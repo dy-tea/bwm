@@ -7,6 +7,7 @@
 #include "transaction.h"
 #include "tree.h"
 #include "workspace.h"
+#include "ipc.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -353,6 +354,21 @@ void server_init(void) {
 
   // Initialize workspace manager
   workspace_init();
+
+  // Initialize IPC
+  ipc_init();
+}
+
+static int ipc_socket_handler(int fd, uint32_t mask, void *data) {
+  (void)fd;
+  (void)data;
+  if (mask & WL_EVENT_READABLE) {
+    int client_fd = accept(ipc_get_socket_fd(), NULL, NULL);
+    if (client_fd >= 0) {
+      ipc_handle_incoming(client_fd);
+    }
+  }
+  return 0;
 }
 
 int server_run(void) {
@@ -410,6 +426,12 @@ int server_run(void) {
 
   setenv("WAYLAND_DISPLAY", socket, true);
 
+  // add IPC socket to event loop
+  struct wl_event_loop *event_loop = wl_display_get_event_loop(server.wl_display);
+  int ipc_fd = ipc_get_socket_fd();
+  if (ipc_fd >= 0)
+    wl_event_loop_add_fd(event_loop, ipc_fd, WL_EVENT_READABLE, ipc_socket_handler, NULL);
+
   wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s", socket);
   wl_display_run(server.wl_display);
   return 0;
@@ -418,6 +440,7 @@ int server_run(void) {
 void server_fini(void) {
   transaction_fini();
   workspace_fini();
+  ipc_cleanup();
   wl_display_destroy_clients(server.wl_display);
 
   wl_list_remove(&server.new_xdg_toplevel.link);

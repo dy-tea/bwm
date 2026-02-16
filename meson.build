@@ -23,7 +23,13 @@ executable(
     'src' / 'keyboard.c',
     'src' / 'transaction.c',
     'src' / 'workspace.c',
+    'src' / 'ipc.c',
   ],
   include_directories: include_directories('include'),
   dependencies: libs,
+)
+
+executable(
+  'bmsg',
+  'bmsg' / 'bmsg.c',
 )
