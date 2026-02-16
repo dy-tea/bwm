@@ -696,17 +696,43 @@ void swap_nodes(monitor_t *m1, desktop_t *d1, node_t *n1, monitor_t *m2,
   if (n1 == NULL || n2 == NULL || n1 == n2)
     return;
 
+  bool n1_focused = (d1->focus == n1);
+  bool n2_focused = (d2->focus == n2);
+
   client_t *c1 = n1->client;
   client_t *c2 = n2->client;
 
   n1->client = c2;
   n2->client = c1;
 
+  bool tmp_vacant = n1->vacant;
+  bool tmp_marked = n1->marked;
+  bool tmp_locked = n1->locked;
+  bool tmp_sticky = n1->sticky;
+  bool tmp_private = n1->private_node;
+
+  n1->vacant = n2->vacant;
+  n1->marked = n2->marked;
+  n1->locked = n2->locked;
+  n1->sticky = n2->sticky;
+  n1->private_node = n2->private_node;
+
+  n2->vacant = tmp_vacant;
+  n2->marked = tmp_marked;
+  n2->locked = tmp_locked;
+  n2->sticky = tmp_sticky;
+  n2->private_node = tmp_private;
+
   if (c1 != NULL && c1->toplevel != NULL)
     c1->toplevel->node = n2;
 
   if (c2 != NULL && c2->toplevel != NULL)
     c2->toplevel->node = n1;
+
+  if (n1_focused)
+    focus_node(m2, d2, n2);
+  if (n2_focused)
+    focus_node(m1, d1, n1);
 
   arrange(m1, d1);
   if (d1 != d2)
