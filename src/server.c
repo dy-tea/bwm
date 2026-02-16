@@ -6,6 +6,7 @@
 #include "types.h"
 #include "transaction.h"
 #include "tree.h"
+#include "workspace.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -339,6 +340,9 @@ void server_init(void) {
 
   // Initialize transaction system
   transaction_init();
+
+  // Initialize workspace manager
+  workspace_init();
 }
 
 int server_run(void) {
@@ -403,6 +407,7 @@ int server_run(void) {
 
 void server_fini(void) {
   transaction_fini();
+  workspace_fini();
   wl_display_destroy_clients(server.wl_display);
 
   wl_list_remove(&server.new_xdg_toplevel.link);

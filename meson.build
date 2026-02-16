@@ -22,6 +22,7 @@ executable(
     'src' / 'popup.c',
     'src' / 'keyboard.c',
     'src' / 'transaction.c',
+    'src' / 'workspace.c',
   ],
   include_directories: include_directories('include'),
   dependencies: libs,

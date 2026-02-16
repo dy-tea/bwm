@@ -1,9 +1,11 @@
 #pragma once
 
+#define WLR_USE_UNSTABLE
 #include "toplevel.h"
 #include "types.h"
 #include <wayland-server.h>
 #include <xkbcommon/xkbcommon.h>
+#include <wlr/types/wlr_ext_workspace_v1.h>
 
 enum cursor_mode {
     CURSOR_PASSTHROUGH,
@@ -58,6 +60,10 @@ struct bwm_server {
   // bspwm integration
   monitor_t *monitors;
   monitor_t *focused_monitor;
+
+  // workspace tracking
+  struct wlr_ext_workspace_manager_v1 *workspace_manager;
+  struct wl_listener workspace_commit;
 };
 
 extern struct bwm_server server;

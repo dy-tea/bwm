@@ -4,6 +4,7 @@
 #include "server.h"
 #include "toplevel.h"
 #include "tree.h"
+#include "workspace.h"
 #include <stdlib.h>
 #include <unistd.h>
 #include <wlr/types/wlr_keyboard.h>
@@ -109,10 +110,10 @@ bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym) {
 
   // handle vt switch
   if (sym >= XKB_KEY_XF86Switch_VT_1 && sym <= XKB_KEY_XF86Switch_VT_12) {
-      if (server.session) {
-          wlr_session_change_vt(server.session, (unsigned int)(sym + 1 - XKB_KEY_XF86Switch_VT_1));
-          return true;
-      }
+    if (server.session) {
+      wlr_session_change_vt(server.session, (unsigned int)(sym + 1 - XKB_KEY_XF86Switch_VT_1));
+      return true;
+    }
   }
 
   // window navigation (Super + hjkl)
@@ -227,9 +228,10 @@ bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym) {
 
   // desktop switching (Super + 1-9)
   if (mod && !shift && sym >= XKB_KEY_1 && sym <= XKB_KEY_9) {
-    int desktop_num = sym - XKB_KEY_1;
-    // TODO: implement desktop switching
-    wlr_log(WLR_INFO, "Desktop switching not yet implemented: %d", desktop_num);
+    int desktop_num = sym - XKB_KEY_1 + 1;
+    char name[16];
+    snprintf(name, sizeof(name), "%d", desktop_num);
+    workspace_switch_to_desktop(name);
     return true;
   }
 
@@ -436,8 +438,38 @@ void focus_prev_desktop(void) {
 }
 
 void send_to_desktop(int desktop_index) {
-  // TODO: implement desktop transfer
-  wlr_log(WLR_INFO, "Send to desktop %d not yet implemented", desktop_index);
+  char name[16];
+  snprintf(name, sizeof(name), "%d", desktop_index + 1);
+  
+  desktop_t *target = find_desktop_by_name(name);
+  if (!target) {
+    wlr_log(WLR_ERROR, "Desktop not found: %s", name);
+    return;
+  }
+
+  if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL) {
+    return;
+  }
+
+  node_t *n = mon->desk->focus;
+  if (n == NULL || n->client == NULL) {
+    return;
+  }
+
+  desktop_t *src_desk = mon->desk;
+
+  remove_node(mon, src_desk, n);
+  insert_node(server.focused_monitor, target, n, find_public(target));
+
+  target->focus = n;
+  if (target->focus == n) {
+    focus_node(server.focused_monitor, target, n);
+  }
+
+  arrange(mon, src_desk);
+  arrange(server.focused_monitor, target);
+  
+  wlr_log(WLR_INFO, "Sent window to desktop: %s", name);
 }
 
 void toggle_monocle(void) {
