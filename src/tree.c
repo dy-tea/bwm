@@ -274,9 +274,6 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
     wlr_log(WLR_DEBUG, "apply_layout: node %u tiled_rect=(%d,%d %dx%d)",
             n->id, r.x, r.y, r.width, r.height);
 
-    // Don't apply geometry here - let the transaction system handle it
-    // This prevents immediate updates that cause flicker
-
   } else {
     struct wlr_box first_rect;
     struct wlr_box second_rect;

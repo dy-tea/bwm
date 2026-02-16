@@ -19,6 +19,7 @@ executable(
     'src' / 'output.c',
     'src' / 'tree.c',
     'src' / 'toplevel.c',
+    'src' / 'popup.c',
     'src' / 'keyboard.c',
     'src' / 'transaction.c',
   ],

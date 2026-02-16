@@ -125,6 +125,10 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
 
   if (toplevel->xdg_toplevel->base->initial_commit) {
     wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, 0, 0);
+
+    wlr_xdg_toplevel_set_wm_capabilities(toplevel->xdg_toplevel,
+        WLR_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN |
+        WLR_XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE);
     return;
   }
 

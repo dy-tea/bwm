@@ -112,7 +112,7 @@ struct bwm_server init(void) {
   s.scene_layout = wlr_scene_attach_output_layout(s.scene, s.output_layout);
 
   // xdg shell
-  s.xdg_shell = wlr_xdg_shell_create(s.wl_display, 3);
+  s.xdg_shell = wlr_xdg_shell_create(s.wl_display, 5);
   wl_list_init(&s.toplevels);
 
   // cursor
