@@ -575,10 +575,21 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
         focus_toplevel(d->focus->client->toplevel);
     }
 
-    free_node(p);
+    if (p->ntxnrefs == 0) {
+      free_node(p);
+    } else {
+      // mark for destruction
+      p->destroying = true;
+      wlr_log(WLR_DEBUG, "Marked parent node %u as destroying (ntxnrefs=%zu)",
+              p->id, (size_t)p->ntxnrefs);
+    }
   }
 
-  free_node(n);
+  if (!n->destroying) {
+    n->destroying = true;
+    wlr_log(WLR_DEBUG, "Marked removed node %u as destroying (ntxnrefs=%zu)",
+            n->id, (size_t)n->ntxnrefs);
+  }
 }
 
 void close_node(node_t *n) {
@@ -604,29 +615,20 @@ bool focus_node(monitor_t *m, desktop_t *d, node_t *n) {
 
   // Handle monocle mode visibility
   if (d->layout == LAYOUT_MONOCLE && d->root != NULL) {
-    // Hide all windows first
-    for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root)) {
-      if (node->client != NULL) {
-        wlr_scene_node_set_enabled(&node->client->toplevel->scene_tree->node, false);
+    // mark visibility state
+    for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
+      if (node->client != NULL)
         node->client->shown = false;
-      }
-    }
 
-    // Show only the focused window
-    if (n != NULL && n->client != NULL) {
-      wlr_scene_node_set_enabled(&n->client->toplevel->scene_tree->node, true);
+    // mark focused window as shown
+    if (n != NULL && n->client != NULL)
       n->client->shown = true;
-    }
   } else {
-    // In tiled mode, ensure all windows are visible
-    if (d->root != NULL) {
-      for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root)) {
-        if (node->client != NULL) {
-          wlr_scene_node_set_enabled(&node->client->toplevel->scene_tree->node, true);
+    // mark all windows as shown in tiled mode
+    if (d->root != NULL)
+      for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
+        if (node->client != NULL)
           node->client->shown = true;
-        }
-      }
-    }
   }
 
   if (n != NULL && n->client != NULL)

@@ -70,10 +70,9 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   node_t *focus = d->focus;
   insert_node(m, d, n, focus);
 
-  arrange(m, d);
   focus_node(m, d, n);
+  arrange(m, d);
 
-  // Don't set shown = true yet - wait for transaction to complete
   wlr_log(WLR_INFO, "Window mapped and tiled: %s",
           n->client->title[0] ? n->client->title : "untitled");
 }
@@ -86,8 +85,10 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
   toplevel->mapped = false;
   toplevel->configured = false;
 
-  // Disable the scene node immediately to hide it
-  wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
+  if (toplevel->node && toplevel->node->client && toplevel->node->client->shown) {
+    toplevel_save_buffer(toplevel);
+    wlr_log(WLR_DEBUG, "Saved buffer for unmapping toplevel to prevent gap");
+  }
 
   if (toplevel->node == NULL)
     return;
@@ -97,9 +98,17 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
   desktop_t *d = m ? m->desk : NULL;
 
   if (m && d) {
+    if (n)
+      node_set_dirty(n);
+
     remove_node(m, d, n);
+
+    if (n)
+      n->destroying = true;
+
     arrange(m, d);
 
+    // focus handling after removing node
     if (d->focus != NULL && d->focus->client != NULL &&
         d->focus->client->toplevel != NULL)
       focus_toplevel(d->focus->client->toplevel);
@@ -109,8 +118,6 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
         focus_toplevel(d->focus->client->toplevel);
     }
   }
-
-  toplevel->node = NULL;
 }
 
 void toplevel_commit(struct wl_listener *listener, void *data) {
@@ -123,8 +130,15 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
 
   if (toplevel->mapped && toplevel->xdg_toplevel->base->surface->mapped) {
     uint32_t serial = toplevel->xdg_toplevel->base->current.configure_serial;
-    if (transaction_notify_view_ready_by_serial(toplevel, serial))
+    bool successful = transaction_notify_view_ready_by_serial(toplevel, serial);
+
+    if (successful) {
       toplevel->configured = true;
+      wlr_log(WLR_DEBUG, "Transaction completed for serial=%u", serial);
+    }
+
+    if (toplevel->saved_surface_tree && !successful)
+      toplevel_send_frame_done(toplevel);
   }
 }
 
@@ -132,6 +146,11 @@ void toplevel_destroy(struct wl_listener *listener, void *data) {
   struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, destroy);
 
   wlr_log(WLR_INFO, "Toplevel destroyed");
+
+  if (toplevel->node && toplevel->node->client) {
+    toplevel->node->client->toplevel = NULL;
+    toplevel->node = NULL;
+  }
 
   wl_list_remove(&toplevel->map.link);
   wl_list_remove(&toplevel->unmap.link);
@@ -288,10 +307,29 @@ void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
   toplevel->mapped = false;
   toplevel->configured = false;
 
-  toplevel->scene_tree =
-      wlr_scene_xdg_surface_create(&server.scene->tree, xdg_toplevel->base);
+  // create parent scene tree container
+  toplevel->scene_tree = wlr_scene_tree_create(&server.scene->tree);
   if (!toplevel->scene_tree) {
     wlr_log(WLR_ERROR, "Failed to create scene tree for toplevel");
+    free(toplevel);
+    return;
+  }
+
+  // create content tree as child and add surface
+  toplevel->content_tree = wlr_scene_tree_create(toplevel->scene_tree);
+  if (!toplevel->content_tree) {
+    wlr_log(WLR_ERROR, "Failed to create content tree for toplevel");
+    wlr_scene_node_destroy(&toplevel->scene_tree->node);
+    free(toplevel);
+    return;
+  }
+
+  // create surface scene within the content tree
+  struct wlr_scene_tree *xdg_tree =
+      wlr_scene_xdg_surface_create(toplevel->content_tree, xdg_toplevel->base);
+  if (!xdg_tree) {
+    wlr_log(WLR_ERROR, "Failed to create XDG surface scene for toplevel");
+    wlr_scene_node_destroy(&toplevel->scene_tree->node);
     free(toplevel);
     return;
   }
@@ -302,6 +340,7 @@ void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
   wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
 
   toplevel->node = NULL;
+  toplevel->saved_surface_tree = NULL;
 
   // register event listeners
   toplevel->map.notify = toplevel_map;
@@ -348,4 +387,116 @@ bool toplevel_is_ready(struct bwm_toplevel *toplevel) {
          toplevel->xdg_toplevel->base &&
          toplevel->xdg_toplevel->base->surface &&
          toplevel->xdg_toplevel->base->surface->mapped;
+}
+
+static int buffer_copy_count = 0;
+
+static void save_buffer_iterator(struct wlr_scene_buffer *buffer,
+                                 int sx, int sy, void *data) {
+  struct wlr_scene_tree *tree = data;
+
+  buffer_copy_count++;
+  wlr_log(WLR_DEBUG, "save_buffer_iterator called: buffer=%p, sx=%d, sy=%d",
+          (void*)buffer, sx, sy);
+
+  // ignore buffers with no content
+  if (!buffer->buffer) {
+    wlr_log(WLR_DEBUG, "Skipping buffer with no content");
+    return;
+  }
+
+  struct wlr_scene_buffer *sbuf = wlr_scene_buffer_create(tree, NULL);
+  if (!sbuf) {
+    wlr_log(WLR_ERROR, "Could not allocate a scene buffer when saving a surface");
+    return;
+  }
+
+  wlr_scene_buffer_set_dest_size(sbuf, buffer->dst_width, buffer->dst_height);
+  wlr_scene_buffer_set_opaque_region(sbuf, &buffer->opaque_region);
+  wlr_scene_buffer_set_source_box(sbuf, &buffer->src_box);
+  wlr_scene_node_set_position(&sbuf->node, sx, sy);
+  wlr_scene_buffer_set_transform(sbuf, buffer->transform);
+  wlr_scene_buffer_set_buffer(sbuf, buffer->buffer);
+
+  wlr_log(WLR_DEBUG, "Successfully copied buffer %dx%d at (%d,%d)",
+          buffer->dst_width, buffer->dst_height, sx, sy);
+}
+
+void toplevel_save_buffer(struct bwm_toplevel *toplevel) {
+  if (!toplevel || !toplevel->scene_tree || !toplevel->content_tree)
+    return;
+
+  // removed saved buffer
+  if (toplevel->saved_surface_tree) {
+    wlr_log(WLR_DEBUG, "Removing existing saved buffer before saving new one");
+    toplevel_remove_saved_buffer(toplevel);
+  }
+
+  toplevel->saved_surface_tree = wlr_scene_tree_create(toplevel->scene_tree);
+  if (!toplevel->saved_surface_tree) {
+    wlr_log(WLR_ERROR, "Could not allocate a scene tree node when saving a surface");
+    return;
+  }
+
+  wlr_scene_node_set_enabled(&toplevel->saved_surface_tree->node, false);
+
+  // copy scene buffers
+  buffer_copy_count = 0;
+  wlr_log(WLR_DEBUG, "Starting buffer iteration for content_tree=%p",
+          (void*)toplevel->content_tree);
+
+  wlr_scene_node_for_each_buffer(&toplevel->content_tree->node,
+                                 save_buffer_iterator,
+                                 toplevel->saved_surface_tree);
+
+  wlr_log(WLR_DEBUG, "Buffer iteration complete, copied %d buffers", buffer_copy_count);
+
+  bool has_children = !wl_list_empty(&toplevel->saved_surface_tree->children);
+  wlr_log(WLR_DEBUG, "After iteration: saved_surface_tree has_children=%d", has_children);
+
+  if (!has_children) {
+    // cleanup
+    wlr_scene_node_destroy(&toplevel->saved_surface_tree->node);
+    toplevel->saved_surface_tree = NULL;
+    wlr_log(WLR_DEBUG, "No buffers to save for toplevel - destroyed saved tree");
+  } else {
+    wlr_scene_node_set_enabled(&toplevel->content_tree->node, false);
+    wlr_scene_node_set_enabled(&toplevel->saved_surface_tree->node, true);
+    wlr_log(WLR_DEBUG, "Saved buffer for toplevel - swapped content_tree for saved_surface_tree");
+  }
+}
+
+void toplevel_remove_saved_buffer(struct bwm_toplevel *toplevel) {
+  if (!toplevel || !toplevel->saved_surface_tree)
+    return;
+
+  wlr_log(WLR_DEBUG, "Removing saved buffer for toplevel");
+
+  wlr_scene_node_destroy(&toplevel->saved_surface_tree->node);
+  toplevel->saved_surface_tree = NULL;
+
+  if (toplevel->content_tree)
+    wlr_scene_node_set_enabled(&toplevel->content_tree->node, true);
+}
+
+static void send_frame_done_iterator(struct wlr_scene_buffer *scene_buffer,
+                                     int x, int y, void *data) {
+  struct timespec *when = data;
+  struct wlr_scene_surface *scene_surface =
+      wlr_scene_surface_try_from_buffer(scene_buffer);
+  if (scene_surface == NULL)
+    return;
+  wlr_surface_send_frame_done(scene_surface->surface, when);
+}
+
+void toplevel_send_frame_done(struct bwm_toplevel *toplevel) {
+  if (!toplevel || !toplevel->content_tree)
+    return;
+
+  struct timespec when;
+  clock_gettime(CLOCK_MONOTONIC, &when);
+
+  struct wlr_scene_node *node;
+  wl_list_for_each(node, &toplevel->content_tree->children, link)
+    wlr_scene_node_for_each_buffer(node, send_frame_done_iterator, &when);
 }

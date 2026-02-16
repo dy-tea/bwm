@@ -6,7 +6,9 @@
 struct bwm_toplevel {
   struct wl_list link;
   struct wlr_xdg_toplevel *xdg_toplevel;
-  struct wlr_scene_tree *scene_tree;
+  struct wlr_scene_tree *scene_tree;      // Parent container
+  struct wlr_scene_tree *content_tree;    // XDG surface content
+  struct wlr_scene_tree *saved_surface_tree;  // Saved buffer snapshot
 
   node_t *node;
 
@@ -47,3 +49,8 @@ void toplevel_set_app_id(struct wl_listener *listener, void *data);
 void focus_toplevel(struct bwm_toplevel *toplevel);
 void toplevel_apply_geometry(struct bwm_toplevel *toplevel);
 bool toplevel_is_ready(struct bwm_toplevel *toplevel);
+
+// buffer saving for transactions
+void toplevel_save_buffer(struct bwm_toplevel *toplevel);
+void toplevel_remove_saved_buffer(struct bwm_toplevel *toplevel);
+void toplevel_send_frame_done(struct bwm_toplevel *toplevel);
