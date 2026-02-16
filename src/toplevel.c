@@ -13,6 +13,7 @@
 extern struct bwm_server server;
 
 void toplevel_map(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, map);
 
   wlr_log(WLR_INFO, "Toplevel mapped");
@@ -78,6 +79,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
 }
 
 void toplevel_unmap(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, unmap);
 
   wlr_log(WLR_INFO, "Toplevel unmapped");
@@ -121,6 +123,7 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
 }
 
 void toplevel_commit(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, commit);
 
   if (toplevel->xdg_toplevel->base->initial_commit) {
@@ -147,6 +150,7 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
 }
 
 void toplevel_destroy(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, destroy);
 
   wlr_log(WLR_INFO, "Toplevel destroyed");
@@ -172,6 +176,7 @@ void toplevel_destroy(struct wl_listener *listener, void *data) {
 }
 
 void toplevel_request_move(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_toplevel *toplevel =
       wl_container_of(listener, toplevel, request_move);
   wlr_log(WLR_DEBUG, "Toplevel requested move");
@@ -193,6 +198,7 @@ void toplevel_request_resize(struct wl_listener *listener, void *data) {
 }
 
 void toplevel_request_maximize(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_toplevel *toplevel =
       wl_container_of(listener, toplevel, request_maximize);
 
@@ -220,6 +226,7 @@ void toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
 }
 
 void toplevel_set_title(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_toplevel *toplevel =
       wl_container_of(listener, toplevel, set_title);
 
@@ -234,6 +241,7 @@ void toplevel_set_title(struct wl_listener *listener, void *data) {
 }
 
 void toplevel_set_app_id(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_toplevel *toplevel =
       wl_container_of(listener, toplevel, set_app_id);
 
@@ -320,6 +328,7 @@ void toplevel_apply_geometry(struct bwm_toplevel *toplevel) {
 }
 
 void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
+	(void)listener;
   struct wlr_xdg_toplevel *xdg_toplevel = data;
 
   wlr_log(WLR_INFO, "New XDG toplevel");

@@ -28,6 +28,7 @@ void popup_unconstrain(struct bwm_popup *popup) {
 }
 
 void popup_commit(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_popup *popup = wl_container_of(listener, popup, commit);
 
   if (popup->xdg_popup->base->initial_commit)
@@ -37,11 +38,13 @@ void popup_commit(struct wl_listener *listener, void *data) {
 }
 
 void popup_reposition(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_popup *popup = wl_container_of(listener, popup, commit);
   popup_unconstrain(popup);
 }
 
 void popup_destroy(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_popup *popup = wl_container_of(listener, popup, destroy);
 
   wl_list_remove(&popup->commit.link);
@@ -53,6 +56,7 @@ void popup_destroy(struct wl_listener *listener, void *data) {
 }
 
 void handle_new_xdg_popup(struct wl_listener *listener, void *data) {
+	(void)listener;
   struct wlr_xdg_popup *xdg_popup = data;
   struct bwm_popup *popup = calloc(1, sizeof(struct bwm_popup));
 

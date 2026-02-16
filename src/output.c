@@ -9,6 +9,7 @@
 #include <wlr/util/log.h>
 
 void output_frame(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_output *output = wl_container_of(listener, output, frame);
   struct wlr_scene_output *scene_output =
       wlr_scene_get_scene_output(server.scene, output->wlr_output);
@@ -30,6 +31,7 @@ void output_request_state(struct wl_listener *listener, void *data) {
 }
 
 void output_destroy(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_output *output = wl_container_of(listener, output, destroy);
   wl_list_remove(&output->frame.link);
   wl_list_remove(&output->request_state.link);
@@ -38,7 +40,8 @@ void output_destroy(struct wl_listener *listener, void *data) {
   free(output);
 }
 
-void handle_new_output(__attribute__((unused)) struct wl_listener *listener, void *data) {
+void handle_new_output(struct wl_listener *listener, void *data) {
+	(void)listener;
   struct wlr_output *wlr_output = data;
   struct bwm_output *o = calloc(1, sizeof(struct bwm_output));
   o->wlr_output = wlr_output;
