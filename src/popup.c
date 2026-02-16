@@ -2,14 +2,29 @@
 #include <stdlib.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/types/wlr_scene.h>
-#include "toplevel.h"
 #include "popup.h"
 
 void popup_unconstrain(struct bwm_popup *popup) {
-    int lx, ly;
-    wlr_scene_node_coords(&popup->parent_tree->node.parent->node, &lx, &ly);
+    struct wlr_scene_tree *parent_scene_tree = popup->parent_tree;
+    if (parent_scene_tree == NULL)
+        return;
 
-    // TODO: get workspace and unconstrain from box
+    struct wlr_surface *parent_surface = popup->xdg_popup->parent;
+    if (parent_surface == NULL)
+        return;
+
+    struct wlr_xdg_surface *parent_xdg_surface = wlr_xdg_surface_try_from_wlr_surface(parent_surface);
+    if (parent_xdg_surface == NULL)
+        return;
+
+    struct wlr_box box = {
+        .x = -parent_xdg_surface->current.geometry.x,
+        .y = -parent_xdg_surface->current.geometry.y,
+        .width = parent_xdg_surface->current.geometry.width,
+        .height = parent_xdg_surface->current.geometry.height,
+    };
+
+    wlr_xdg_popup_unconstrain_from_box(popup->xdg_popup, &box);
 }
 
 void popup_commit(struct wl_listener *listener, void *data) {
@@ -40,7 +55,6 @@ void popup_destroy(struct wl_listener *listener, void *data) {
 void handle_new_xdg_popup(struct wl_listener *listener, void *data) {
     struct wlr_xdg_popup *xdg_popup = data;
     struct bwm_popup *popup = calloc(1, sizeof(struct bwm_popup));
-    struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, new_xdg_popup);
 
     popup->xdg_popup = xdg_popup;
 

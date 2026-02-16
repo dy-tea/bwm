@@ -215,7 +215,6 @@ void arrange(monitor_t *m, desktop_t *d) {
 
   apply_layout(m, d, d->root, rect, rect);
 
-  // Commit the transaction with all dirty nodes
   transaction_commit_dirty();
 }
 
@@ -224,7 +223,11 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
   if (n == NULL)
     return;
 
-  // Set pending state (like Sway does with container->pending)
+  // skip hidden nodes
+  if (n->hidden)
+    return;
+
+  // set pending
   n->pending.rectangle = rect;
   node_set_dirty(n);
 
@@ -279,21 +282,36 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
     struct wlr_box second_rect;
 
     if (d->layout == LAYOUT_MONOCLE) {
-      // In monocle mode, pass full rectangle to all children
       first_rect = rect;
       second_rect = rect;
     } else if (n->split_type == TYPE_VERTICAL) {
-      first_rect = rect;
-      second_rect = rect;
-      first_rect.width = (int)(n->split_ratio * rect.width);
-      second_rect.x += first_rect.width;
-      second_rect.width = rect.width - first_rect.width;
+      if (n->first_child && n->first_child->hidden && n->second_child && !n->second_child->hidden) {
+        first_rect = (struct wlr_box){0, 0, 0, 0};
+        second_rect = rect;
+      } else if (n->second_child && n->second_child->hidden && n->first_child && !n->first_child->hidden) {
+        first_rect = rect;
+        second_rect = (struct wlr_box){0, 0, 0, 0};
+      } else {
+        first_rect = rect;
+        second_rect = rect;
+        first_rect.width = (int)(n->split_ratio * rect.width);
+        second_rect.x += first_rect.width;
+        second_rect.width = rect.width - first_rect.width;
+      }
     } else {
-      first_rect = rect;
-      second_rect = rect;
-      first_rect.height = (int)(n->split_ratio * rect.height);
-      second_rect.y += first_rect.height;
-      second_rect.height = rect.height - first_rect.height;
+      if (n->first_child && n->first_child->hidden && n->second_child && !n->second_child->hidden) {
+        first_rect = (struct wlr_box){0, 0, 0, 0};
+        second_rect = rect;
+      } else if (n->second_child && n->second_child->hidden && n->first_child && !n->first_child->hidden) {
+        first_rect = rect;
+        second_rect = (struct wlr_box){0, 0, 0, 0};
+      } else {
+        first_rect = rect;
+        second_rect = rect;
+        first_rect.height = (int)(n->split_ratio * rect.height);
+        second_rect.y += first_rect.height;
+        second_rect.height = rect.height - first_rect.height;
+      }
     }
 
     apply_layout(m, d, n->first_child, first_rect, root_rect);
@@ -751,10 +769,13 @@ void set_floating(monitor_t *m, desktop_t *d, node_t *n, bool value) {
   if (n == NULL || n->client == NULL)
     return;
 
-  if (value)
+  if (value) {
+    n->hidden = true;
     set_state(m, d, n, STATE_FLOATING);
-  else
+  } else {
+    n->hidden = false;
     set_state(m, d, n, STATE_TILED);
+  }
 }
 
 presel_t *make_presel(void) {

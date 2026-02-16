@@ -1,3 +1,4 @@
+#include "types.h"
 #define WLR_USE_UNSTABLE
 #include "keyboard.h"
 #include "server.h"
@@ -8,6 +9,7 @@
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_scene.h>
 #include <wlr/backend/session.h>
 #include <wlr/util/log.h>
 
@@ -373,10 +375,14 @@ void toggle_floating(void) {
     return;
 
   if (n->client->state == STATE_FLOATING) {
+    n->hidden = false;
+    wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node, server.tile_tree);
     set_state(mon, mon->desk, n, STATE_TILED);
     wlr_log(WLR_INFO, "Window tiled");
   } else if (n->client->state == STATE_TILED) {
     n->client->floating_rectangle = n->rectangle;
+    n->hidden = true;
+    wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node, server.float_tree);
     set_state(mon, mon->desk, n, STATE_FLOATING);
     wlr_log(WLR_INFO, "Window floating");
   }
@@ -392,9 +398,15 @@ void toggle_fullscreen(void) {
 
   if (n->client->state == STATE_FULLSCREEN) {
     set_state(mon, mon->desk, n, n->client->last_state);
+    if (n->client->last_state == STATE_FLOATING)
+      wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node, server.float_tree);
+    else if (n->client->last_state == STATE_TILED)
+      wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node, server.tile_tree);
     wlr_xdg_toplevel_set_fullscreen(n->client->toplevel->xdg_toplevel, false);
     wlr_log(WLR_INFO, "Fullscreen disabled");
   } else {
+    n->hidden = true;
+    wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node, server.fullscreen_tree);
     set_state(mon, mon->desk, n, STATE_FULLSCREEN);
     wlr_xdg_toplevel_set_fullscreen(n->client->toplevel->xdg_toplevel, true);
     wlr_log(WLR_INFO, "Fullscreen enabled");

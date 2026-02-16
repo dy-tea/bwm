@@ -172,19 +172,23 @@ void toplevel_destroy(struct wl_listener *listener, void *data) {
 }
 
 void toplevel_request_move(struct wl_listener *listener, void *data) {
-  // handle floating window move or swap if moved over other tiling toplevel in tiling mode
   struct bwm_toplevel *toplevel =
       wl_container_of(listener, toplevel, request_move);
   wlr_log(WLR_DEBUG, "Toplevel requested move");
-  if (toplevel->xdg_toplevel->base->initialized)
+  if (toplevel->node && toplevel->node->client && toplevel->node->client->state == STATE_FLOATING)
+      begin_interactive(toplevel, CURSOR_MOVE, 0);
+  else if (toplevel->xdg_toplevel->base->initialized)
       wlr_xdg_surface_schedule_configure(toplevel->xdg_toplevel->base);
 }
 
 void toplevel_request_resize(struct wl_listener *listener, void *data) {
+  struct wlr_xdg_toplevel_resize_event *event = data;
   struct bwm_toplevel *toplevel =
       wl_container_of(listener, toplevel, request_resize);
   wlr_log(WLR_DEBUG, "Toplevel requested resize");
-  if (toplevel->xdg_toplevel->base->initialized)
+  if (toplevel->node && toplevel->node->client && toplevel->node->client->state == STATE_FLOATING)
+      begin_interactive(toplevel, CURSOR_RESIZE, event->edges);
+  else if (toplevel->xdg_toplevel->base->initialized)
       wlr_xdg_surface_schedule_configure(toplevel->xdg_toplevel->base);
 }
 
@@ -274,6 +278,21 @@ void focus_toplevel(struct bwm_toplevel *toplevel) {
                                    seat->keyboard_state.keyboard->keycodes,
                                    seat->keyboard_state.keyboard->num_keycodes,
                                    &seat->keyboard_state.keyboard->modifiers);
+
+  // update mon and desk focus
+  if (toplevel->node != NULL) {
+    for (monitor_t *m = mon_head; m != NULL; m = m->next) {
+      if (m->desk != NULL && m->desk->root != NULL) {
+        for (node_t *n = first_extrema(m->desk->root); n != NULL; n = next_leaf(n, m->desk->root)) {
+          if (n == toplevel->node) {
+            mon = m;
+            m->desk->focus = toplevel->node;
+            return;
+          }
+        }
+      }
+    }
+  }
 }
 
 void toplevel_apply_geometry(struct bwm_toplevel *toplevel) {
@@ -312,7 +331,7 @@ void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
   toplevel->configured = false;
 
   // create parent scene tree container
-  toplevel->scene_tree = wlr_scene_tree_create(&server.scene->tree);
+  toplevel->scene_tree = wlr_scene_tree_create(server.tile_tree);
   if (!toplevel->scene_tree) {
     wlr_log(WLR_ERROR, "Failed to create scene tree for toplevel");
     free(toplevel);
@@ -342,9 +361,6 @@ void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
   xdg_toplevel->base->data = toplevel->scene_tree;
 
   wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
-
-  toplevel->node = NULL;
-  toplevel->saved_surface_tree = NULL;
 
   // register event listeners
   toplevel->map.notify = toplevel_map;

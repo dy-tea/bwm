@@ -1,8 +1,15 @@
 #pragma once
 
+#include "toplevel.h"
 #include "types.h"
 #include <wayland-server.h>
 #include <xkbcommon/xkbcommon.h>
+
+enum cursor_mode {
+    CURSOR_PASSTHROUGH,
+    CURSOR_MOVE,
+    CURSOR_RESIZE,
+};
 
 struct bwm_server {
   struct wl_display *wl_display;
@@ -12,6 +19,10 @@ struct bwm_server {
   struct wlr_allocator *allocator;
   struct wlr_scene *scene;
   struct wlr_scene_output_layout *scene_layout;
+
+  struct wlr_scene_tree *tile_tree;
+  struct wlr_scene_tree *float_tree;
+  struct wlr_scene_tree *fullscreen_tree;
 
   struct wlr_xdg_shell *xdg_shell;
   struct wl_listener new_xdg_toplevel;
@@ -37,6 +48,13 @@ struct bwm_server {
   struct wl_list outputs;
   struct wl_listener new_output;
 
+  // cursor state
+  enum cursor_mode cursor_mode;
+  struct bwm_toplevel *grabbed_toplevel;
+  double grab_x, grab_y;
+  struct wlr_box grab_geobox;
+  uint32_t resize_edges;
+
   // bspwm integration
   monitor_t *monitors;
   monitor_t *focused_monitor;
@@ -44,5 +62,8 @@ struct bwm_server {
 
 extern struct bwm_server server;
 
-struct bwm_server init(void);
-int run(struct bwm_server *server);
+void begin_interactive(struct bwm_toplevel *toplevel, enum cursor_mode mode, uint32_t edges);
+
+void server_init(void);
+int server_run(void);
+void server_fini(void);
