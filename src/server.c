@@ -2,7 +2,6 @@
 #include "keyboard.h"
 #include "output.h"
 #include "toplevel.h"
-#include "popup.h"
 #include "types.h"
 #include "transaction.h"
 #include "tree.h"
@@ -279,6 +278,12 @@ void server_init(void) {
     exit(EXIT_FAILURE);
   }
 
+  server.new_output.notify = handle_new_output;
+  wl_signal_add(&server.backend->events.new_output, &server.new_output);
+
+  server.new_input.notify = handle_new_input;
+  wl_signal_add(&server.backend->events.new_input, &server.new_input);
+
   server.renderer = wlr_renderer_autocreate(server.backend);
   if (server.renderer == NULL) {
     wlr_log(WLR_ERROR, "Failed to create renderer");
@@ -330,8 +335,14 @@ void server_init(void) {
   server.xdg_shell = wlr_xdg_shell_create(server.wl_display, 5);
   wl_list_init(&server.toplevels);
 
+  server.new_xdg_toplevel.notify = handle_new_xdg_toplevel;
+  wl_signal_add(&server.xdg_shell->events.new_toplevel, &server.new_xdg_toplevel);
+
   // layer shell
   server.layer_shell = wlr_layer_shell_v1_create(server.wl_display, 5);
+
+  server.new_layer_surface.notify = handle_new_layer_surface;
+  wl_signal_add(&server.layer_shell->events.new_surface, &server.new_layer_surface);
 
   // cursor
   server.cursor = wlr_cursor_create();
@@ -342,12 +353,36 @@ void server_init(void) {
 
   server.cursor_mode = CURSOR_PASSTHROUGH;
 
+  server.cursor_motion.notify = cursor_motion;
+  wl_signal_add(&server.cursor->events.motion, &server.cursor_motion);
+
+  server.cursor_motion_absolute.notify = cursor_motion_absolute;
+  wl_signal_add(&server.cursor->events.motion_absolute, &server.cursor_motion_absolute);
+
+  server.cursor_button.notify = cursor_button;
+  wl_signal_add(&server.cursor->events.button, &server.cursor_button);
+
+  server.cursor_axis.notify = cursor_axis;
+  wl_signal_add(&server.cursor->events.axis, &server.cursor_axis);
+
+  server.cursor_frame.notify = cursor_frame;
+  wl_signal_add(&server.cursor->events.frame, &server.cursor_frame);
+
   // seat
   server.seat = wlr_seat_create(server.wl_display, "seat0");
   wl_list_init(&server.keyboards);
 
   uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
   wlr_seat_set_capabilities(server.seat, caps);
+
+  server.request_cursor.notify = request_cursor;
+  wl_signal_add(&server.seat->events.request_set_cursor, &server.request_cursor);
+
+  server.pointer_focus_change.notify = seat_pointer_focus_change;
+  wl_signal_add(&server.seat->pointer_state.events.focus_change, &server.pointer_focus_change);
+
+  server.request_set_selection.notify = request_set_selection;
+  wl_signal_add(&server.seat->events.request_set_selection, &server.request_set_selection);
 
   // init desktop structure
   monitor_t *m = (monitor_t *)calloc(1, sizeof(monitor_t));
@@ -405,47 +440,6 @@ static int ipc_socket_handler(int fd, uint32_t mask, void *data) {
 }
 
 int server_run(void) {
-  // backend listeners
-  server.new_output.notify = handle_new_output;
-  wl_signal_add(&server.backend->events.new_output, &server.new_output);
-
-  server.new_input.notify = handle_new_input;
-  wl_signal_add(&server.backend->events.new_input, &server.new_input);
-
-  // xdg-shell listeners
-  server.new_xdg_toplevel.notify = handle_new_xdg_toplevel;
-  wl_signal_add(&server.xdg_shell->events.new_toplevel, &server.new_xdg_toplevel);
-
-  // layer-shell listeners
-  server.new_layer_surface.notify = handle_new_layer_surface;
-  wl_signal_add(&server.layer_shell->events.new_surface, &server.new_layer_surface);
-
-  // cursor listeners
-  server.cursor_motion.notify = cursor_motion;
-  wl_signal_add(&server.cursor->events.motion, &server.cursor_motion);
-
-  server.cursor_motion_absolute.notify = cursor_motion_absolute;
-  wl_signal_add(&server.cursor->events.motion_absolute, &server.cursor_motion_absolute);
-
-  server.cursor_button.notify = cursor_button;
-  wl_signal_add(&server.cursor->events.button, &server.cursor_button);
-
-  server.cursor_axis.notify = cursor_axis;
-  wl_signal_add(&server.cursor->events.axis, &server.cursor_axis);
-
-  server.cursor_frame.notify = cursor_frame;
-  wl_signal_add(&server.cursor->events.frame, &server.cursor_frame);
-
-  // seat listeners
-  server.request_cursor.notify = request_cursor;
-  wl_signal_add(&server.seat->events.request_set_cursor, &server.request_cursor);
-
-  server.pointer_focus_change.notify = seat_pointer_focus_change;
-  wl_signal_add(&server.seat->pointer_state.events.focus_change, &server.pointer_focus_change);
-
-  server.request_set_selection.notify = request_set_selection;
-  wl_signal_add(&server.seat->events.request_set_selection, &server.request_set_selection);
-
   const char *socket = wl_display_add_socket_auto(server.wl_display);
   if (!socket) {
     wlr_backend_destroy(server.backend);
