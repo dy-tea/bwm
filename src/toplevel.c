@@ -21,7 +21,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   toplevel->mapped = true;
   toplevel->configured = false;
 
-  monitor_t *m = mon;
+  monitor_t *m = server.focused_monitor;
   if (m == NULL) {
     wlr_log(WLR_ERROR, "No monitor available for toplevel");
     return;
@@ -72,7 +72,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   insert_node(m, d, n, focus);
 
   focus_node(m, d, n);
-  arrange(m, d);
+  arrange(m, d, true);
 
   wlr_log(WLR_INFO, "Window mapped and tiled: %s",
           n->client->title[0] ? n->client->title : "untitled");
@@ -108,7 +108,7 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
     if (n)
       n->destroying = true;
 
-    arrange(m, d);
+    arrange(m, d, true);
 
     // focus handling after removing node
     if (d->focus != NULL && d->focus->client != NULL &&
@@ -286,21 +286,6 @@ void focus_toplevel(struct bwm_toplevel *toplevel) {
                                    seat->keyboard_state.keyboard->keycodes,
                                    seat->keyboard_state.keyboard->num_keycodes,
                                    &seat->keyboard_state.keyboard->modifiers);
-
-  // update mon and desk focus
-  if (toplevel->node != NULL) {
-    for (monitor_t *m = mon_head; m != NULL; m = m->next) {
-      if (m->desk != NULL && m->desk->root != NULL) {
-        for (node_t *n = first_extrema(m->desk->root); n != NULL; n = next_leaf(n, m->desk->root)) {
-          if (n == toplevel->node) {
-            mon = m;
-            m->desk->focus = toplevel->node;
-            return;
-          }
-        }
-      }
-    }
-  }
 }
 
 void toplevel_apply_geometry(struct bwm_toplevel *toplevel) {

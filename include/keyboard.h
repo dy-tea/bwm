@@ -41,6 +41,10 @@ void swap_south(void);
 void focus_next_desktop(void);
 void focus_prev_desktop(void);
 void send_to_desktop(int desktop_index);
+void send_to_desktop_by_name(const char *name);
+void send_to_next_desktop(void);
+void send_to_prev_desktop(void);
+void send_all_to_desktop(int desktop_index);
 void toggle_monocle(void);
 
 // layout

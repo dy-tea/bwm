@@ -8,6 +8,7 @@ void workspace_init(void);
 void workspace_fini(void);
 void workspace_create_desktop(const char *name);
 void workspace_switch_to_desktop(const char *name);
+void workspace_switch_to_desktop_by_index(int index);
 struct wlr_ext_workspace_handle_v1 *workspace_get_active(void);
 
 struct desktop_t;

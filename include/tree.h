@@ -11,7 +11,7 @@ client_t *make_client(void);
 void free_node(node_t *n);
 
 // Tree layout
-void arrange(monitor_t *m, desktop_t *d);
+void arrange(monitor_t *m, desktop_t *d, bool use_transaction);
 void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
                   struct wlr_box root_rect);
 

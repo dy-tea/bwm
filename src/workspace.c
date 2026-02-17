@@ -4,8 +4,10 @@
 #include "types.h"
 #include "output.h"
 #include "tree.h"
+#include "transaction.h"
 #include <string.h>
 #include <wlr/util/log.h>
+#include <wlr/types/wlr_scene.h>
 
 extern struct bwm_server server;
 
@@ -102,11 +104,6 @@ void workspace_create_desktop(const char *name) {
     return;
   }
 
-  if (find_desktop_by_name(name)) {
-    wlr_log(WLR_DEBUG, "Desktop already exists in bspwm: %s", name);
-    return;
-  }
-
   struct wlr_ext_workspace_group_handle_v1 *group = NULL;
   if (!wl_list_empty(&server.workspace_manager->groups))
     group = wl_container_of(server.workspace_manager->groups.next, group, link);
@@ -125,6 +122,47 @@ void workspace_create_desktop(const char *name) {
   wlr_log(WLR_INFO, "Created workspace: %s", name);
 }
 
+static void hide_node(node_t *n) {
+  if (!n)
+    return;
+  if (n->client) {
+    n->client->shown = false;
+    wlr_scene_node_set_enabled(&n->client->toplevel->scene_tree->node, false);
+  }
+  hide_node(n->first_child);
+  hide_node(n->second_child);
+}
+
+static void show_node(node_t *n) {
+  if (!n)
+    return;
+  if (n->client) {
+    n->client->shown = true;
+    wlr_scene_node_set_enabled(&n->client->toplevel->scene_tree->node, true);
+  }
+  show_node(n->first_child);
+  show_node(n->second_child);
+}
+
+static void hide_desktop(desktop_t *d) {
+  if (!d || !d->root)
+    return;
+  hide_node(d->root);
+  for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root))
+    if (n->client)
+      wlr_scene_node_set_enabled(&n->client->toplevel->scene_tree->node, n->client->shown);
+}
+
+static void show_desktop(desktop_t *d, monitor_t *m) {
+  if (!d || !d->root)
+    return;
+  show_node(d->root);
+  wlr_log(WLR_DEBUG, "show_desktop: showing %s", d->name);
+  for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root))
+    if (n->client)
+      wlr_scene_node_set_enabled(&n->client->toplevel->scene_tree->node, n->client->shown);
+}
+
 void workspace_switch_to_desktop(const char *name) {
   if (!server.workspace_manager)
     return;
@@ -141,17 +179,55 @@ void workspace_switch_to_desktop(const char *name) {
     return;
   }
 
+  desktop_t *old_desktop = server.focused_monitor->desk;
+
+  // hide old desktop
+  if (old_desktop) {
+    hide_desktop(old_desktop);
+    struct wlr_ext_workspace_handle_v1 *old_ws = find_workspace_by_name(old_desktop->name);
+    if (old_ws)
+      wlr_ext_workspace_handle_v1_set_hidden(old_ws, true);
+  }
+
+  // show new desktop
+  show_desktop(d, server.focused_monitor);
+
   struct wlr_ext_workspace_handle_v1 *old = workspace_get_active();
   if (old)
     wlr_ext_workspace_handle_v1_set_active(old, false);
 
   wlr_ext_workspace_handle_v1_set_active(workspace, true);
+  wlr_ext_workspace_handle_v1_set_hidden(workspace, false);
 
   server.focused_monitor->desk = d;
   if (d->focus != NULL)
     focus_node(server.focused_monitor, d, d->focus);
 
+  arrange(server.focused_monitor, d, true);
+
   wlr_log(WLR_INFO, "Switched to desktop: %s", name);
+}
+
+void workspace_switch_to_desktop_by_index(int index) {
+  if (!server.workspace_manager || !server.focused_monitor)
+    return;
+
+  wlr_log(WLR_DEBUG, "Looking for desktop at index %d", index);
+  desktop_t *target = server.focused_monitor->desk_head;
+  for (int idx = 0; target != NULL && idx < index; target = target->next, ++idx)
+    wlr_log(WLR_DEBUG, "Desktop at idx %d: %s", idx, target->name);
+
+  if (!target) {
+    int count = 0;
+    target = server.focused_monitor->desk_head;
+    for (; target != NULL; target = target->next, ++count)
+      wlr_log(WLR_DEBUG, "Desktop %d: %s", count, target->name);
+    wlr_log(WLR_ERROR, "Desktop not found at index: %d (total: %d)", index, count);
+    return;
+  }
+
+  wlr_log(WLR_DEBUG, "Switching to desktop: %s", target->name);
+  workspace_switch_to_desktop(target->name);
 }
 
 struct wlr_ext_workspace_handle_v1 *workspace_get_active(void) {

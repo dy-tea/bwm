@@ -89,11 +89,22 @@ void free_node(node_t *n) {
   if (n == NULL)
     return;
 
-  if (n->client != NULL)
-    free(n->client);
+  // deadbeef my beloved
+  static uintptr_t sentinel = 0xDEADBEEF;
+  if ((uintptr_t)n->client == sentinel || (uintptr_t)n->presel == sentinel) {
+    wlr_log(WLR_ERROR, "free_node: double-free detected!");
+    return;
+  }
 
-  if (n->presel != NULL)
+  if (n->client != NULL) {
+    free(n->client);
+    n->client = (void*)sentinel;
+  }
+
+  if (n->presel != NULL) {
     free(n->presel);
+    n->presel = (void*)sentinel;
+  }
 
   free(n);
 }
@@ -170,7 +181,7 @@ node_t *next_leaf(node_t *n, node_t *r) {
   node_t *p = n;
   for (; is_second_child(p) && p != r; p = p->parent)
     ;
-  if (p == r)
+  if (p == r || p->parent == NULL)
     return NULL;
   return first_extrema(p->parent->second_child);
 }
@@ -181,12 +192,12 @@ node_t *prev_leaf(node_t *n, node_t *r) {
   node_t *p = n;
   for (; is_first_child(p) && p != r; p = p->parent)
     ;
-  if (p == r)
+  if (p == r || p->parent == NULL)
     return NULL;
   return second_extrema(p->parent->first_child);
 }
 
-void arrange(monitor_t *m, desktop_t *d) {
+void arrange(monitor_t *m, desktop_t *d, bool use_transaction) {
   if (d->root == NULL)
     return;
 
@@ -215,7 +226,9 @@ void arrange(monitor_t *m, desktop_t *d) {
 
   apply_layout(m, d, d->root, rect, rect);
 
-  transaction_commit_dirty();
+  if (use_transaction) {
+    transaction_commit_dirty();
+  }
 }
 
 void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
@@ -352,6 +365,7 @@ node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
 
   if (f == NULL) {
     d->root = n;
+    n->parent = NULL;
     return f;
   }
 
@@ -360,9 +374,9 @@ node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
     node_t *p = f->parent;
     if (p != NULL) {
       if (is_first_child(f))
-          p->first_child = n;
+        p->first_child = n;
       else
-          p->second_child = n;
+        p->second_child = n;
     } else d->root = n;
     n->parent = p;
     free_node(f);
@@ -388,10 +402,10 @@ node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
     if (p == NULL || automatic_scheme != SCHEME_SPIRAL || single_tiled) {
       // normal insertion
       if (p != NULL) {
-          if (is_first_child(f))
-              p->first_child = c;
-          else
-              p->second_child = c;
+        if (is_first_child(f))
+          p->first_child = c;
+        else
+          p->second_child = c;
       } else d->root = c;
 
       c->parent = p;
@@ -472,10 +486,10 @@ node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
   } else {
     // presel
     if (p != NULL) {
-        if (is_first_child(f))
-            p->first_child = c;
-        else
-            p->second_child = c;
+      if (is_first_child(f))
+        p->first_child = c;
+      else
+        p->second_child = c;
     }
 
     c->split_ratio = f->presel->split_ratio;
@@ -535,14 +549,27 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
     node_t *b = brother_tree(n);
     node_t *g = p->parent;
 
+    if (b == NULL) {
+    	// remove your existence if you don't have a brother
+      d->root = NULL;
+      d->focus = NULL;
+      wlr_log(WLR_ERROR, "remove_node: brother is NULL, tree may be corrupted");
+      return;
+    }
+
     b->parent = g;
 
     if (g != NULL) {
-        if (is_first_child(p))
-            g->first_child = b;
-        else
-            g->second_child = b;
+      if (is_first_child(p))
+        g->first_child = b;
+      else
+        g->second_child = b;
     } else d->root = b;
+
+    // clear detached pointers
+    n->parent = NULL;
+    n->first_child = NULL;
+    n->second_child = NULL;
 
     // adjust tree structure
     if (!n->vacant) {
@@ -589,21 +616,6 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
           d->focus->client->toplevel != NULL)
         focus_toplevel(d->focus->client->toplevel);
     }
-
-    if (p->ntxnrefs == 0) {
-      free_node(p);
-    } else {
-      // mark for destruction
-      p->destroying = true;
-      wlr_log(WLR_DEBUG, "Marked parent node %u as destroying (ntxnrefs=%zu)",
-              p->id, (size_t)p->ntxnrefs);
-    }
-  }
-
-  if (!n->destroying) {
-    n->destroying = true;
-    wlr_log(WLR_DEBUG, "Marked removed node %u as destroying (ntxnrefs=%zu)",
-            n->id, (size_t)n->ntxnrefs);
   }
 }
 
@@ -628,8 +640,8 @@ bool focus_node(monitor_t *m, desktop_t *d, node_t *n) {
   d->focus = n;
   mon = m;
 
-  // Handle monocle mode visibility
-  if (d->layout == LAYOUT_MONOCLE && d->root != NULL) {
+  bool is_current_desktop = (m->desk == d);
+  if (is_current_desktop && d->layout == LAYOUT_MONOCLE && d->root != NULL) {
     // mark visibility state
     for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
       if (node->client != NULL)
@@ -638,8 +650,8 @@ bool focus_node(monitor_t *m, desktop_t *d, node_t *n) {
     // mark focused window as shown
     if (n != NULL && n->client != NULL)
       n->client->shown = true;
-  } else {
-    // mark all windows as shown in tiled mode
+  } else if (is_current_desktop) {
+    // mark all windows as shown in tiled mode, but only for current desktop
     if (d->root != NULL)
       for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
         if (node->client != NULL)
@@ -749,9 +761,9 @@ void swap_nodes(monitor_t *m1, desktop_t *d1, node_t *n1, monitor_t *m2,
   if (n2_focused)
     focus_node(m1, d1, n1);
 
-  arrange(m1, d1);
+  arrange(m1, d1, true);
   if (d1 != d2)
-    arrange(m2, d2);
+    arrange(m2, d2, true);
 }
 
 bool set_state(monitor_t *m, desktop_t *d, node_t *n, client_state_t s) {
@@ -761,7 +773,7 @@ bool set_state(monitor_t *m, desktop_t *d, node_t *n, client_state_t s) {
   n->client->last_state = n->client->state;
   n->client->state = s;
 
-  arrange(m, d);
+  arrange(m, d, true);
   return true;
 }
 

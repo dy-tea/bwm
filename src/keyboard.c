@@ -7,14 +7,30 @@
 #include "workspace.h"
 #include <stdlib.h>
 #include <unistd.h>
+#include <wlr/backend/session.h>
 #include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_shell.h>
-#include <wlr/types/wlr_scene.h>
-#include <wlr/backend/session.h>
 #include <wlr/util/log.h>
 
 extern struct bwm_server server;
+
+bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed);
+
+static monitor_t *find_monitor_for_desktop(desktop_t *d) {
+  monitor_t *m = mon_head;
+  while (m != NULL) {
+    desktop_t *desk = m->desk_head;
+    while (desk != NULL) {
+      if (desk == d)
+        return m;
+      desk = desk->next;
+    }
+    m = m->next;
+  }
+  return NULL;
+}
 
 void handle_new_keyboard(struct wlr_input_device *device) {
   struct wlr_keyboard *wlr_keyboard = wlr_keyboard_from_input_device(device);
@@ -72,10 +88,17 @@ void keyboard_key(struct wl_listener *listener, void *data) {
   bool handled = false;
   uint32_t modifiers = wlr_keyboard_get_modifiers(keyboard->wlr_keyboard);
 
-  if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED)
-    for (int i = 0; i < nsyms; i++)
-      if ((handled = handle_keybind(modifiers, syms[i])))
-        break;
+  if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    // first try raw keycode for number keys
+    if (handle_keybind_raw(modifiers, event->keycode, true)) {
+      handled = true;
+    } else {
+      // fallback to keysym
+      for (int i = 0; i < nsyms; i++)
+        if ((handled = handle_keybind(modifiers, syms[i])))
+          break;
+    }
+  }
 
   if (!handled) {
     // pass key to focused client
@@ -96,6 +119,33 @@ void keyboard_destroy(struct wl_listener *listener, void *data) {
   free(keyboard);
 }
 
+// keybind handling using raw keycode (for number keys 1-0)
+bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed) {
+  if (!pressed)
+    return false;
+
+#define DEBUG
+#ifdef DEBUG
+  bool mod = modifiers & WLR_MODIFIER_ALT;
+#else
+  bool mod = modifiers & WLR_MODIFIER_LOGO;
+#endif
+  bool shift = modifiers & WLR_MODIFIER_SHIFT;
+
+  // number keys 1-9 are keycodes 2-10, 0 is keycode 11
+  if (mod && keycode >= 2 && keycode <= 11) {
+    int desktop_index = keycode - 2;
+    if (shift) {
+      send_to_desktop(desktop_index);
+    } else {
+      workspace_switch_to_desktop_by_index(desktop_index);
+    }
+    return true;
+  }
+
+  return false;
+}
+
 // keybind handling
 bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym) {
   // super (mod4) is the primary modifier
@@ -111,7 +161,8 @@ bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym) {
   // handle vt switch
   if (sym >= XKB_KEY_XF86Switch_VT_1 && sym <= XKB_KEY_XF86Switch_VT_12) {
     if (server.session) {
-      wlr_session_change_vt(server.session, (unsigned int)(sym + 1 - XKB_KEY_XF86Switch_VT_1));
+      wlr_session_change_vt(server.session,
+                            (unsigned int)(sym + 1 - XKB_KEY_XF86Switch_VT_1));
       return true;
     }
   }
@@ -226,20 +277,27 @@ bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym) {
     return true;
   }
 
-  // desktop switching (Super + 1-9)
+  // desktop switching (Super + 1-9, 0)
   if (mod && !shift && sym >= XKB_KEY_1 && sym <= XKB_KEY_9) {
-    int desktop_num = sym - XKB_KEY_1 + 1;
-    char name[16];
-    snprintf(name, sizeof(name), "%d", desktop_num);
-    workspace_switch_to_desktop(name);
+    int desktop_index = sym - XKB_KEY_1;
+    workspace_switch_to_desktop_by_index(desktop_index);
+    return true;
+  }
+  if (mod && !shift && sym == XKB_KEY_0) {
+    workspace_switch_to_desktop_by_index(9);
     return true;
   }
 
-  // send to desktop (Super + Shift + 1-9)
-  if (mod && shift && sym >= XKB_KEY_1 && sym <= XKB_KEY_9) {
-    int desktop_num = sym - XKB_KEY_1;
-    send_to_desktop(desktop_num);
-    return true;
+  // send to prev/next desktop (Super + Shift + Left/Right)
+  if (mod && shift) {
+    if (sym == XKB_KEY_Left) {
+      send_to_prev_desktop();
+      return true;
+    }
+    if (sym == XKB_KEY_Right) {
+      send_to_next_desktop();
+      return true;
+    }
   }
 
   return false;
@@ -378,13 +436,15 @@ void toggle_floating(void) {
 
   if (n->client->state == STATE_FLOATING) {
     n->hidden = false;
-    wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node, server.tile_tree);
+    wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
+                            server.tile_tree);
     set_state(mon, mon->desk, n, STATE_TILED);
     wlr_log(WLR_INFO, "Window tiled");
   } else if (n->client->state == STATE_TILED) {
     n->client->floating_rectangle = n->rectangle;
     n->hidden = true;
-    wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node, server.float_tree);
+    wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
+                            server.float_tree);
     set_state(mon, mon->desk, n, STATE_FLOATING);
     wlr_log(WLR_INFO, "Window floating");
   }
@@ -401,14 +461,17 @@ void toggle_fullscreen(void) {
   if (n->client->state == STATE_FULLSCREEN) {
     set_state(mon, mon->desk, n, n->client->last_state);
     if (n->client->last_state == STATE_FLOATING)
-      wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node, server.float_tree);
+      wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
+                              server.float_tree);
     else if (n->client->last_state == STATE_TILED)
-      wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node, server.tile_tree);
+      wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
+                              server.tile_tree);
     wlr_xdg_toplevel_set_fullscreen(n->client->toplevel->xdg_toplevel, false);
     wlr_log(WLR_INFO, "Fullscreen disabled");
   } else {
     n->hidden = true;
-    wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node, server.fullscreen_tree);
+    wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
+                            server.fullscreen_tree);
     set_state(mon, mon->desk, n, STATE_FULLSCREEN);
     wlr_xdg_toplevel_set_fullscreen(n->client->toplevel->xdg_toplevel, true);
     wlr_log(WLR_INFO, "Fullscreen enabled");
@@ -438,38 +501,175 @@ void focus_prev_desktop(void) {
 }
 
 void send_to_desktop(int desktop_index) {
-  char name[16];
-  snprintf(name, sizeof(name), "%d", desktop_index + 1);
-  
+  if (mon == NULL)
+    return;
+
+  // get index of desktop
+  desktop_t *target = mon->desk_head;
+  int idx = 0;
+  for (; target != NULL && idx < desktop_index; target = target->next, ++idx)
+    ;
+
+  if (!target) {
+    wlr_log(WLR_ERROR, "Desktop not found at index: %d", desktop_index);
+    return;
+  }
+
+  if (mon->desk == target)
+    return;
+
+  if (mon->desk == NULL || mon->desk->focus == NULL)
+    return;
+
+  node_t *n = mon->desk->focus;
+  if (n == NULL || n->client == NULL)
+    return;
+
+  desktop_t *src_desk = mon->desk;
+
+  n->destroying = false;
+  n->ntxnrefs = 0;
+
+  n->client->shown = false;
+  wlr_scene_node_set_enabled(&n->client->toplevel->scene_tree->node, false);
+
+  // remove from source desktop
+  remove_node(mon, src_desk, n);
+
+  // update focus on source desktop
+  if (src_desk->focus == n) {
+    if (src_desk->root != NULL) {
+      node_t *new_focus = first_extrema(src_desk->root);
+      if (new_focus != NULL) {
+        src_desk->focus = new_focus;
+        focus_node(mon, src_desk, new_focus);
+      } else {
+        src_desk->focus = NULL;
+      }
+    } else {
+      src_desk->focus = NULL;
+    }
+  }
+
+  monitor_t *target_mon = find_monitor_for_desktop(target);
+  if (target_mon == NULL) {
+    wlr_log(WLR_ERROR, "Could not find monitor for desktop: %s", target->name);
+    return;
+  }
+
+  insert_node(target_mon, target, n, find_public(target));
+  target->focus = n;
+
+  arrange(mon, src_desk, true);
+  arrange(target_mon, target, false);
+
+  wlr_log(WLR_INFO, "Sent window to desktop: %s", target->name);
+}
+
+void send_to_desktop_by_name(const char *name) {
+  if (mon == NULL)
+    return;
+
   desktop_t *target = find_desktop_by_name(name);
   if (!target) {
     wlr_log(WLR_ERROR, "Desktop not found: %s", name);
     return;
   }
 
-  if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL) {
+  if (mon->desk == target)
     return;
-  }
+
+  if (mon->desk == NULL || mon->desk->focus == NULL)
+    return;
 
   node_t *n = mon->desk->focus;
-  if (n == NULL || n->client == NULL) {
+  if (n == NULL || n->client == NULL)
     return;
-  }
 
   desktop_t *src_desk = mon->desk;
 
-  remove_node(mon, src_desk, n);
-  insert_node(server.focused_monitor, target, n, find_public(target));
-
-  target->focus = n;
-  if (target->focus == n) {
-    focus_node(server.focused_monitor, target, n);
+  monitor_t *target_mon = find_monitor_for_desktop(target);
+  if (target_mon == NULL) {
+    wlr_log(WLR_ERROR, "Could not find monitor for desktop: %s", target->name);
+    return;
   }
 
-  arrange(mon, src_desk);
-  arrange(server.focused_monitor, target);
-  
-  wlr_log(WLR_INFO, "Sent window to desktop: %s", name);
+  n->destroying = false;
+  n->ntxnrefs = 0;
+
+  n->client->shown = false;
+  wlr_scene_node_set_enabled(&n->client->toplevel->scene_tree->node, false);
+
+  remove_node(mon, src_desk, n);
+
+  if (src_desk->focus == n) {
+    if (src_desk->root != NULL) {
+      node_t *new_focus = first_extrema(src_desk->root);
+      if (new_focus != NULL) {
+        src_desk->focus = new_focus;
+        focus_node(mon, src_desk, new_focus);
+      } else {
+        src_desk->focus = NULL;
+      }
+    } else {
+      src_desk->focus = NULL;
+    }
+  }
+
+  // add to target desktop
+  insert_node(target_mon, target, n, find_public(target));
+  target->focus = n;
+
+  // Ensure the moved node respects initial_polarity
+  // In SPIRAL mode, insert_node may place it as second_child regardless
+  if (n->parent != NULL) {
+    if (initial_polarity == FIRST_CHILD && n->parent->second_child == n) {
+      // Node is second child but should be first, swap them
+      node_t *p = n->parent;
+      node_t *sibling = p->first_child;
+      p->first_child = n;
+      p->second_child = sibling;
+      n->parent = p;
+      if (sibling != NULL)
+        sibling->parent = p;
+    } else if (initial_polarity == SECOND_CHILD && n->parent->first_child == n) {
+      // Node is first child but should be second, swap them
+      node_t *p = n->parent;
+      node_t *sibling = p->second_child;
+      p->second_child = n;
+      p->first_child = sibling;
+      n->parent = p;
+      if (sibling != NULL)
+        sibling->parent = p;
+    }
+  }
+
+  arrange(mon, src_desk, true);
+  arrange(target_mon, target, false);
+
+  wlr_log(WLR_INFO, "Sent window to desktop: %s", target->name);
+}
+
+void send_to_next_desktop(void) {
+  if (mon == NULL || mon->desk == NULL)
+    return;
+
+  desktop_t *next = mon->desk->next;
+  if (next != NULL) {
+    send_to_desktop_by_name(next->name);
+    wlr_log(WLR_INFO, "Sent window to next desktop");
+  }
+}
+
+void send_to_prev_desktop(void) {
+  if (mon == NULL || mon->desk == NULL)
+    return;
+
+  desktop_t *prev = mon->desk->prev;
+  if (prev != NULL) {
+    send_to_desktop_by_name(prev->name);
+    wlr_log(WLR_INFO, "Sent window to previous desktop");
+  }
 }
 
 void toggle_monocle(void) {
@@ -487,7 +687,7 @@ void toggle_monocle(void) {
     wlr_log(WLR_INFO, "Switched to monocle layout");
   }
 
-  arrange(mon, d);
+  arrange(mon, d, true);
 
   if (d->focus != NULL)
     focus_node(mon, d, d->focus);
@@ -498,7 +698,7 @@ void rotate_clockwise(void) {
     return;
 
   rotate_tree(mon->desk->root, 90);
-  arrange(mon, mon->desk);
+  arrange(mon, mon->desk, true);
   wlr_log(WLR_INFO, "Rotated tree clockwise");
 }
 
@@ -507,7 +707,7 @@ void rotate_counterclockwise(void) {
     return;
 
   rotate_tree(mon->desk->root, 270);
-  arrange(mon, mon->desk);
+  arrange(mon, mon->desk, true);
   wlr_log(WLR_INFO, "Rotated tree counterclockwise");
 }
 
@@ -516,7 +716,7 @@ void flip_horizontal(void) {
     return;
 
   flip_tree(mon->desk->root, FLIP_HORIZONTAL);
-  arrange(mon, mon->desk);
+  arrange(mon, mon->desk, true);
   wlr_log(WLR_INFO, "Flipped tree horizontally");
 }
 
@@ -525,7 +725,7 @@ void flip_vertical(void) {
     return;
 
   flip_tree(mon->desk->root, FLIP_VERTICAL);
-  arrange(mon, mon->desk);
+  arrange(mon, mon->desk, true);
   wlr_log(WLR_INFO, "Flipped tree vertically");
 }
 
