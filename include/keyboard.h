@@ -1,6 +1,5 @@
 #pragma once
 
-#define WLR_USE_UNSTABLE
 #include <wayland-server.h>
 #include <wlr/types/wlr_input_device.h>
 #include <xkbcommon/xkbcommon.h>

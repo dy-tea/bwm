@@ -1,11 +1,12 @@
-#define WLR_USE_UNSTABLE
 #include "toplevel.h"
 #include "keyboard.h"
+#include "popup.h"
 #include "server.h"
 #include "tree.h"
 #include "transaction.h"
 #include <string.h>
 #include <stdlib.h>
+#include <wayland-server-core.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
@@ -163,6 +164,7 @@ void toplevel_destroy(struct wl_listener *listener, void *data) {
   wl_list_remove(&toplevel->map.link);
   wl_list_remove(&toplevel->unmap.link);
   wl_list_remove(&toplevel->commit.link);
+  wl_list_remove(&toplevel->new_xdg_popup.link);
   wl_list_remove(&toplevel->destroy.link);
   wl_list_remove(&toplevel->request_move.link);
   wl_list_remove(&toplevel->request_resize.link);
@@ -217,10 +219,13 @@ void toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
   monitor_t *m = mon;
   desktop_t *d = m ? m->desk : NULL;
 
-  if (event->fullscreen)
+  if (event->fullscreen) {
     set_state(m, d, toplevel->node, STATE_FULLSCREEN);
-  else
+    wlr_scene_node_reparent(&toplevel->scene_tree->node, server.full_tree);
+  } else {
     set_state(m, d, toplevel->node, STATE_TILED);
+    wlr_scene_node_reparent(&toplevel->scene_tree->node, server.tile_tree);
+  }
 
   wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, event->fullscreen);
 }
@@ -365,6 +370,9 @@ void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 
   toplevel->commit.notify = toplevel_commit;
   wl_signal_add(&xdg_toplevel->base->surface->events.commit, &toplevel->commit);
+
+  toplevel->new_xdg_popup.notify = handle_new_xdg_popup;
+  wl_signal_add(&xdg_toplevel->base->events.new_popup, &toplevel->new_xdg_popup);
 
   toplevel->destroy.notify = toplevel_destroy;
   wl_signal_add(&xdg_toplevel->events.destroy, &toplevel->destroy);

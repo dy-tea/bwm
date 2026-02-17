@@ -1,16 +1,16 @@
 #pragma once
 
-#define WLR_USE_UNSTABLE
 #include "toplevel.h"
 #include "types.h"
 #include <wayland-server.h>
 #include <xkbcommon/xkbcommon.h>
 #include <wlr/types/wlr_ext_workspace_v1.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
 
 enum cursor_mode {
-    CURSOR_PASSTHROUGH,
-    CURSOR_MOVE,
-    CURSOR_RESIZE,
+  CURSOR_PASSTHROUGH,
+  CURSOR_MOVE,
+  CURSOR_RESIZE,
 };
 
 struct bwm_server {
@@ -22,13 +22,20 @@ struct bwm_server {
   struct wlr_scene *scene;
   struct wlr_scene_output_layout *scene_layout;
 
+  struct wlr_linux_dmabuf_v1 *linux_dmabuf;
+
+  struct wlr_scene_tree *bg_tree;
+  struct wlr_scene_tree *bot_tree;
   struct wlr_scene_tree *tile_tree;
   struct wlr_scene_tree *float_tree;
-  struct wlr_scene_tree *fullscreen_tree;
+  struct wlr_scene_tree *top_tree;
+  struct wlr_scene_tree *full_tree;
+  struct wlr_scene_tree *over_tree;
 
   struct wlr_xdg_shell *xdg_shell;
+  struct wlr_layer_shell_v1 *layer_shell;
+  struct wl_listener new_layer_surface;
   struct wl_listener new_xdg_toplevel;
-  struct wl_listener new_xdg_popup;
   struct wl_list toplevels;
 
   struct wlr_cursor *cursor;

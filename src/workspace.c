@@ -1,4 +1,3 @@
-#define WLR_USE_UNSTABLE
 #include "workspace.h"
 #include "server.h"
 #include "types.h"

@@ -8,6 +8,7 @@
 #include "tree.h"
 #include "workspace.h"
 #include "ipc.h"
+#include "layer.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -17,6 +18,11 @@
 #include <wlr/util/log.h>
 #include <wlr/util/box.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_drm.h>
+#include <wlr/types/wlr_linux_dmabuf_v1.h>
+#include <wlr/types/wlr_export_dmabuf_v1.h>
+#include <wlr/types/wlr_xdg_output_v1.h>
+#include <wlr/types/wlr_primary_selection_v1.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_data_device.h>
@@ -33,7 +39,7 @@ static void reset_cursor_mode(void) {
   server.grabbed_toplevel = NULL;
 }
 
-static struct bwm_toplevel *desktop_toplevel_at(
+static void *desktop_type_at(
       double lx, double ly, struct wlr_surface **surface,
       double *sx, double *sy) {
   struct wlr_scene_node *node = wlr_scene_node_at(
@@ -47,6 +53,7 @@ static struct bwm_toplevel *desktop_toplevel_at(
     return NULL;
 
   *surface = scene_surface->surface;
+
   struct wlr_scene_tree *tree = node->parent;
   for (; tree != NULL && tree->node.data == NULL; tree = tree->node.parent)
     ;
@@ -132,10 +139,9 @@ static void process_cursor_motion(uint32_t time) {
   double sx, sy;
   struct wlr_seat *seat = server.seat;
   struct wlr_surface *surface = NULL;
-  struct bwm_toplevel *toplevel = desktop_toplevel_at(
-          server.cursor->x, server.cursor->y, &surface, &sx, &sy);
-  if (!toplevel)
-    wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, "default");
+  void *type = desktop_type_at(server.cursor->x, server.cursor->y, &surface, &sx, &sy);
+  if (type == NULL)
+  	wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, "default");
 
   if (surface) {
     wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
@@ -194,10 +200,19 @@ void cursor_button(struct wl_listener *listener, void *data) {
   } else {
     double sx, sy;
     struct wlr_surface *surface = NULL;
-    struct bwm_toplevel *toplevel = desktop_toplevel_at(
+    void *type = desktop_type_at(
             server.cursor->x, server.cursor->y, &surface, &sx, &sy);
-    if (toplevel)
-      focus_toplevel(toplevel);
+    if (type == NULL)
+    	return;
+    if (wlr_layer_surface_v1_try_from_wlr_surface(surface)) {
+    	struct bwm_layer_surface* layer = type;
+     	if (layer)
+      	focus_layer_surface(layer);
+    } else {
+    	struct bwm_toplevel *toplevel = type;
+	    if (toplevel)
+	      focus_toplevel(toplevel);
+    }
   }
 }
 
@@ -281,24 +296,42 @@ void server_init(void) {
   wlr_compositor_create(server.wl_display, 5, server.renderer);
   wlr_subcompositor_create(server.wl_display);
 
+  // dmabuf support
+  if (wlr_renderer_get_texture_formats(server.renderer, WLR_BUFFER_CAP_DMABUF)) {
+  	wlr_drm_create(server.wl_display, server.renderer);
+    server.linux_dmabuf = wlr_linux_dmabuf_v1_create_with_renderer(server.wl_display, 4, server.renderer);
+    wlr_export_dmabuf_manager_v1_create(server.wl_display);
+  }
+
   wlr_data_device_manager_create(server.wl_display);
+  wlr_primary_selection_v1_device_manager_create(server.wl_display);
 
   server.output_layout = wlr_output_layout_create(server.wl_display);
+  wlr_xdg_output_manager_v1_create(server.wl_display, server.output_layout);
 
   wl_list_init(&server.outputs);
 
   // scene graph
   server.scene = wlr_scene_create();
   server.scene_layout = wlr_scene_attach_output_layout(server.scene, server.output_layout);
+  if (server.linux_dmabuf)
+ 		wlr_scene_set_linux_dmabuf_v1(server.scene, server.linux_dmabuf);
 
   // scene trees for layering
-  server.tile_tree = wlr_scene_tree_create(&server.scene->tree);
-  server.float_tree = wlr_scene_tree_create(&server.scene->tree);
-  server.fullscreen_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.bg_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.bot_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.tile_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.float_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.top_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.full_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.over_tree = wlr_scene_tree_create(&server.scene->tree);
 
   // xdg shell
   server.xdg_shell = wlr_xdg_shell_create(server.wl_display, 5);
   wl_list_init(&server.toplevels);
+
+  // layer shell
+  server.layer_shell = wlr_layer_shell_v1_create(server.wl_display, 5);
 
   // cursor
   server.cursor = wlr_cursor_create();
@@ -383,8 +416,9 @@ int server_run(void) {
   server.new_xdg_toplevel.notify = handle_new_xdg_toplevel;
   wl_signal_add(&server.xdg_shell->events.new_toplevel, &server.new_xdg_toplevel);
 
-  server.new_xdg_popup.notify = handle_new_xdg_popup;
-  wl_signal_add(&server.xdg_shell->events.new_popup, &server.new_xdg_popup);
+  // layer-shell listeners
+  server.new_layer_surface.notify = handle_new_layer_surface;
+  wl_signal_add(&server.layer_shell->events.new_surface, &server.new_layer_surface);
 
   // cursor listeners
   server.cursor_motion.notify = cursor_motion;
@@ -444,7 +478,6 @@ void server_fini(void) {
   wl_display_destroy_clients(server.wl_display);
 
   wl_list_remove(&server.new_xdg_toplevel.link);
-  wl_list_remove(&server.new_xdg_popup.link);
   wl_list_remove(&server.cursor_motion.link);
   wl_list_remove(&server.cursor_motion_absolute.link);
   wl_list_remove(&server.cursor_button.link);

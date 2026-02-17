@@ -1,8 +1,8 @@
-#define WLR_USE_UNSTABLE
 #include "tree.h"
 #include "toplevel.h"
 #include "types.h"
 #include "transaction.h"
+#include "output.h"
 #include <stdlib.h>
 #include <wlr/util/log.h>
 #include <wlr/types/wlr_xdg_shell.h>
@@ -201,7 +201,12 @@ void arrange(monitor_t *m, desktop_t *d, bool use_transaction) {
   if (d->root == NULL)
     return;
 
-  struct wlr_box rect = m->rectangle;
+  struct wlr_box rect;
+  if (m->output) {
+    rect = m->output->usable_area;
+  } else {
+    rect = m->rectangle;
+  }
 
   rect.x += m->padding.left + d->padding.left;
   rect.y += m->padding.top + d->padding.top;

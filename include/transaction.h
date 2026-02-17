@@ -11,31 +11,31 @@ struct node_t;
 struct bwm_toplevel;
 
 struct bwm_transaction_inst {
-    struct bwm_transaction *transaction;
-    struct node_t *node;
-    struct wl_list link;  // bwm_transaction::instructions
+  struct bwm_transaction *transaction;
+  struct node_t *node;
+  struct wl_list link;  // bwm_transaction::instructions
 
-    // saved state
-    struct wlr_box rectangle;
-    double split_ratio;
-    int split_type;  // split_type_t
-    bool hidden;
+  // saved state
+  struct wlr_box rectangle;
+  double split_ratio;
+  int split_type;  // split_type_t
+  bool hidden;
 
-    int state;  // client_state_t
-    struct wlr_box tiled_rectangle;
-    struct wlr_box floating_rectangle;
-    struct wlr_box content_rect;
-    uint32_t serial;
-    bool waiting;
-    bool server_request;
+  int state;  // client_state_t
+  struct wlr_box tiled_rectangle;
+  struct wlr_box floating_rectangle;
+  struct wlr_box content_rect;
+  uint32_t serial;
+  bool waiting;
+  bool server_request;
 };
 
 struct bwm_transaction {
-    struct wl_event_source *timer;
-    struct wl_list instructions;
-    size_t num_waiting;
-    size_t num_configures;
-    struct timespec commit_time;
+  struct wl_event_source *timer;
+  struct wl_list instructions;
+  size_t num_waiting;
+  size_t num_configures;
+  struct timespec commit_time;
 };
 
 /**

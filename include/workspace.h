@@ -1,6 +1,5 @@
 #pragma once
 
-#define WLR_USE_UNSTABLE
 #include <wlr/types/wlr_ext_workspace_v1.h>
 #include <stdbool.h>
 

@@ -1,4 +1,3 @@
-#define WLR_USE_UNSTABLE
 #include "transaction.h"
 #include "server.h"
 #include "toplevel.h"

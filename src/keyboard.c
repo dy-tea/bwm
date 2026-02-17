@@ -1,5 +1,4 @@
 #include "types.h"
-#define WLR_USE_UNSTABLE
 #include "keyboard.h"
 #include "server.h"
 #include "toplevel.h"
@@ -471,7 +470,7 @@ void toggle_fullscreen(void) {
   } else {
     n->hidden = true;
     wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
-                            server.fullscreen_tree);
+                            server.full_tree);
     set_state(mon, mon->desk, n, STATE_FULLSCREEN);
     wlr_xdg_toplevel_set_fullscreen(n->client->toplevel->xdg_toplevel, true);
     wlr_log(WLR_INFO, "Fullscreen enabled");

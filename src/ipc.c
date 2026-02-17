@@ -1,4 +1,3 @@
-#define WLR_USE_UNSTABLE
 #include "ipc.h"
 #include "server.h"
 #include "types.h"
