@@ -247,6 +247,7 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
 
   // set pending
   n->pending.rectangle = rect;
+  n->monitor = m;
   node_set_dirty(n);
 
   wlr_log(WLR_DEBUG, "apply_layout: node %u pending_rect=(%d,%d %dx%d)",
@@ -299,14 +300,19 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
     struct wlr_box first_rect;
     struct wlr_box second_rect;
 
+    bool first_fullscreen = n->first_child && n->first_child->client && n->first_child->client->state == STATE_FULLSCREEN;
+    bool second_fullscreen = n->second_child && n->second_child->client && n->second_child->client->state == STATE_FULLSCREEN;
+    bool first_hidden = n->first_child && n->first_child->hidden;
+    bool second_hidden = n->second_child && n->second_child->hidden;
+
     if (d->layout == LAYOUT_MONOCLE) {
       first_rect = rect;
       second_rect = rect;
     } else if (n->split_type == TYPE_VERTICAL) {
-      if (n->first_child && n->first_child->hidden && n->second_child && !n->second_child->hidden) {
+      if ((first_hidden || first_fullscreen) && n->second_child && !(second_hidden || second_fullscreen)) {
         first_rect = (struct wlr_box){0, 0, 0, 0};
         second_rect = rect;
-      } else if (n->second_child && n->second_child->hidden && n->first_child && !n->first_child->hidden) {
+      } else if ((second_hidden || second_fullscreen) && n->first_child && !(first_hidden || first_fullscreen)) {
         first_rect = rect;
         second_rect = (struct wlr_box){0, 0, 0, 0};
       } else {
@@ -317,10 +323,10 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
         second_rect.width = rect.width - first_rect.width;
       }
     } else {
-      if (n->first_child && n->first_child->hidden && n->second_child && !n->second_child->hidden) {
+      if ((first_hidden || first_fullscreen) && n->second_child && !(second_hidden || second_fullscreen)) {
         first_rect = (struct wlr_box){0, 0, 0, 0};
         second_rect = rect;
-      } else if (n->second_child && n->second_child->hidden && n->first_child && !n->first_child->hidden) {
+      } else if ((second_hidden || second_fullscreen) && n->first_child && !(first_hidden || first_fullscreen)) {
         first_rect = rect;
         second_rect = (struct wlr_box){0, 0, 0, 0};
       } else {

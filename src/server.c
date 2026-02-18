@@ -409,6 +409,7 @@ void server_init(void) {
   m->desk = d;
   m->desk_head = d;
   m->desk_tail = d;
+  d->monitor = m;
 
   mon = m;
   mon_head = m;

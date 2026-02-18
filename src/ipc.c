@@ -420,6 +420,7 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
         mon->desk_head = d;
         mon->desk_tail = d;
       }
+      d->monitor = mon;
 
       workspace_create_desktop(d->name);
 
@@ -475,6 +476,7 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
         mon->desk_head = newd;
         mon->desk_tail = newd;
       }
+      newd->monitor = mon;
 
       wlr_log(WLR_DEBUG, "IPC: creating workspace for new desktop %s", newd->name);
       workspace_create_desktop(newd->name);

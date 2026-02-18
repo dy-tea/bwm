@@ -468,7 +468,6 @@ void toggle_fullscreen(void) {
     wlr_xdg_toplevel_set_fullscreen(n->client->toplevel->xdg_toplevel, false);
     wlr_log(WLR_INFO, "Fullscreen disabled");
   } else {
-    n->hidden = true;
     wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
                             server.full_tree);
     set_state(mon, mon->desk, n, STATE_FULLSCREEN);

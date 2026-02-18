@@ -90,6 +90,7 @@ typedef struct node_t {
   struct node_t *second_child;
   struct node_t *parent;
   client_t *client;
+  struct monitor_t *monitor;
 
   // transaction support
   struct bwm_transaction_inst *instruction;
@@ -126,6 +127,7 @@ typedef struct desktop_t {
   padding_t padding;
   int window_gap;
   unsigned int border_width;
+  struct monitor_t *monitor;
 } desktop_t;
 
 typedef struct monitor_t {

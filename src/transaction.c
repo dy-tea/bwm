@@ -161,11 +161,15 @@ static void apply_node_state(node_t *node,
 
   // node is destroying, hide it now atomically with other changes
   if (node->destroying) {
-    if (node->client->toplevel->saved_surface_tree) {
+    if (node->client->toplevel 
+        && node->client->toplevel->saved_surface_tree 
+        && node->client->toplevel->content_tree) {
       toplevel_remove_saved_buffer(node->client->toplevel);
       wlr_log(WLR_DEBUG, "Removed saved buffer for destroying node %u", node->id);
     }
-    wlr_scene_node_set_enabled(&node->client->toplevel->scene_tree->node, false);
+    if (node->client->toplevel && node->client->toplevel->scene_tree) {
+      wlr_scene_node_set_enabled(&node->client->toplevel->scene_tree->node, false);
+    }
     node->client->shown = false;
     wlr_log(WLR_DEBUG, "Hid destroying node %u atomically with transaction", node->id);
     return;
@@ -182,9 +186,9 @@ static void apply_node_state(node_t *node,
 
     struct wlr_box *rect;
     if (node->client->state == STATE_FULLSCREEN) {
-      monitor_t *m = mon;
+      monitor_t *m = node->monitor;
       if (m)
-          rect = &m->rectangle;
+        rect = &m->rectangle;
       else return;
     } else if (node->client->state == STATE_FLOATING)
       rect = &instruction->floating_rectangle;
@@ -264,7 +268,7 @@ static bool should_configure(node_t *node,
   // determine target size based on state
   struct wlr_box target_rect;
   if (node->client->state == STATE_FULLSCREEN) {
-    monitor_t *m = mon;
+    monitor_t *m = node->monitor;
     if (!m) return false;
     target_rect = m->rectangle;
   } else if (node->client->state == STATE_FLOATING)
@@ -357,7 +361,7 @@ static void transaction_commit(struct bwm_transaction *txn) {
         // determine the correct rectangle based on client state
         struct wlr_box *rect;
         if (node->client->state == STATE_FULLSCREEN) {
-          monitor_t *m = mon;
+          monitor_t *m = node->monitor;
           if (m)
             rect = &m->rectangle;
           else

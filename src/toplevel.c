@@ -4,6 +4,7 @@
 #include "server.h"
 #include "tree.h"
 #include "transaction.h"
+#include "types.h"
 #include <string.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
@@ -108,6 +109,8 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
 
     if (n)
       n->destroying = true;
+
+    toplevel->node = NULL;
 
     arrange(m, d, true);
 
@@ -216,14 +219,22 @@ void toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
   if (toplevel->node == NULL || toplevel->node->client == NULL)
     return;
 
-  monitor_t *m = mon;
+  if (event->fullscreen == (toplevel->node->client->state == STATE_FULLSCREEN))
+    return;
+
+  monitor_t *m = toplevel->node->monitor;
   desktop_t *d = m ? m->desk : NULL;
 
   if (event->fullscreen) {
     set_state(m, d, toplevel->node, STATE_FULLSCREEN);
     wlr_scene_node_reparent(&toplevel->scene_tree->node, server.full_tree);
   } else {
-    set_state(m, d, toplevel->node, STATE_TILED);
+    client_state_t last = toplevel->node->client->last_state;
+    if (last == STATE_FLOATING) {
+      set_state(m, d, toplevel->node, STATE_FLOATING);
+    } else {
+      set_state(m, d, toplevel->node, STATE_TILED);
+    }
     wlr_scene_node_reparent(&toplevel->scene_tree->node, server.tile_tree);
   }
 
@@ -302,7 +313,7 @@ void toplevel_apply_geometry(struct bwm_toplevel *toplevel) {
   struct wlr_box *rect;
 
   if (c->state == STATE_FULLSCREEN) {
-    monitor_t *m = mon;
+    monitor_t *m = toplevel->node->monitor;
     if (m)
       rect = &m->rectangle;
     else return;
