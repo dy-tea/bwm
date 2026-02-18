@@ -1,0 +1,123 @@
+#
+# bwm hotkey configuration
+#
+
+# terminal emulator
+alt + Return
+	foot
+
+# close window
+alt + shift + q
+	bmsg node --close
+
+# toggle fullscreen
+alt + f
+	bmsg node --state fullscreen
+
+# toggle floating
+alt + shift + space
+	bmsg node --state floating
+
+# toggle monocle
+alt + m
+	bmsg desktop --layout monocle
+
+# window navigation
+alt + h
+	focus_west
+alt + j
+	focus_south
+alt + k
+	focus_north
+alt + l
+	focus_east
+
+# window swapping
+alt + shift + h
+	swap_west
+alt + shift + j
+	swap_south
+alt + shift + k
+	swap_north
+alt + shift + l
+	swap_east
+
+# preselection
+alt + ctrl + h
+	presel_west
+alt + ctrl + j
+	presel_south
+alt + ctrl + k
+	presel_north
+alt + ctrl + l
+	presel_east
+
+# cancel preselection
+alt + ctrl + space
+	cancel_presel
+
+# rotate
+alt + r
+	rotate_clockwise
+alt + shift + r
+	rotate_counterclockwise
+
+# flip
+alt + comma
+	flip_horizontal
+alt + period
+	flip_vertical
+
+# desktop switching (1-based index)
+alt + 1
+	desktop 1
+alt + 2
+	desktop 2
+alt + 3
+	desktop 3
+alt + 4
+	desktop 4
+alt + 5
+	desktop 5
+alt + 6
+	desktop 6
+alt + 7
+	desktop 7
+alt + 8
+	desktop 8
+alt + 9
+	desktop 9
+alt + 0
+	desktop 10
+
+# send to desktop (1-based index)
+alt + shift + 1
+	bmsg node --to-desktop 1
+alt + shift + 2
+	bmsg node --to-desktop 2
+alt + shift + 3
+	bmsg node --to-desktop 3
+alt + shift + 4
+	bmsg node --to-desktop 4
+alt + shift + 5
+	bmsg node --to-desktop 5
+alt + shift + 6
+	bmsg node --to-desktop 6
+alt + shift + 7
+	bmsg node --to-desktop 7
+alt + shift + 8
+	bmsg node --to-desktop 8
+alt + shift + 9
+	bmsg node --to-desktop 9
+alt + shift + 0
+	bmsg node --to-desktop 10
+
+# send to next/prev desktop
+alt + shift + Right
+	send_to_next
+alt + shift + Left
+	send_to_prev
+
+# quit
+alt + alt + q
+	bmsg quit

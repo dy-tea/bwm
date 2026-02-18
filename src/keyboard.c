@@ -4,6 +4,7 @@
 #include "toplevel.h"
 #include "tree.h"
 #include "workspace.h"
+#include "config.h"
 #include <stdlib.h>
 #include <unistd.h>
 #include <wlr/backend/session.h>
@@ -14,6 +15,9 @@
 #include <wlr/util/log.h>
 
 extern struct bwm_server server;
+
+extern keybind_t keybinds[MAX_KEYBINDS];
+extern size_t num_keybinds;
 
 bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed);
 
@@ -123,23 +127,12 @@ bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed) {
   if (!pressed)
     return false;
 
-#define DEBUG
-#ifdef DEBUG
-  bool mod = modifiers & WLR_MODIFIER_ALT;
-#else
-  bool mod = modifiers & WLR_MODIFIER_LOGO;
-#endif
-  bool shift = modifiers & WLR_MODIFIER_SHIFT;
-
-  // number keys 1-9 are keycodes 2-10, 0 is keycode 11
-  if (mod && keycode >= 2 && keycode <= 11) {
-    int desktop_index = keycode - 2;
-    if (shift) {
-      send_to_desktop(desktop_index);
-    } else {
-      workspace_switch_to_desktop_by_index(desktop_index);
+  for (size_t i = 0; i < num_keybinds; i++) {
+    keybind_t *kb = &keybinds[i];
+    if (kb->use_keycode && keybind_matches(kb, modifiers, 0, keycode)) {
+      execute_keybind(kb);
+      return true;
     }
-    return true;
   }
 
   return false;
@@ -147,17 +140,7 @@ bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed) {
 
 // keybind handling
 bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym) {
-  // super (mod4) is the primary modifier
-#define DEBUG
-#ifdef DEBUG
-  bool mod = modifiers & WLR_MODIFIER_ALT;
-#else
-  bool mod = modifiers & WLR_MODIFIER_LOGO;
-#endif
-  bool shift = modifiers & WLR_MODIFIER_SHIFT;
-  bool ctrl = modifiers & WLR_MODIFIER_CTRL;
-
-  // handle vt switch
+  // handle vt switch - always available
   if (sym >= XKB_KEY_XF86Switch_VT_1 && sym <= XKB_KEY_XF86Switch_VT_12) {
     if (server.session) {
       wlr_session_change_vt(server.session,
@@ -166,135 +149,11 @@ bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym) {
     }
   }
 
-  // window navigation (Super + hjkl)
-  if (mod && !shift && !ctrl) {
-    switch (sym) {
-    case XKB_KEY_h:
-      focus_west();
-      return true;
-    case XKB_KEY_j:
-      focus_south();
-      return true;
-    case XKB_KEY_k:
-      focus_north();
-      return true;
-    case XKB_KEY_l:
-      focus_east();
-      return true;
-    }
-  }
-
-  // window manipulation (Super + Shift + hjkl) - swap
-  if (mod && shift && !ctrl) {
-    switch (sym) {
-    case XKB_KEY_H:
-      swap_west();
-      return true;
-    case XKB_KEY_J:
-      swap_south();
-      return true;
-    case XKB_KEY_K:
-      swap_north();
-      return true;
-    case XKB_KEY_L:
-      swap_east();
-      return true;
-    }
-  }
-
-  // close window (Super + Shift + q)
-  if (mod && shift && sym == XKB_KEY_Q) {
-    close_focused();
-    return true;
-  }
-
-  // toggle floating (Super + Shift + space)
-  if (mod && shift && sym == XKB_KEY_space) {
-    toggle_floating();
-    return true;
-  }
-
-  // toggle fullscreen (Super + f)
-  if (mod && !shift && sym == XKB_KEY_f) {
-    toggle_fullscreen();
-    return true;
-  }
-
-  // toggle monocle (Super + m)
-  if (mod && !shift && sym == XKB_KEY_m) {
-    toggle_monocle();
-    return true;
-  }
-
-  // preselection (Super + Ctrl + hjkl)
-  if (mod && ctrl && !shift) {
-    switch (sym) {
-    case XKB_KEY_h:
-      presel_west();
-      return true;
-    case XKB_KEY_j:
-      presel_south();
-      return true;
-    case XKB_KEY_k:
-      presel_north();
-      return true;
-    case XKB_KEY_l:
-      presel_east();
-      return true;
-    }
-  }
-
-  // cancel preselection (Super + Ctrl + space)
-  if (mod && ctrl && sym == XKB_KEY_space) {
-    cancel_presel();
-    return true;
-  }
-
-  // rotate (Super + r/R)
-  if (mod && sym == XKB_KEY_r) {
-    if (shift)
-      rotate_counterclockwise();
-    else
-      rotate_clockwise();
-    return true;
-  }
-
-  // flip (Super + {comma,period})
-  if (mod && !shift) {
-    if (sym == XKB_KEY_comma) {
-      flip_horizontal();
-      return true;
-    } else if (sym == XKB_KEY_period) {
-      flip_vertical();
-      return true;
-    }
-  }
-
-  // spawn terminal (Super + Return)
-  if (mod && !shift && sym == XKB_KEY_Return) {
-    spawn_terminal();
-    return true;
-  }
-
-  // desktop switching (Super + 1-9, 0)
-  if (mod && !shift && sym >= XKB_KEY_1 && sym <= XKB_KEY_9) {
-    int desktop_index = sym - XKB_KEY_1;
-    workspace_switch_to_desktop_by_index(desktop_index);
-    return true;
-  }
-  if (mod && !shift && sym == XKB_KEY_0) {
-    workspace_switch_to_desktop_by_index(9);
-    return true;
-  }
-
-  // send to prev/next desktop (Super + Shift + Left/Right)
-  if (mod && shift) {
-    if (sym == XKB_KEY_Left) {
-      send_to_prev_desktop();
-      return true;
-    }
-    if (sym == XKB_KEY_Right) {
-      send_to_next_desktop();
+  // check user-defined keybinds
+  for (size_t i = 0; i < num_keybinds; i++) {
+    keybind_t *kb = &keybinds[i];
+    if (!kb->use_keycode && keybind_matches(kb, modifiers, sym, 0)) {
+      execute_keybind(kb);
       return true;
     }
   }
@@ -765,19 +624,4 @@ void cancel_presel(void) {
 
   presel_cancel(mon, mon->desk, mon->desk->focus);
   wlr_log(WLR_INFO, "Cancelled preselection");
-}
-
-void spawn_terminal(void) {
-  if (fork() == 0) {
-    execlp("foot", "foot", NULL);
-    execlp("alacritty", "alacritty", NULL);
-    execlp("kitty", "kitty", NULL);
-    execlp("wterm", "wterm", NULL);
-    execlp("weston-terminal", "weston-terminal", NULL);
-
-    wlr_log(WLR_ERROR, "Failed to spawn terminal");
-    exit(1);
-  }
-
-  wlr_log(WLR_INFO, "Spawned terminal");
 }

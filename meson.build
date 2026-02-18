@@ -68,13 +68,13 @@ executable(
 		'src' / 'workspace.c',
 		'src' / 'ipc.c',
 		'src' / 'layer.c',
+		'src' / 'config.c',
 		wl_protos_src,
 	],
 	include_directories: inc,
 	dependencies: libs,
+	install: true,
+	install_dir: get_option('bindir'),
 )
 
-executable(
-	'bmsg',
-	'bmsg' / 'bmsg.c',
-)
+executable('bmsg', 'bmsg' / 'bmsg.c', install: true, install_dir: get_option('bindir'))

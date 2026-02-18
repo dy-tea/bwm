@@ -59,7 +59,5 @@ void presel_north(void);
 void presel_south(void);
 void cancel_presel(void);
 
-void spawn_terminal(void);
-
 // keybind processing
 bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym);

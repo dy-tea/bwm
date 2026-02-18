@@ -8,10 +8,12 @@
 #include "workspace.h"
 #include "ipc.h"
 #include "layer.h"
+#include "config.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
+#include <wayland-util.h>
 #include <wlr/backend.h>
 #include <wlr/render/allocator.h>
 #include <wlr/util/log.h>
@@ -418,14 +420,10 @@ void server_init(void) {
   server.monitors = m;
   server.focused_monitor = m;
 
-  // Initialize transaction system
   transaction_init();
-
-  // Initialize workspace manager
   workspace_init();
-
-  // Initialize IPC
   ipc_init();
+  config_init();
 }
 
 static int ipc_socket_handler(int fd, uint32_t mask, void *data) {
@@ -436,6 +434,16 @@ static int ipc_socket_handler(int fd, uint32_t mask, void *data) {
     if (client_fd >= 0) {
       ipc_handle_incoming(client_fd);
     }
+  }
+  return 0;
+}
+
+static int hotkey_reload_handler(int fd, uint32_t mask, void *data) {
+  (void)data;
+  if (mask & WL_EVENT_READABLE) {
+    char buf[64];
+    read(fd, buf, sizeof(buf));
+    reload_hotkeys();
   }
   return 0;
 }
@@ -461,6 +469,14 @@ int server_run(void) {
   if (ipc_fd >= 0)
     wl_event_loop_add_fd(event_loop, ipc_fd, WL_EVENT_READABLE, ipc_socket_handler, NULL);
 
+  // add inotify for hotkey config file watching
+  int hotkey_fd = get_hotkey_watch_fd();
+  if (hotkey_fd >= 0)
+    wl_event_loop_add_fd(event_loop, hotkey_fd, WL_EVENT_READABLE, hotkey_reload_handler, NULL);
+
+  // run config after server is fully initialized
+  wl_event_loop_add_idle(event_loop, run_config_idle, NULL);
+
   wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s", socket);
   wl_display_run(server.wl_display);
   return 0;
@@ -470,9 +486,13 @@ void server_fini(void) {
   transaction_fini();
   workspace_fini();
   ipc_cleanup();
+  config_fini();
   wl_display_destroy_clients(server.wl_display);
 
+  wl_list_remove(&server.new_input.link);
+  wl_list_remove(&server.new_output.link);
   wl_list_remove(&server.new_xdg_toplevel.link);
+  wl_list_remove(&server.new_layer_surface.link);
   wl_list_remove(&server.cursor_motion.link);
   wl_list_remove(&server.cursor_motion_absolute.link);
   wl_list_remove(&server.cursor_button.link);

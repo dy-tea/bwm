@@ -388,8 +388,10 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
     transaction_commit_dirty();
     send_success(client_fd, "renamed\n");
   } else if (streq("-a", *args) || streq("--add-desktops", *args)) {
-    if (!has_target) {
-      send_failure(client_fd, "monitor -a: no monitor specified\n");
+    if (!has_target)
+      mon = server.focused_monitor;
+    if (!mon) {
+      send_failure(client_fd, "monitor -a: no monitor available\n");
       return;
     }
     if (num < 2) {
@@ -430,8 +432,10 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
     transaction_commit_dirty();
     send_success(client_fd, "desktops added\n");
   } else if (streq("-d", *args) || streq("--reset-desktops", *args)) {
-    if (!has_target) {
-      send_failure(client_fd, "monitor -d: no monitor specified\n");
+    if (!has_target)
+      mon = server.focused_monitor;
+    if (!mon) {
+      send_failure(client_fd, "monitor -d: no monitor available\n");
       return;
     }
     if (num < 2) {

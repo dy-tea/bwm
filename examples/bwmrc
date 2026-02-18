@@ -1,0 +1,22 @@
+#! /bin/sh
+
+# Example bwmrc configuration
+# This file is executed at server startup
+
+# Set up desktops (names separated by spaces)
+bmsg monitor -d I II III IV V VI VII VIII IX X
+
+# Set border width
+bmsg config border_width 2
+
+# Set window gap
+bmsg config window_gap 12
+
+# Set single monocle
+bmsg config single_monocle true
+
+# Set borderless monocle
+bmsg config borderless_monocle true
+
+# Set gapless monocle
+bmsg config gapless_monocle true
