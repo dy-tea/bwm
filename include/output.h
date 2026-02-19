@@ -19,6 +19,9 @@ struct bwm_output {
   struct wl_listener frame;
   struct wl_listener request_state;
   struct wl_listener destroy;
+
+  struct wlr_session_lock_surface_v1 *lock_surface;
+  struct wl_listener destroy_lock_surface;
 };
 
 void handle_new_output(struct wl_listener *listener, void *data);

@@ -69,6 +69,7 @@ executable(
 		'src' / 'ipc.c',
 		'src' / 'layer.c',
 		'src' / 'config.c',
+		'src' / 'lock.c',
 		wl_protos_src,
 	],
 	include_directories: inc,

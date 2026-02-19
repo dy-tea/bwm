@@ -9,6 +9,8 @@
 #include "ipc.h"
 #include "layer.h"
 #include "config.h"
+#include "lock.h"
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -34,6 +36,7 @@
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_session_lock_v1.h>
 
 static void reset_cursor_mode(void) {
   server.cursor_mode = CURSOR_PASSTHROUGH;
@@ -332,6 +335,8 @@ void server_init(void) {
 	server.top_tree = wlr_scene_tree_create(&server.scene->tree);
 	server.full_tree = wlr_scene_tree_create(&server.scene->tree);
 	server.over_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.drag_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.lock_tree = wlr_scene_tree_create(&server.scene->tree);
 
   // xdg shell
   server.xdg_shell = wlr_xdg_shell_create(server.wl_display, 5);
@@ -385,6 +390,20 @@ void server_init(void) {
 
   server.request_set_selection.notify = request_set_selection;
   wl_signal_add(&server.seat->events.request_set_selection, &server.request_set_selection);
+
+  // session lock
+  server.session_lock_manager = wlr_session_lock_manager_v1_create(server.wl_display);
+
+  server.new_session_lock.notify = handle_new_session_lock;
+  wl_signal_add(&server.session_lock_manager->events.new_lock, &server.new_session_lock);
+
+  server.locked = false;
+  server.current_session_lock = NULL;
+  const float lockcolor[] = {0.1f, 0.1f, 0.1f, 1.0f};
+  struct wlr_box full_geo = {0};
+  wlr_output_layout_get_box(server.output_layout, NULL, &full_geo);
+  server.lock_background = wlr_scene_rect_create(server.lock_tree, full_geo.width, full_geo.height, lockcolor);
+  wlr_scene_node_set_enabled(&server.lock_background->node, false);
 
   // init desktop structure
   monitor_t *m = (monitor_t *)calloc(1, sizeof(monitor_t));

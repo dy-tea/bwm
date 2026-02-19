@@ -1,6 +1,7 @@
 #include "output.h"
 #include "server.h"
 #include "layer.h"
+#include "lock.h"
 #include <time.h>
 #include <stdlib.h>
 #include <wlr/types/wlr_output.h>
@@ -38,6 +39,9 @@ void output_destroy(struct wl_listener *listener, void *data) {
   for (size_t i = 0; i < 4; i++)
     wl_list_for_each_safe(layer, tmp, &output->layers[i], link)
       wlr_layer_surface_v1_destroy(layer->layer_surface);
+
+  if (output->lock_surface)
+    destroy_lock_surface(&output->destroy_lock_surface, NULL);
 
   wl_list_remove(&output->frame.link);
   wl_list_remove(&output->request_state.link);

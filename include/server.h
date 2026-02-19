@@ -1,5 +1,6 @@
 #pragma once
 
+#include "lock.h"
 #include "toplevel.h"
 #include "types.h"
 #include <wayland-server.h>
@@ -31,6 +32,8 @@ struct bwm_server {
   struct wlr_scene_tree *top_tree;
   struct wlr_scene_tree *full_tree;
   struct wlr_scene_tree *over_tree;
+  struct wlr_scene_tree *drag_tree;
+  struct wlr_scene_tree *lock_tree;
 
   struct wlr_xdg_shell *xdg_shell;
   struct wlr_layer_shell_v1 *layer_shell;
@@ -56,6 +59,12 @@ struct bwm_server {
   struct wlr_output_layout *output_layout;
   struct wl_list outputs;
   struct wl_listener new_output;
+
+  struct wlr_session_lock_manager_v1 *session_lock_manager;
+  struct wl_listener new_session_lock;
+  struct wlr_scene_rect *lock_background;
+  struct wlr_session_lock_v1 *current_session_lock;
+  bool locked;
 
   // cursor state
   enum cursor_mode cursor_mode;
