@@ -13,6 +13,8 @@
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_relative_pointer_v1.h>
+#include <wlr/types/wlr_idle_notify_v1.h>
 
 static void reset_cursor_mode(void) {
   server.cursor_mode = CURSOR_PASSTHROUGH;
@@ -107,7 +109,13 @@ static void process_cursor_resize(void) {
   wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, new_width, new_height);
 }
 
-static void process_cursor_motion(uint32_t time) {
+static void process_cursor_motion(uint32_t time, double dx, double dy, double dx_unaccel, double dy_unaccel) {
+	if (time) {
+		wlr_relative_pointer_manager_v1_send_relative_motion(
+			server.relative_pointer_manager, server.seat, time * 1000,
+			dx, dy, dx_unaccel, dy_unaccel);
+	}
+
   if (server.cursor_mode == CURSOR_MOVE) {
     process_cursor_move();
     return;
@@ -120,6 +128,8 @@ static void process_cursor_motion(uint32_t time) {
     struct wlr_scene_node *node = server.seat->drag->icon->data;
     wlr_scene_node_set_position(node, server.cursor->x, server.cursor->y);
   }
+
+  wlr_idle_notifier_v1_notify_activity(server.idle_notifier, server.seat);
 
   double sx, sy;
   struct wlr_seat *seat = server.seat;
@@ -165,20 +175,34 @@ void cursor_motion(struct wl_listener *listener, void *data) {
 	(void)listener;
   struct wlr_pointer_motion_event *event = data;
   wlr_cursor_move(server.cursor, &event->pointer->base, event->delta_x, event->delta_y);
-  process_cursor_motion(event->time_msec);
+  process_cursor_motion(event->time_msec, event->delta_x, event->delta_y, event->unaccel_dx, event->unaccel_dy);
 }
 
 void cursor_motion_absolute(struct wl_listener *listener, void *data) {
 	(void)listener;
   struct wlr_pointer_motion_absolute_event *event = data;
-  wlr_cursor_warp_absolute(server.cursor, &event->pointer->base, event->x, event->y);
-  process_cursor_motion(event->time_msec);
+
+  // warp cursor
+  if (event->time_msec)
+    wlr_cursor_warp_absolute(server.cursor, &event->pointer->base,
+      event->x, event->y);
+
+  // get absolute pos
+  double lx, ly, dx, dy;
+  wlr_cursor_absolute_to_layout_coords(server.cursor, &event->pointer->base, event->x,
+    event->y, &lx, &ly);
+  dx = lx - server.cursor->x;
+  dy = ly - server.cursor->y;
+
+  // process motion
+  process_cursor_motion(event->time_msec, dx, dy, dx, dy);
 }
 
 void cursor_button(struct wl_listener *listener, void *data) {
 	(void)listener;
   struct wlr_pointer_button_event *event = data;
   wlr_seat_pointer_notify_button(server.seat, event->time_msec, event->button, event->state);
+  wlr_idle_notifier_v1_notify_activity(server.idle_notifier, server.seat);
 
   if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
     reset_cursor_mode();
@@ -206,6 +230,7 @@ void cursor_axis(struct wl_listener *listener, void *data) {
   struct wlr_pointer_axis_event *event = data;
   wlr_seat_pointer_notify_axis(server.seat, event->time_msec, event->orientation,
       event->delta, event->delta_discrete, event->source, event->relative_direction);
+  wlr_idle_notifier_v1_notify_activity(server.idle_notifier, server.seat);
 }
 
 void cursor_frame(struct wl_listener *listener, void *data) {

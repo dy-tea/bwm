@@ -49,6 +49,9 @@ struct bwm_server {
   struct wl_listener cursor_axis;
   struct wl_listener cursor_frame;
 
+  struct wlr_relative_pointer_manager_v1 *relative_pointer_manager;
+  struct wlr_idle_notifier_v1 *idle_notifier;
+
   struct wlr_seat *seat;
   struct wl_listener new_input;
   struct wl_listener request_cursor;

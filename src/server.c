@@ -34,6 +34,7 @@
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
+#include <wlr/types/wlr_relative_pointer_v1.h>
 #include <wlr/types/wlr_session_lock_v1.h>
 #include <wlr/types/wlr_xdg_foreign_registry.h>
 #include <wlr/types/wlr_xdg_foreign_v1.h>
@@ -49,6 +50,7 @@
 #include <wlr/types/wlr_ext_image_capture_source_v1.h>
 #include <wlr/types/wlr_ext_image_copy_capture_v1.h>
 #include <wlr/types/wlr_alpha_modifier_v1.h>
+#include <wlr/types/wlr_idle_notify_v1.h>
 
 void handle_request_start_drag(struct wl_listener *listener, void *data);
 void handle_start_drag(struct wl_listener *listener, void *data);
@@ -157,6 +159,12 @@ void server_init(void) {
 
   server.cursor_frame.notify = cursor_frame;
   wl_signal_add(&server.cursor->events.frame, &server.cursor_frame);
+
+  // relative pointer
+  server.relative_pointer_manager = wlr_relative_pointer_manager_v1_create(server.wl_display);
+
+  // idle notifier
+  server.idle_notifier = wlr_idle_notifier_v1_create(server.wl_display);
 
   // seat
   server.seat = wlr_seat_create(server.wl_display, "seat0");

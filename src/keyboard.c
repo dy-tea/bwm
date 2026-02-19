@@ -12,6 +12,7 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/util/log.h>
 
 extern struct bwm_server server;
@@ -82,6 +83,8 @@ void keyboard_key(struct wl_listener *listener, void *data) {
   struct bwm_keyboard *keyboard = wl_container_of(listener, keyboard, key);
   struct wlr_keyboard_key_event *event = data;
   struct wlr_seat *seat = server.seat;
+
+  wlr_idle_notifier_v1_notify_activity(server.idle_notifier, seat);
 
   // get keysym
   uint32_t keycode = event->keycode + 8;
