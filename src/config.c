@@ -251,71 +251,72 @@ static void add_keybind(uint32_t modifiers, xkb_keysym_t keysym, uint32_t keycod
 }
 
 static void parse_hotkey_line(const char *hotkey_str, const char *command_str) {
-    char hotkey_buf[MAXLEN];
-    char command_buf[MAXLEN];
+  char hotkey_buf[MAXLEN];
+  char command_buf[MAXLEN];
 
-    snprintf(hotkey_buf, sizeof(hotkey_buf), "%s", hotkey_str);
-    snprintf(command_buf, sizeof(command_buf), "%s", command_str);
+  snprintf(hotkey_buf, sizeof(hotkey_buf), "%s", hotkey_str);
+  snprintf(command_buf, sizeof(command_buf), "%s", command_str);
 
-    char expanded_hotkey[MAXLEN];
-    char expanded_cmd[MAXLEN];
+  char expanded_hotkey[MAXLEN];
+  char expanded_cmd[MAXLEN];
 
-    expand_sequence(hotkey_buf, expanded_hotkey, sizeof(expanded_hotkey));
-    expand_sequence(command_buf, expanded_cmd, sizeof(expanded_cmd));
+  expand_sequence(hotkey_buf, expanded_hotkey, sizeof(expanded_hotkey));
+  expand_sequence(command_buf, expanded_cmd, sizeof(expanded_cmd));
 
-    wlr_log(WLR_DEBUG, "parse_hotkey_line: hotkey=[%s] cmd=[%s]", expanded_hotkey, expanded_cmd);
+  wlr_log(WLR_DEBUG, "parse_hotkey_line: hotkey=[%s] cmd=[%s]", expanded_hotkey, expanded_cmd);
 
-    char single_hotkey[MAXLEN];
-    char single_cmd[MAXLEN];
+  char single_hotkey[MAXLEN];
+  char single_cmd[MAXLEN];
 
-    char *saveptr;
-    char *hotkey_token = strtok_r(expanded_hotkey, "\t", &saveptr);
-    while (hotkey_token) {
-        snprintf(single_hotkey, sizeof(single_hotkey), "%s", hotkey_token);
+  char *saveptr;
+  char *hotkey_token = strtok_r(expanded_hotkey, "\t", &saveptr);
+  while (hotkey_token) {
+    snprintf(single_hotkey, sizeof(single_hotkey), "%s", hotkey_token);
 
-        char *cmd_token = strtok_r(expanded_cmd, "\t", &saveptr);
+    char *cmd_token = strtok_r(expanded_cmd, "\t", &saveptr);
 
-        while (cmd_token) {
-            snprintf(single_cmd, sizeof(single_cmd), "%s", cmd_token);
+    while (cmd_token) {
+      snprintf(single_cmd, sizeof(single_cmd), "%s", cmd_token);
 
-            uint32_t modifiers = 0;
-            xkb_keysym_t keysym = XKB_KEY_NoSymbol;
-            uint32_t keycode = 0;
-            bool use_keycode = false;
+      uint32_t modifiers = 0;
+      xkb_keysym_t keysym = XKB_KEY_NoSymbol;
+      uint32_t keycode = 0;
+      bool use_keycode = false;
 
-            char *plus = strrchr(single_hotkey, '+');
-            if (plus) {
-                *plus = '\0';
-                modifiers = parse_modifiers(single_hotkey);
-                char *key_part = plus + 1;
-                while (*key_part == ' ') key_part++;
-                keysym = parse_keysym(key_part);
-                keycode = parse_keycode(key_part);
-                if (keycode > 0)
-                  use_keycode = true;
-            } else {
-                keysym = parse_keysym(single_hotkey);
-                keycode = parse_keycode(single_hotkey);
-                if (keycode > 0)
-                  use_keycode = true;
-            }
+      char *plus = strrchr(single_hotkey, '+');
+      if (plus) {
+        *plus = '\0';
+        modifiers = parse_modifiers(single_hotkey);
+        char *key_part = plus + 1;
+        while (*key_part == ' ') key_part++;
+        keysym = parse_keysym(key_part);
+        keycode = parse_keycode(key_part);
+        if (keycode > 0)
+          use_keycode = true;
+      } else {
+        keysym = parse_keysym(single_hotkey);
+        keycode = parse_keycode(single_hotkey);
+        if (keycode > 0)
+          use_keycode = true;
+      }
 
-            if (keysym == XKB_KEY_NoSymbol && keycode == 0) {
-                wlr_log(WLR_ERROR, "Unknown keysym: %s", single_hotkey);
-            } else {
-                int desktop_index = 0;
-                bind_action_t action = parse_action(single_cmd, &desktop_index);
-                if (action != BIND_EXTERNAL)
-                  add_keybind(modifiers, keysym, keycode, use_keycode, action, desktop_index, NULL);
-                else
-                  add_keybind(modifiers, keysym, keycode, use_keycode, action, desktop_index, single_cmd);
-            }
+      if (keysym == XKB_KEY_NoSymbol && keycode == 0) {
+        wlr_log(WLR_ERROR, "Unknown keysym: %s", single_hotkey);
+      } else {
+        int desktop_index = 0;
+        bind_action_t action = parse_action(single_cmd, &desktop_index);
+        wlr_log(WLR_DEBUG, "Parsed action: %d for cmd: '%s'", action, single_cmd);
+        if (action != BIND_EXTERNAL)
+          add_keybind(modifiers, keysym, keycode, use_keycode, action, desktop_index, NULL);
+        else
+          add_keybind(modifiers, keysym, keycode, use_keycode, action, desktop_index, single_cmd);
+      }
 
-            cmd_token = strtok_r(NULL, "\t", &saveptr);
-        }
-
-        hotkey_token = strtok_r(NULL, "\t", &saveptr);
+      cmd_token = strtok_r(NULL, "\t", &saveptr);
     }
+
+    hotkey_token = strtok_r(NULL, "\t", &saveptr);
+  }
 }
 
 static char config_path[PATH_MAX];
@@ -342,11 +343,12 @@ void run_config_idle(void *data) {
     execl("/bin/sh", "/bin/sh", config_path, NULL);
     _exit(1);
   }
-  // Don't wait - let it run asynchronously
 }
 
 void load_hotkeys(const char *config_path) {
   num_keybinds = 0;
+
+  wlr_log(WLR_DEBUG, "load_hotkeys called with path: %s", config_path);
 
   FILE *f = fopen(config_path, "r");
   if (!f) {
@@ -467,8 +469,18 @@ bool keybind_matches(keybind_t *kb, uint32_t modifiers, xkb_keysym_t keysym, uin
 
   if (kb->use_keycode)
     return (kb->modifiers == modifiers) && (kb->keycode == keycode);
-  else
-    return (kb->modifiers == modifiers) && (kb->keysym == keysym);
+  else {
+    if (kb->modifiers == modifiers && kb->keysym == keysym)
+      return true;
+    if (kb->modifiers == (modifiers | WLR_MODIFIER_SHIFT) && kb->keysym == keysym)
+      return true;
+    if (kb->modifiers == modifiers) {
+      xkb_keysym_t lower = xkb_keysym_to_lower(keysym);
+      if (kb->keysym == lower)
+        return true;
+    }
+    return false;
+  }
 }
 
 void execute_keybind(keybind_t *kb) {

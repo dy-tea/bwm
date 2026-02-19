@@ -70,6 +70,7 @@ void handle_new_keyboard(struct wlr_input_device *device) {
 }
 
 void keyboard_modifiers(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_keyboard *keyboard =
       wl_container_of(listener, keyboard, modifiers);
   wlr_seat_set_keyboard(server.seat, keyboard->wlr_keyboard);
@@ -112,6 +113,7 @@ void keyboard_key(struct wl_listener *listener, void *data) {
 }
 
 void keyboard_destroy(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_keyboard *keyboard = wl_container_of(listener, keyboard, destroy);
 
   wl_list_remove(&keyboard->modifiers.link);
