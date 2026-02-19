@@ -71,6 +71,9 @@ struct bwm_server {
   struct wlr_session_lock_v1 *current_session_lock;
   bool locked;
 
+  struct wlr_ext_foreign_toplevel_list_v1 *foreign_toplevel_list;
+  struct wlr_foreign_toplevel_manager_v1 *foreign_toplevel_manager;
+
   // cursor state
   enum cursor_mode cursor_mode;
   struct bwm_toplevel *grabbed_toplevel;

@@ -2,6 +2,8 @@
 
 #include "types.h"
 #include <wayland-server.h>
+#include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
+#include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 
 struct bwm_toplevel {
   struct wl_list link;
@@ -9,6 +11,9 @@ struct bwm_toplevel {
   struct wlr_scene_tree *scene_tree;      // Parent container
   struct wlr_scene_tree *content_tree;    // XDG surface content
   struct wlr_scene_tree *saved_surface_tree;  // Saved buffer snapshot
+
+  struct wlr_ext_foreign_toplevel_handle_v1 *ext_foreign_toplevel;
+  struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel;
 
   node_t *node;
 
@@ -27,6 +32,12 @@ struct bwm_toplevel {
   struct wl_listener set_title;
   struct wl_listener set_app_id;
   struct wl_listener new_xdg_popup;
+
+  // foreign toplevel listeners
+  struct wl_listener foreign_activate_request;
+  struct wl_listener foreign_fullscreen_request;
+  struct wl_listener foreign_close_request;
+  struct wl_listener foreign_destroy;
 };
 
 void handle_new_xdg_toplevel(struct wl_listener *listener, void *data);

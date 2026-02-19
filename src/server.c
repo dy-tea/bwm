@@ -39,6 +39,8 @@
 #include <wlr/types/wlr_xdg_foreign_registry.h>
 #include <wlr/types/wlr_xdg_foreign_v1.h>
 #include <wlr/types/wlr_xdg_foreign_v2.h>
+#include <wlr/types/wlr_foreign_toplevel_management_v1.h>
+#include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
 #include <wlr/types/wlr_single_pixel_buffer_v1.h>
 #include <wlr/types/wlr_fixes.h>
 #include <wlr/types/wlr_screencopy_v1.h>
@@ -254,6 +256,12 @@ void server_init(void) {
         sizeof(color_representation_coeffs_and_range[0]),
   };
   wlr_color_representation_manager_v1_create(server.wl_display, 1, &color_representation_options);
+
+  // foreign toplevel list
+  server.foreign_toplevel_list = wlr_ext_foreign_toplevel_list_v1_create(server.wl_display, 1);
+
+  // foreign toplevel manager
+  server.foreign_toplevel_manager = wlr_foreign_toplevel_manager_v1_create(server.wl_display);
 
   // xdg foreign
   struct wlr_xdg_foreign_registry *xdg_foreign_registry = wlr_xdg_foreign_registry_create(server.wl_display);
