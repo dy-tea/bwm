@@ -51,6 +51,8 @@
 #include <wlr/types/wlr_ext_image_copy_capture_v1.h>
 #include <wlr/types/wlr_alpha_modifier_v1.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
+#include <wlr/types/wlr_color_management_v1.h>
+#include <wlr/types/wlr_color_representation_v1.h>
 
 void handle_request_start_drag(struct wl_listener *listener, void *data);
 void handle_start_drag(struct wl_listener *listener, void *data);
@@ -201,6 +203,57 @@ void server_init(void) {
   wlr_output_layout_get_box(server.output_layout, NULL, &full_geo);
   server.lock_background = wlr_scene_rect_create(server.lock_tree, full_geo.width, full_geo.height, lockcolor);
   wlr_scene_node_set_enabled(&server.lock_background->node, false);
+
+  // color manager
+  if (server.renderer->features.input_color_transform) {
+		const enum wp_color_manager_v1_render_intent render_intents[] = {
+			WP_COLOR_MANAGER_V1_RENDER_INTENT_PERCEPTUAL,
+		};
+		const enum wp_color_manager_v1_transfer_function transfer_functions[] = {
+			WP_COLOR_MANAGER_V1_TRANSFER_FUNCTION_SRGB,
+			WP_COLOR_MANAGER_V1_TRANSFER_FUNCTION_ST2084_PQ,
+			WP_COLOR_MANAGER_V1_TRANSFER_FUNCTION_EXT_LINEAR,
+			WP_COLOR_MANAGER_V1_TRANSFER_FUNCTION_GAMMA22,
+			WP_COLOR_MANAGER_V1_TRANSFER_FUNCTION_BT1886,
+		};
+		const enum wp_color_manager_v1_primaries primaries[] = {
+			WP_COLOR_MANAGER_V1_PRIMARIES_SRGB,
+			WP_COLOR_MANAGER_V1_PRIMARIES_BT2020,
+		};
+		struct wlr_color_manager_v1 *cm = wlr_color_manager_v1_create(
+				server.wl_display, 1, &(struct wlr_color_manager_v1_options){
+			.features = {
+				.parametric = true,
+				.set_mastering_display_primaries = true,
+			},
+			.render_intents = render_intents,
+			.render_intents_len = sizeof(render_intents) / sizeof(render_intents[0]),
+			.transfer_functions = transfer_functions,
+			.transfer_functions_len = sizeof(transfer_functions) / sizeof(transfer_functions[0]),
+			.primaries = primaries,
+			.primaries_len = sizeof(primaries) / sizeof(primaries[0]),
+		});
+		wlr_scene_set_color_manager_v1(server.scene, cm);
+	}
+
+  // color representation
+  enum wp_color_representation_surface_v1_alpha_mode
+    color_representation_alpha_modes[] = {WP_COLOR_REPRESENTATION_SURFACE_V1_ALPHA_MODE_STRAIGHT};
+  const struct wlr_color_representation_v1_coeffs_and_range
+    color_representation_coeffs_and_range[] = {
+    {
+      WP_COLOR_REPRESENTATION_SURFACE_V1_COEFFICIENTS_IDENTITY,
+      WP_COLOR_REPRESENTATION_SURFACE_V1_RANGE_FULL}
+    };
+  const struct wlr_color_representation_v1_options color_representation_options = {
+    color_representation_alpha_modes,
+    sizeof(color_representation_alpha_modes) /
+        sizeof(color_representation_alpha_modes[0]),
+    color_representation_coeffs_and_range,
+    sizeof(color_representation_coeffs_and_range) /
+        sizeof(color_representation_coeffs_and_range[0]),
+  };
+  wlr_color_representation_manager_v1_create(server.wl_display, 1, &color_representation_options);
 
   // xdg foreign
   struct wlr_xdg_foreign_registry *xdg_foreign_registry = wlr_xdg_foreign_registry_create(server.wl_display);
