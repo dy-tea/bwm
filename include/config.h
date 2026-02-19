@@ -80,6 +80,7 @@ extern keybind_t keybinds[MAX_KEYBINDS];
 extern size_t num_keybinds;
 
 void config_init(void);
+void config_init_with_config_dir(const char *config_dir);
 void config_fini(void);
 void run_config(const char *config_path);
 void run_config_idle(void *data);

@@ -19,12 +19,17 @@
 #define BWMRC_NAME "bwmrc"
 #define BWMHKRC_NAME "bwmhkrc"
 
+static const char *custom_config_dir = NULL;
+
 keybind_t keybinds[MAX_KEYBINDS];
 size_t num_keybinds = 0;
 static int hotkey_watch_fd = -1;
 static char hotkey_config_path[PATH_MAX];
 
 static const char *get_config_home(void) {
+  if (custom_config_dir)
+    return custom_config_dir;
+
   const char *xdg = getenv("XDG_CONFIG_HOME");
   if (xdg && xdg[0] != '\0')
     return xdg;
@@ -437,6 +442,12 @@ static void setup_inotify_watch(const char *config_path) {
 }
 
 void config_init(void) {
+  config_init_with_config_dir(NULL);
+}
+
+void config_init_with_config_dir(const char *config_dir) {
+  custom_config_dir = config_dir;
+
   const char *config_home = get_config_home();
 
   char bwmrc_path[PATH_MAX];
