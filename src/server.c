@@ -1,4 +1,5 @@
 #include "server.h"
+#include "cursor.h"
 #include "keyboard.h"
 #include "output.h"
 #include "toplevel.h"
@@ -28,250 +29,21 @@
 #include <wlr/types/wlr_primary_selection_v1.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_subcompositor.h>
-#include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
-#include <wlr/types/wlr_seat.h>
-#include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_session_lock_v1.h>
+#include <wlr/types/wlr_data_device.h>
+#include <wlroots-0.20/wlr/types/wlr_scene.h>
 
-static void reset_cursor_mode(void) {
-  server.cursor_mode = CURSOR_PASSTHROUGH;
-  server.grabbed_toplevel = NULL;
-}
-
-static void *desktop_type_at(
-      double lx, double ly, struct wlr_surface **surface,
-      double *sx, double *sy) {
-  struct wlr_scene_node *node = wlr_scene_node_at(
-      &server.scene->tree.node, lx, ly, sx, sy);
-  if (node == NULL || node->type != WLR_SCENE_NODE_BUFFER)
-      return NULL;
-
-  struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
-  struct wlr_scene_surface *scene_surface = wlr_scene_surface_try_from_buffer(scene_buffer);
-  if (!scene_surface)
-    return NULL;
-
-  *surface = scene_surface->surface;
-
-  struct wlr_scene_tree *tree = node->parent;
-  for (; tree != NULL && tree->node.data == NULL; tree = tree->node.parent)
-    ;
-
-  if (tree == NULL)
-    return NULL;
-
-  return tree->node.data;
-}
-
-static void process_cursor_move(void) {
-  struct bwm_toplevel *toplevel = server.grabbed_toplevel;
-  if (!toplevel || !toplevel->node || !toplevel->node->client || toplevel->node->client->state != STATE_FLOATING)
-    return;
-
-  double x = server.cursor->x - server.grab_x;
-  double y = server.cursor->y - server.grab_y;
-
-  toplevel->node->client->floating_rectangle.x = (int)x;
-  toplevel->node->client->floating_rectangle.y = (int)y;
-
-  wlr_scene_node_set_position(&toplevel->scene_tree->node, x, y);
-}
-
-static void process_cursor_resize(void) {
-  struct bwm_toplevel *toplevel = server.grabbed_toplevel;
-  if (!toplevel || !toplevel->node || !toplevel->node->client)
-    return;
-
-  double border_x = server.cursor->x - server.grab_x;
-  double border_y = server.cursor->y - server.grab_y;
-
-  int new_left = server.grab_geobox.x;
-  int new_right = server.grab_geobox.x + server.grab_geobox.width;
-  int new_top = server.grab_geobox.y;
-  int new_bottom = server.grab_geobox.y + server.grab_geobox.height;
-
-  if (server.resize_edges & WLR_EDGE_TOP) {
-    new_top = border_y;
-    if (new_top >= new_bottom)
-        new_top = new_bottom - 1;
-  } else if (server.resize_edges & WLR_EDGE_BOTTOM) {
-    new_bottom = border_y;
-    if (new_bottom <= new_top)
-      new_bottom = new_top + 1;
-  }
-  if (server.resize_edges & WLR_EDGE_LEFT) {
-    new_left = border_x;
-    if (new_left >= new_right)
-      new_left = new_right - 1;
-  } else if (server.resize_edges & WLR_EDGE_RIGHT) {
-    new_right = border_x;
-    if (new_right <= new_left)
-      new_right = new_left + 1;
-  }
-
-  int new_width = new_right - new_left;
-  int new_height = new_bottom - new_top;
-
-  if (new_width < MIN_WIDTH)
-    new_width = MIN_WIDTH;
-  if (new_height < MIN_HEIGHT)
-    new_height = MIN_HEIGHT;
-
-  toplevel->node->client->floating_rectangle.x = new_left;
-  toplevel->node->client->floating_rectangle.y = new_top;
-  toplevel->node->client->floating_rectangle.width = new_width;
-  toplevel->node->client->floating_rectangle.height = new_height;
-
-  wlr_scene_node_set_position(&toplevel->scene_tree->node, new_left, new_top);
-  wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, new_width, new_height);
-}
-
-static void process_cursor_motion(uint32_t time) {
-  if (server.cursor_mode == CURSOR_MOVE) {
-    process_cursor_move();
-    return;
-  } else if (server.cursor_mode == CURSOR_RESIZE) {
-    process_cursor_resize();
-    return;
-  }
-
-  double sx, sy;
-  struct wlr_seat *seat = server.seat;
-  struct wlr_surface *surface = NULL;
-  void *type = desktop_type_at(server.cursor->x, server.cursor->y, &surface, &sx, &sy);
-  if (type == NULL)
-  	wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, "default");
-
-  if (surface) {
-    wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
-    wlr_seat_pointer_notify_motion(seat, time, sx, sy);
-  } else {
-    wlr_seat_pointer_clear_focus(seat);
-  }
-}
-
-void begin_interactive(struct bwm_toplevel *toplevel, enum cursor_mode mode, uint32_t edges) {
-  server.grabbed_toplevel = toplevel;
-  server.cursor_mode = mode;
-
-  if (mode == CURSOR_MOVE) {
-    if (toplevel->node && toplevel->node->client) {
-      server.grab_x = server.cursor->x - toplevel->node->client->floating_rectangle.x;
-      server.grab_y = server.cursor->y - toplevel->node->client->floating_rectangle.y;
-    }
-  } else {
-    double border_x = server.cursor->x;
-    double border_y = server.cursor->y;
-    if (edges & WLR_EDGE_RIGHT)
-      border_x = toplevel->node->client->floating_rectangle.x + toplevel->node->client->floating_rectangle.width;
-    if (edges & WLR_EDGE_BOTTOM)
-      border_y = toplevel->node->client->floating_rectangle.y + toplevel->node->client->floating_rectangle.height;
-
-    server.grab_x = server.cursor->x - border_x;
-    server.grab_y = server.cursor->y - border_y;
-
-    server.grab_geobox = toplevel->node->client->floating_rectangle;
-    server.resize_edges = edges;
-  }
-}
-
-void cursor_motion(struct wl_listener *listener, void *data) {
-	(void)listener;
-  struct wlr_pointer_motion_event *event = data;
-  wlr_cursor_move(server.cursor, &event->pointer->base, event->delta_x, event->delta_y);
-  process_cursor_motion(event->time_msec);
-}
-
-void cursor_motion_absolute(struct wl_listener *listener, void *data) {
-	(void)listener;
-  struct wlr_pointer_motion_absolute_event *event = data;
-  wlr_cursor_warp_absolute(server.cursor, &event->pointer->base, event->x, event->y);
-  process_cursor_motion(event->time_msec);
-}
-
-void cursor_button(struct wl_listener *listener, void *data) {
-	(void)listener;
-  struct wlr_pointer_button_event *event = data;
-  wlr_seat_pointer_notify_button(server.seat, event->time_msec, event->button, event->state);
-
-  if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
-    reset_cursor_mode();
-  } else {
-    double sx, sy;
-    struct wlr_surface *surface = NULL;
-    void *type = desktop_type_at(
-            server.cursor->x, server.cursor->y, &surface, &sx, &sy);
-    if (type == NULL)
-    	return;
-    if (wlr_layer_surface_v1_try_from_wlr_surface(surface)) {
-    	struct bwm_layer_surface* layer = type;
-     	if (layer)
-      	focus_layer_surface(layer);
-    } else {
-    	struct bwm_toplevel *toplevel = type;
-	    if (toplevel)
-	      focus_toplevel(toplevel);
-    }
-  }
-}
-
-void cursor_axis(struct wl_listener *listener, void *data) {
-	(void)listener;
-  struct wlr_pointer_axis_event *event = data;
-  wlr_seat_pointer_notify_axis(server.seat, event->time_msec, event->orientation,
-      event->delta, event->delta_discrete, event->source, event->relative_direction);
-}
-
-void cursor_frame(struct wl_listener *listener, void *data) {
-	(void)listener;
-	(void)data;
-  wlr_seat_pointer_notify_frame(server.seat);
-}
-
-void request_cursor(struct wl_listener *listener, void *data) {
-	(void)listener;
-  struct wlr_seat_pointer_request_set_cursor_event *event = data;
-  if (event->seat_client == server.seat->pointer_state.focused_client)
-    wlr_cursor_set_surface(server.cursor, event->surface, event->hotspot_x, event->hotspot_y);
-}
-
-void seat_pointer_focus_change(struct wl_listener *listener, void *data) {
-	(void)listener;
-  struct wlr_seat_pointer_focus_change_event *event = data;
-  if (event->new_surface == NULL)
-    wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, "default");
-}
-
-void request_set_selection(struct wl_listener *listener, void *data) {
-	(void)listener;
-  struct wlr_seat_request_set_selection_event *event = data;
-  wlr_seat_set_selection(server.seat, event->source, event->serial);
-}
-
-void handle_new_input(struct wl_listener *listener, void *data) {
-	(void)listener;
-  struct wlr_input_device *device = data;
-  switch (device->type) {
-  case WLR_INPUT_DEVICE_KEYBOARD:
-    handle_new_keyboard(device);
-    break;
-  case WLR_INPUT_DEVICE_POINTER:
-    wlr_cursor_attach_input_device(server.cursor, device);
-    break;
-  default:
-    break;
-  }
-
-  uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
-  if (!wl_list_empty(&server.keyboards))
-      caps |= WL_SEAT_CAPABILITY_KEYBOARD;
-  wlr_seat_set_capabilities(server.seat, caps);
-}
+void handle_request_start_drag(struct wl_listener *listener, void *data);
+void handle_start_drag(struct wl_listener *listener, void *data);
+void handle_drag_icon_destroy(struct wl_listener *listener, void *data);
+void request_set_selection(struct wl_listener *listener, void *data);
+void handle_new_input(struct wl_listener *listener, void *data);
 
 void server_init(void) {
   server = (struct bwm_server){0};
@@ -390,6 +162,12 @@ void server_init(void) {
 
   server.request_set_selection.notify = request_set_selection;
   wl_signal_add(&server.seat->events.request_set_selection, &server.request_set_selection);
+
+  server.request_start_drag.notify = handle_request_start_drag;
+  wl_signal_add(&server.seat->events.request_start_drag, &server.request_start_drag);
+
+  server.start_drag.notify = handle_start_drag;
+  wl_signal_add(&server.seat->events.start_drag, &server.start_drag);
 
   // session lock
   server.session_lock_manager = wlr_session_lock_manager_v1_create(server.wl_display);
@@ -520,6 +298,8 @@ void server_fini(void) {
   wl_list_remove(&server.request_cursor.link);
   wl_list_remove(&server.pointer_focus_change.link);
   wl_list_remove(&server.request_set_selection.link);
+  wl_list_remove(&server.request_start_drag.link);
+  wl_list_remove(&server.start_drag.link);
 
   wlr_scene_node_destroy(&server.scene->tree.node);
   wlr_cursor_destroy(server.cursor);
@@ -528,4 +308,33 @@ void server_fini(void) {
   wlr_renderer_destroy(server.renderer);
   wlr_backend_destroy(server.backend);
   wl_display_destroy(server.wl_display);
+}
+
+void handle_request_start_drag(struct wl_listener *listener, void *data) {
+  (void)listener;
+  struct wlr_seat_request_start_drag_event *event = data;
+  if (wlr_seat_validate_pointer_grab_serial(server.seat, event->origin, event->serial))
+    wlr_seat_start_pointer_drag(server.seat, event->drag, event->serial);
+  else
+    wlr_data_source_destroy(event->drag->source);
+}
+
+void handle_start_drag(struct wl_listener *listener, void *data) {
+  (void)listener;
+  struct wlr_drag *drag = data;
+  if (!drag->icon)
+    return;
+
+  struct wlr_scene_node *node = &wlr_scene_drag_icon_create(server.drag_tree, drag->icon)->node;
+  drag->icon->data = node;
+
+  struct wl_listener *listener_icon = calloc(1, sizeof(*listener_icon));
+  listener_icon->notify = handle_drag_icon_destroy;
+  wl_signal_add(&drag->icon->events.destroy, listener_icon);
+}
+
+void handle_drag_icon_destroy(struct wl_listener *listener, void *data) {
+  (void)data;
+  wl_list_remove(&listener->link);
+  free(listener);
 }

@@ -54,6 +54,8 @@ struct bwm_server {
   struct wl_listener request_cursor;
   struct wl_listener pointer_focus_change;
   struct wl_listener request_set_selection;
+  struct wl_listener request_start_drag;
+  struct wl_listener start_drag;
   struct wl_list keyboards;
 
   struct wlr_output_layout *output_layout;

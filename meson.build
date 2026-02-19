@@ -59,6 +59,7 @@ executable(
 	[
 		'src' / 'main.c',
 		'src' / 'server.c',
+		'src' / 'cursor.c',
 		'src' / 'output.c',
 		'src' / 'tree.c',
 		'src' / 'toplevel.c',
