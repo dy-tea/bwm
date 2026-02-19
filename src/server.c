@@ -1,11 +1,9 @@
 #include "server.h"
 #include "cursor.h"
-#include "keyboard.h"
 #include "output.h"
 #include "toplevel.h"
 #include "types.h"
 #include "transaction.h"
-#include "tree.h"
 #include "workspace.h"
 #include "ipc.h"
 #include "layer.h"
@@ -23,6 +21,7 @@
 #include <wlr/util/box.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_drm.h>
+#include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_linux_dmabuf_v1.h>
 #include <wlr/types/wlr_export_dmabuf_v1.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
@@ -36,8 +35,20 @@
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_session_lock_v1.h>
-#include <wlr/types/wlr_data_device.h>
-#include <wlroots-0.20/wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_xdg_foreign_registry.h>
+#include <wlr/types/wlr_xdg_foreign_v1.h>
+#include <wlr/types/wlr_xdg_foreign_v2.h>
+#include <wlr/types/wlr_single_pixel_buffer_v1.h>
+#include <wlr/types/wlr_fixes.h>
+#include <wlr/types/wlr_screencopy_v1.h>
+#include <wlr/types/wlr_viewporter.h>
+#include <wlr/types/wlr_presentation_time.h>
+#include <wlr/types/wlr_export_dmabuf_v1.h>
+#include <wlr/types/wlr_ext_data_control_v1.h>
+#include <wlr/types/wlr_gamma_control_v1.h>
+#include <wlr/types/wlr_ext_image_capture_source_v1.h>
+#include <wlr/types/wlr_ext_image_copy_capture_v1.h>
+#include <wlr/types/wlr_alpha_modifier_v1.h>
 
 void handle_request_start_drag(struct wl_listener *listener, void *data);
 void handle_start_drag(struct wl_listener *listener, void *data);
@@ -183,6 +194,42 @@ void server_init(void) {
   server.lock_background = wlr_scene_rect_create(server.lock_tree, full_geo.width, full_geo.height, lockcolor);
   wlr_scene_node_set_enabled(&server.lock_background->node, false);
 
+  // xdg foreign
+  struct wlr_xdg_foreign_registry *xdg_foreign_registry = wlr_xdg_foreign_registry_create(server.wl_display);
+  wlr_xdg_foreign_v1_create(server.wl_display, xdg_foreign_registry);
+  wlr_xdg_foreign_v2_create(server.wl_display, xdg_foreign_registry);
+
+  // single pixel buffer
+  wlr_single_pixel_buffer_manager_v1_create(server.wl_display);
+
+  // screencopy
+  wlr_screencopy_manager_v1_create(server.wl_display);
+
+  // viewporter
+  wlr_viewporter_create(server.wl_display);
+
+  // presentation
+  wlr_presentation_create(server.wl_display, server.backend, 2);
+
+  // export dmabuf
+  wlr_export_dmabuf_manager_v1_create(server.wl_display);
+
+  // ext data control
+  wlr_ext_data_control_manager_v1_create(server.wl_display, 1);
+
+  // gamma control
+  wlr_scene_set_gamma_control_manager_v1(server.scene, wlr_gamma_control_manager_v1_create(server.wl_display));
+
+  // image copy capture
+  wlr_ext_image_copy_capture_manager_v1_create(server.wl_display, 1);
+  wlr_ext_output_image_capture_source_manager_v1_create(server.wl_display, 1);
+
+  // alpha modifier
+  wlr_alpha_modifier_v1_create(server.wl_display);
+
+  // fixes
+  wlr_fixes_create(server.wl_display, 1);
+
   // init desktop structure
   monitor_t *m = (monitor_t *)calloc(1, sizeof(monitor_t));
   m->id = next_monitor_id++;
@@ -300,6 +347,7 @@ void server_fini(void) {
   wl_list_remove(&server.request_set_selection.link);
   wl_list_remove(&server.request_start_drag.link);
   wl_list_remove(&server.start_drag.link);
+  wl_list_remove(&server.new_session_lock.link);
 
   wlr_scene_node_destroy(&server.scene->tree.node);
   wlr_cursor_destroy(server.cursor);
