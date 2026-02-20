@@ -5,6 +5,7 @@
 #include "tree.h"
 #include "workspace.h"
 #include "config.h"
+#include "input.h"
 #include <stdlib.h>
 #include <unistd.h>
 #include <wlr/backend/session.h>
@@ -42,16 +43,20 @@ void handle_new_keyboard(struct wlr_input_device *device) {
   struct bwm_keyboard *keyboard = calloc(1, sizeof(struct bwm_keyboard));
   keyboard->wlr_keyboard = wlr_keyboard;
 
-  // keyboard config
-  struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-  struct xkb_keymap *keymap =
-      xkb_keymap_new_from_names(context, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
+  input_config_t *config = input_config_get_for_device(device->name, INPUT_CONFIG_TYPE_KEYBOARD);
+  if (config) {
+    input_config_apply(config, device);
+  } else {
+    struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    struct xkb_keymap *keymap =
+        xkb_keymap_new_from_names(context, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
 
-  wlr_keyboard_set_keymap(wlr_keyboard, keymap);
-  xkb_keymap_unref(keymap);
-  xkb_context_unref(context);
+    wlr_keyboard_set_keymap(wlr_keyboard, keymap);
+    xkb_keymap_unref(keymap);
+    xkb_context_unref(context);
 
-  wlr_keyboard_set_repeat_info(wlr_keyboard, 25, 600);
+    wlr_keyboard_set_repeat_info(wlr_keyboard, 25, 600);
+  }
 
   // register listeners
   keyboard->modifiers.notify = keyboard_modifiers;
@@ -67,7 +72,7 @@ void handle_new_keyboard(struct wlr_input_device *device) {
 
   wl_list_insert(&server.keyboards, &keyboard->link);
 
-  wlr_log(WLR_INFO, "New keyboard configured");
+  wlr_log(WLR_INFO, "New keyboard configured: %s", device->name);
 }
 
 void keyboard_modifiers(struct wl_listener *listener, void *data) {

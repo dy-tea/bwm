@@ -1,9 +1,14 @@
 #include "cursor.h"
 #include "keyboard.h"
 #include "layer.h"
+#include "server.h"
 #include "toplevel.h"
 #include "tree.h"
 #include "types.h"
+#include "input.h"
+#include <stdlib.h>
+#include <wayland-server-core.h>
+#include <wayland-util.h>
 #include <wlr/backend.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
@@ -15,6 +20,13 @@
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_relative_pointer_v1.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
+#include <wlr/types/wlr_pointer_constraints_v1.h>
+#include <wlr/types/wlr_cursor_shape_v1.h>
+#include <wlr/util/region.h>
+#include <wlr/util/log.h>
+#include <wlr/util/box.h>
+
+static void cursor_constrain(struct wlr_pointer_constraint_v1 *constraint);
 
 static void reset_cursor_mode(void) {
   server.cursor_mode = CURSOR_PASSTHROUGH;
@@ -114,6 +126,33 @@ static void process_cursor_motion(uint32_t time, double dx, double dy, double dx
 		wlr_relative_pointer_manager_v1_send_relative_motion(
 			server.relative_pointer_manager, server.seat, time * 1000,
 			dx, dy, dx_unaccel, dy_unaccel);
+
+		if (server.active_pointer_constraint != NULL &&
+			server.cursor_mode != CURSOR_RESIZE && server.cursor_mode != CURSOR_MOVE) {
+			struct bwm_toplevel *toplevel = server.active_pointer_constraint->surface->data;
+			if (toplevel != NULL &&
+				server.active_pointer_constraint->surface == server.seat->pointer_state.focused_surface) {
+				const struct wlr_box geo = toplevel->node->rectangle;
+
+				// calculate constraint
+        double sx = server.cursor->x - geo.x - geo.width;
+        double sy = server.cursor->y - geo.y - geo.height;
+        double cx, cy;
+
+        // apply confine on region
+        if (wlr_region_confine(&server.active_pointer_constraint->region,
+        	sx, sy, sx + dx, sy + dy, &cx, &cy)) {
+          dx = cx - sx;
+          dy = cy - sy;
+        }
+
+        // if pointer is locked, do not move it
+        if (server.active_pointer_constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED)
+          return;
+			} else {
+				cursor_constrain(NULL);
+			}
+		}
 	}
 
   if (server.cursor_mode == CURSOR_MOVE) {
@@ -262,8 +301,10 @@ void handle_new_input(struct wl_listener *listener, void *data) {
     break;
   case WLR_INPUT_DEVICE_POINTER:
     wlr_cursor_attach_input_device(server.cursor, device);
+    input_apply_config(device);
     break;
   default:
+    input_apply_config(device);
     break;
   }
 
@@ -277,4 +318,151 @@ void request_set_selection(struct wl_listener *listener, void *data) {
 	(void)listener;
   struct wlr_seat_request_set_selection_event *event = data;
   wlr_seat_set_selection(server.seat, event->source, event->serial);
+}
+
+void cursor_check_constraint_region(void) {
+  struct wlr_pointer_constraint_v1 *constraint = server.active_pointer_constraint;
+  pixman_region32_t *region = &constraint->region;
+  struct bwm_toplevel *toplevel = constraint->surface->data;
+  if (server.cursor_requires_warp && toplevel) {
+    server.cursor_requires_warp = false;
+
+    double sx = server.cursor->x + toplevel->node->rectangle.x;
+    double sy = server.cursor->y + toplevel->node->rectangle.y;
+
+    if (!pixman_region32_contains_point(region, floor(sx), floor(sy), NULL)) {
+      int count;
+      pixman_box32_t *boxes = pixman_region32_rectangles(region, &count);
+      if (count > 0) {
+        sx = (boxes[0].x1 + boxes[0].x2) / 2.0;
+        sy = (boxes[0].y1 + boxes[0].y2) / 2.0;
+
+        wlr_cursor_warp_closest(server.cursor, NULL,
+          sx + toplevel->node->rectangle.x,
+          sy + toplevel->node->rectangle.y);
+      }
+    }
+  }
+
+  // empty region if locked
+  if (constraint->type == WLR_POINTER_CONSTRAINT_V1_CONFINED)
+      pixman_region32_copy(&server.pointer_confine, region);
+  else
+      pixman_region32_clear(&server.pointer_confine);
+}
+
+static void cursor_warp_to_constraint_hint(void) {
+	struct wlr_pointer_constraint_v1 *active = server.active_pointer_constraint;
+	if (active == NULL)
+		return;
+
+	if (active->current.cursor_hint.enabled) {
+	  double sx = active->current.cursor_hint.x;
+	  double sy = active->current.cursor_hint.y;
+
+	  struct bwm_toplevel *toplevel = active->surface->data;
+	  if (!toplevel)
+	    return;
+
+	  double lx = sx - toplevel->node->rectangle.x;
+	  double ly = sy - toplevel->node->rectangle.y;
+
+	  wlr_cursor_warp(server.cursor, NULL, lx, ly);
+	  wlr_seat_pointer_warp(active->seat, sx, sy);
+	}
+}
+
+void handle_cursor_contraint_commit(struct wl_listener *listener, void *data) {
+	(void)listener;
+	(void)data;
+	cursor_check_constraint_region();
+}
+
+static void cursor_constrain(struct wlr_pointer_constraint_v1 *constraint) {
+	if (server.active_pointer_constraint == constraint)
+    return;
+
+  wl_list_remove(&server.pointer_constraint_commit.link);
+  if (server.active_pointer_constraint) {
+    if (!constraint)
+      cursor_warp_to_constraint_hint();
+
+    // deactivate current constraint
+    wlr_pointer_constraint_v1_send_deactivated(server.active_pointer_constraint);
+  }
+
+  // set the new constraint
+  server.active_pointer_constraint = constraint;
+
+  if (!constraint) {
+    wl_list_init(&server.pointer_constraint_commit.link);
+    return;
+  }
+
+  server.cursor_requires_warp = true;
+
+  if (pixman_region32_not_empty(&constraint->current.region))
+    pixman_region32_intersect(&constraint->region,
+                              &constraint->surface->input_region,
+                              &constraint->current.region);
+  else
+    pixman_region32_copy(&constraint->region,
+                          &constraint->surface->input_region);
+
+  cursor_check_constraint_region();
+
+  wlr_pointer_constraint_v1_send_activated(constraint);
+
+  server.pointer_constraint_commit.notify = handle_cursor_contraint_commit;
+  wl_signal_add(&constraint->surface->events.commit, &server.pointer_constraint_commit);
+}
+
+void handle_constraint_set_region(struct wl_listener *listener, void *data) {
+	(void)listener;
+	(void)data;
+	server.cursor_requires_warp = true;
+}
+
+void handle_constraint_destroy(struct wl_listener *listener, void *data) {
+	(void)data;
+	struct bwm_cursor_constraint *constraint = wl_container_of(listener, constraint, destroy);
+	wl_list_remove(&constraint->set_region.link);
+	wl_list_remove(&constraint->destroy.link);
+
+  if (server.active_pointer_constraint == constraint->constraint) {
+    cursor_warp_to_constraint_hint();
+
+    if (constraint->constraint->link.next)
+      wl_list_remove(&server.pointer_constraint_commit.link);
+
+    wl_list_init(&server.pointer_constraint_commit.link);
+    server.active_pointer_constraint = NULL;
+  }
+}
+
+void handle_pointer_constraint(struct wl_listener *listener, void *data) {
+	(void)listener;
+  struct wlr_pointer_constraint_v1 *constraint = data;
+
+  if (constraint->surface == server.seat->pointer_state.focused_surface) {
+    server.active_pointer_constraint = constraint;
+
+    struct bwm_cursor_constraint *cursor_constraint = calloc(1, sizeof(struct bwm_cursor_constraint));
+    cursor_constraint->constraint = constraint;
+    cursor_constraint->set_region.notify = handle_constraint_set_region;
+    wl_signal_add(&constraint->events.set_region, &cursor_constraint->set_region);
+    cursor_constraint->destroy.notify = handle_constraint_destroy;
+    wl_signal_add(&constraint->events.destroy, &cursor_constraint->destroy);
+  }
+}
+
+void handle_cursor_request_set_shape(struct wl_listener *listener, void *data) {
+	(void)listener;
+	struct wlr_cursor_shape_manager_v1_request_set_shape_event *event = data;
+
+  if (server.cursor_mode != CURSOR_PASSTHROUGH)
+    return;
+
+  if (event->seat_client == server.seat->pointer_state.focused_client)
+    wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, wlr_cursor_shape_v1_name(event->shape));
 }

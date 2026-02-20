@@ -13,6 +13,7 @@ libs = [
 	dependency('wayland-server'),
 	dependency('xkbcommon'),
 	dependency('libinput'),
+	dependency('pixman-1'),
 	wayland_protos,
 ]
 
@@ -73,6 +74,7 @@ executable(
 		'src' / 'layer.c',
 		'src' / 'config.c',
 		'src' / 'lock.c',
+		'src' / 'input.c',
 		wl_protos_src,
 	],
 	include_directories: inc,

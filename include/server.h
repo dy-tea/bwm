@@ -51,6 +51,16 @@ struct bwm_server {
   struct wl_listener cursor_axis;
   struct wl_listener cursor_frame;
 
+  struct wlr_pointer_constraints_v1 *pointer_constraints;
+  struct wlr_pointer_constraint_v1 *active_pointer_constraint;
+  bool cursor_requires_warp;
+  pixman_region32_t pointer_confine;
+  struct wl_listener new_pointer_constraint;
+  struct wl_listener pointer_constraint_commit;
+
+  struct wlr_cursor_shape_manager_v1 *cursor_shape_manager;
+  struct wl_listener cursor_request_set_shape;
+
   struct wlr_relative_pointer_manager_v1 *relative_pointer_manager;
   struct wlr_idle_notifier_v1 *idle_notifier;
 

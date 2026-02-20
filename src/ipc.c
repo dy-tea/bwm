@@ -6,6 +6,7 @@
 #include "workspace.h"
 #include "tree.h"
 #include "output_config.h"
+#include "input.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -318,6 +319,81 @@ static void ipc_cmd_output(char **args, int num, int client_fd) {
   } else {
     send_failure(client_fd, "output: unknown subcommand\n");
   }
+}
+
+static void ipc_cmd_input(char **args, int num, int client_fd) {
+  if (num < 1) {
+    send_failure(client_fd, "input: missing arguments\n");
+    return;
+  }
+
+  char *identifier = NULL;
+  enum input_config_type type = INPUT_CONFIG_TYPE_ANY;
+
+  if (strncmp(*args, "type:", 5) == 0) {
+    char *type_str = *args + 5;
+    while (*type_str == ' ') type_str++;
+
+    if (streq(type_str, "keyboard")) {
+      type = INPUT_CONFIG_TYPE_KEYBOARD;
+    } else if (streq(type_str, "pointer")) {
+      type = INPUT_CONFIG_TYPE_POINTER;
+    } else if (streq(type_str, "touchpad")) {
+      type = INPUT_CONFIG_TYPE_TOUCH;
+    } else if (streq(type_str, "touchscreen")) {
+      type = INPUT_CONFIG_TYPE_TOUCH;
+    } else if (streq(type_str, "tablet")) {
+      type = INPUT_CONFIG_TYPE_TABLET;
+    } else if (streq(type_str, "tablet_pad")) {
+      type = INPUT_CONFIG_TYPE_TABLET_PAD;
+    } else if (streq(type_str, "switch")) {
+      type = INPUT_CONFIG_TYPE_SWITCH;
+    } else if (streq(type_str, "any")) {
+      type = INPUT_CONFIG_TYPE_ANY;
+    } else {
+      send_failure(client_fd, "input: unknown type\n");
+      return;
+    }
+  } else if (!streq(*args, "*")) {
+    identifier = *args;
+  }
+
+  args++;
+  num--;
+
+  if (num < 1) {
+    send_failure(client_fd, "input: missing property\n");
+    return;
+  }
+
+  char *property = *args;
+  args++;
+  num--;
+
+  char *value = "";
+  if (num > 0)
+    value = *args;
+
+  input_config_t *config = input_config_create(identifier);
+  if (!config) {
+    send_failure(client_fd, "input: failed to create config\n");
+    return;
+  }
+  config->type = type;
+
+  if (!input_config_set_value(config, property, value)) {
+    input_config_destroy(config);
+    send_failure(client_fd, "input: unknown property\n");
+    return;
+  }
+
+  input_config_add(config);
+
+  char buf[256];
+  snprintf(buf, sizeof(buf), "input: set %s %s %s\n",
+      identifier ? identifier : (type != INPUT_CONFIG_TYPE_ANY ? "type:xxx" : "*"),
+      property, value);
+  send_success(client_fd, buf);
 }
 
 static desktop_t *find_desktop_by_name_in_monitor(monitor_t *mon, const char *name) {
@@ -915,6 +991,8 @@ static void process_ipc_message(char *msg, int msg_len, int client_fd) {
     ipc_cmd_quit(++args, --num, client_fd);
   } else if (streq("output", *args)) {
     ipc_cmd_output(++args, --num, client_fd);
+  } else if (streq("input", *args)) {
+    ipc_cmd_input(++args, --num, client_fd);
   } else {
     send_failure(client_fd, "unknown command\n");
   }

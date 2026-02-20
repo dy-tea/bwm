@@ -105,10 +105,8 @@ static bind_action_t parse_action(const char *cmd, int *desktop_index) {
   char buf[MAXLEN];
   snprintf(buf, sizeof(buf), "%s", cmd);
 
-  // Strip "bmsg " prefix if present
-  if (strncmp(buf, "bmsg ", 5) == 0) {
+  if (strncmp(buf, "bmsg ", 5) == 0)
     memmove(buf, buf + 5, strlen(buf + 5) + 1);
-  }
 
   char *args[16];
   int argc = 0;
@@ -159,7 +157,6 @@ static bind_action_t parse_action(const char *cmd, int *desktop_index) {
       if (strcmp(args[2], "monocle") == 0) return BIND_DESKTOP_LAYOUT_MONOCLE;
     }
 
-    // desktop <n> - switch to desktop by 1-based index
     int d = atoi(args[1]);
     if (d >= 1 && d <= 10) {
       *desktop_index = d;
@@ -387,7 +384,7 @@ void load_hotkeys(const char *config_path) {
       if (hotkey[0] != '\0' && command[0] != '\0') {
         wlr_log(WLR_DEBUG, "Parsed: hotkey=[%s] command=[%s]", hotkey, command);
         parse_hotkey_line(hotkey, command);
-    }
+      }
       snprintf(hotkey, sizeof(hotkey), "%s", ptr);
       command[0] = '\0';
       offset = 0;

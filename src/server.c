@@ -10,6 +10,7 @@
 #include "config.h"
 #include "lock.h"
 #include "output_config.h"
+#include "input.h"
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,6 +37,8 @@
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_relative_pointer_v1.h>
+#include <wlr/types/wlr_pointer_constraints_v1.h>
+#include <wlr/types/wlr_cursor_shape_v1.h>
 #include <wlr/types/wlr_session_lock_v1.h>
 #include <wlr/types/wlr_xdg_foreign_registry.h>
 #include <wlr/types/wlr_xdg_foreign_v1.h>
@@ -181,6 +184,21 @@ void server_init(void) {
 
   // relative pointer
   server.relative_pointer_manager = wlr_relative_pointer_manager_v1_create(server.wl_display);
+
+  // pointer constraints
+  server.pointer_constraints = wlr_pointer_constraints_v1_create(server.wl_display);
+
+  server.cursor_requires_warp = false;
+  wl_list_init(&server.pointer_constraint_commit.link);
+
+  server.new_pointer_constraint.notify = handle_pointer_constraint;
+  wl_signal_add(&server.pointer_constraints->events.new_constraint, &server.new_pointer_constraint);
+
+  // cursor shape
+  server.cursor_shape_manager = wlr_cursor_shape_manager_v1_create(server.wl_display, 1);
+
+  server.cursor_request_set_shape.notify = handle_cursor_request_set_shape;
+  wl_signal_add(&server.cursor_shape_manager->events.request_set_shape, &server.cursor_request_set_shape);
 
   // idle notifier
   server.idle_notifier = wlr_idle_notifier_v1_create(server.wl_display);
@@ -353,6 +371,7 @@ void server_init(void) {
   ipc_init();
   output_config_init();
   config_init();
+  input_init();
 }
 
 static int ipc_socket_handler(int fd, uint32_t mask, void *data) {
@@ -503,6 +522,7 @@ void server_fini(void) {
   transaction_fini();
   workspace_fini();
   ipc_cleanup();
+  input_fini();
   config_fini();
   wl_display_destroy_clients(server.wl_display);
 

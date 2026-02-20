@@ -6,6 +6,10 @@
 alt + Return
 	foot
 
+# launcher
+alt + space
+	rofi -show drun
+
 # close window
 alt + shift + q
 	bmsg node --close
