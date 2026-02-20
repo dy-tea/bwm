@@ -161,22 +161,19 @@ static void apply_node_state(node_t *node,
 
   // node is destroying, hide it now atomically with other changes
   if (node->destroying) {
-    if (node->client->toplevel 
-        && node->client->toplevel->saved_surface_tree 
+    if (node->client->toplevel
+        && node->client->toplevel->saved_surface_tree
         && node->client->toplevel->content_tree) {
       toplevel_remove_saved_buffer(node->client->toplevel);
       wlr_log(WLR_DEBUG, "Removed saved buffer for destroying node %u", node->id);
     }
-    if (node->client->toplevel && node->client->toplevel->scene_tree) {
-      wlr_scene_node_set_enabled(&node->client->toplevel->scene_tree->node, false);
-    }
     node->client->shown = false;
-    wlr_log(WLR_DEBUG, "Hid destroying node %u atomically with transaction", node->id);
     return;
   }
 
   // apply geometry
-  if (toplevel_is_ready(node->client->toplevel)) {
+  bool ready = toplevel_is_ready(node->client->toplevel);
+  if (ready) {
     wlr_log(WLR_DEBUG, "Transaction apply: node %u tiled_rect=(%d,%d %dx%d)",
             node->id,
             instruction->tiled_rectangle.x,
@@ -381,14 +378,11 @@ static void transaction_commit(struct bwm_transaction *txn) {
         instruction->waiting = true;
         txn->num_waiting++;
 
-        // save buffer for shown views
-        if (node->client->shown && !node->client->toplevel->saved_surface_tree) {
+        if (node->client->shown && !node->client->toplevel->saved_surface_tree
+            && node->client->toplevel->configured) {
           toplevel_save_buffer(node->client->toplevel);
           wlr_log(WLR_DEBUG, "Saved buffer for node %u (shown=true)", node->id);
-        } else if (!node->client->shown)
-          wlr_log(WLR_DEBUG, "NOT saving buffer for node %u (shown=false)", node->id);
-        else if (node->client->toplevel->saved_surface_tree)
-          wlr_log(WLR_DEBUG, "NOT saving buffer for node %u (already has saved buffer)", node->id);
+        }
 
         num_configures++;
 

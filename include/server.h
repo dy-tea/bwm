@@ -9,6 +9,7 @@
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_output_power_management_v1.h>
 #include <wlr/types/wlr_output_management_v1.h>
+#include <wlr/types/wlr_xdg_activation_v1.h>
 
 enum cursor_mode {
   CURSOR_PASSTHROUGH,
@@ -38,6 +39,8 @@ struct bwm_server {
   struct wlr_scene_tree *lock_tree;
 
   struct wlr_xdg_shell *xdg_shell;
+  struct wlr_xdg_activation_v1 *xdg_activation_v1;
+  struct wl_listener xdg_activation_request_activate;
   struct wlr_layer_shell_v1 *layer_shell;
   struct wl_listener new_layer_surface;
   struct wl_listener new_xdg_toplevel;

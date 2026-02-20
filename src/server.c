@@ -33,6 +33,7 @@
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_xdg_activation_v1.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
@@ -69,6 +70,7 @@ void handle_new_input(struct wl_listener *listener, void *data);
 void handle_output_power_set_mode(struct wl_listener *listener, void *data);
 void handle_output_manager_apply(struct wl_listener *listener, void *data);
 void handle_output_manager_test(struct wl_listener *listener, void *data);
+void handle_xdg_activation_request_activate(struct wl_listener *listener, void *data);
 
 void server_init(void) {
   server = (struct bwm_server){0};
@@ -151,6 +153,11 @@ void server_init(void) {
 
   server.new_xdg_toplevel.notify = handle_new_xdg_toplevel;
   wl_signal_add(&server.xdg_shell->events.new_toplevel, &server.new_xdg_toplevel);
+
+  // xdg activation
+  server.xdg_activation_v1 = wlr_xdg_activation_v1_create(server.wl_display);
+  server.xdg_activation_request_activate.notify = handle_xdg_activation_request_activate;
+  wl_signal_add(&server.xdg_activation_v1->events.request_activate, &server.xdg_activation_request_activate);
 
   // layer shell
   server.layer_shell = wlr_layer_shell_v1_create(server.wl_display, 5);
@@ -541,6 +548,7 @@ void server_fini(void) {
   wl_list_remove(&server.request_start_drag.link);
   wl_list_remove(&server.start_drag.link);
   wl_list_remove(&server.new_session_lock.link);
+  wl_list_remove(&server.xdg_activation_request_activate.link);
 
   wlr_scene_node_destroy(&server.scene->tree.node);
   wlr_cursor_destroy(server.cursor);
@@ -578,4 +586,19 @@ void handle_drag_icon_destroy(struct wl_listener *listener, void *data) {
   (void)data;
   wl_list_remove(&listener->link);
   free(listener);
+}
+
+void handle_xdg_activation_request_activate(struct wl_listener *listener, void *data) {
+  (void)listener;
+  struct wlr_xdg_activation_v1_request_activate_event *event = data;
+
+  if (event->surface == NULL)
+    return;
+
+  struct bwm_toplevel *toplevel = event->surface->data;
+  if (toplevel == NULL)
+    return;
+
+  wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
+  focus_toplevel(toplevel);
 }
