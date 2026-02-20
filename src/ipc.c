@@ -5,7 +5,17 @@
 #include "transaction.h"
 #include "workspace.h"
 #include "tree.h"
+#include "output_config.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <wlr/util/log.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_scene.h>
+#include <wayland-util.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -106,6 +116,208 @@ static void ipc_cmd_quit(char **args, int num, int client_fd) {
   wlr_log(WLR_INFO, "Quit requested via IPC");
   wl_display_terminate(server.wl_display);
   send_success(client_fd, "quit\n");
+}
+
+static void ipc_cmd_output(char **args, int num, int client_fd) {
+  if (num < 1) {
+    send_failure(client_fd, "output: missing arguments\n");
+    return;
+  }
+
+  char *output_name = *args;
+  args++;
+  num--;
+
+  if (num < 1) {
+    send_failure(client_fd, "output: missing subcommand\n");
+    return;
+  }
+
+  struct output_config *oc = output_config_find(output_name);
+  if (!oc) {
+    oc = output_config_create(output_name);
+    if (!oc) {
+      send_failure(client_fd, "output: failed to create config\n");
+      return;
+    }
+  }
+
+  char *subcmd = *args;
+
+  if (streq("enable", subcmd)) {
+    oc->enable = OUTPUT_CONFIG_ENABLE;
+    output_config_apply(oc);
+    send_success(client_fd, "output enabled\n");
+  } else if (streq("disable", subcmd)) {
+    oc->enable = OUTPUT_CONFIG_DISABLE;
+    output_config_apply(oc);
+    send_success(client_fd, "output disabled\n");
+  } else if (streq("mode", subcmd) || streq("resolution", subcmd) || streq("res", subcmd)) {
+    if (num < 2) {
+      send_failure(client_fd, "output mode: missing resolution\n");
+      return;
+    }
+    args++;
+    num--;
+
+    char *res = *args;
+    int width, height;
+    float refresh_rate = -1;
+
+    char *at = strchr(res, '@');
+    if (at) {
+      *at = '\0';
+      if (sscanf(at + 1, "%f", &refresh_rate) != 1) {
+        send_failure(client_fd, "output mode: invalid refresh rate\n");
+        return;
+      }
+    }
+
+    if (sscanf(res, "%dx%d", &width, &height) != 2) {
+      send_failure(client_fd, "output mode: invalid resolution format\n");
+      return;
+    }
+
+    oc->width = width;
+    oc->height = height;
+    oc->refresh_rate = refresh_rate;
+    output_config_apply(oc);
+    send_success(client_fd, "output mode set\n");
+  } else if (streq("position", subcmd) || streq("pos", subcmd)) {
+    if (num < 3) {
+      send_failure(client_fd, "output position: missing coordinates\n");
+      return;
+    }
+    args++;
+    num--;
+
+    int x, y;
+    if (sscanf(*args, "%d", &x) != 1) {
+      send_failure(client_fd, "output position: invalid x\n");
+      return;
+    }
+    args++;
+    num--;
+
+    if (sscanf(*args, "%d", &y) != 1) {
+      send_failure(client_fd, "output position: invalid y\n");
+      return;
+    }
+
+    oc->x = x;
+    oc->y = y;
+    output_config_apply(oc);
+    send_success(client_fd, "output position set\n");
+  } else if (streq("scale", subcmd)) {
+    if (num < 2) {
+      send_failure(client_fd, "output scale: missing scale factor\n");
+      return;
+    }
+    args++;
+    num--;
+
+    float scale;
+    if (sscanf(*args, "%f", &scale) != 1) {
+      send_failure(client_fd, "output scale: invalid scale\n");
+      return;
+    }
+
+    oc->scale = scale;
+    output_config_apply(oc);
+    send_success(client_fd, "output scale set\n");
+  } else if (streq("transform", subcmd)) {
+    if (num < 2) {
+      send_failure(client_fd, "output transform: missing transform\n");
+      return;
+    }
+    args++;
+    num--;
+
+    int transform = -1;
+    if (streq("normal", *args) || streq("0", *args)) {
+      transform = WL_OUTPUT_TRANSFORM_NORMAL;
+    } else if (streq("90", *args)) {
+      transform = WL_OUTPUT_TRANSFORM_90;
+    } else if (streq("180", *args)) {
+      transform = WL_OUTPUT_TRANSFORM_180;
+    } else if (streq("270", *args)) {
+      transform = WL_OUTPUT_TRANSFORM_270;
+    } else if (streq("flipped", *args) || streq("flipped-180", *args)) {
+      transform = WL_OUTPUT_TRANSFORM_FLIPPED_180;
+    } else if (streq("flipped-90", *args)) {
+      transform = WL_OUTPUT_TRANSFORM_FLIPPED_90;
+    } else if (streq("flipped-270", *args)) {
+      transform = WL_OUTPUT_TRANSFORM_FLIPPED_270;
+    }
+
+    if (transform < 0) {
+      send_failure(client_fd, "output transform: invalid transform\n");
+      return;
+    }
+
+    oc->transform = transform;
+    output_config_apply(oc);
+    send_success(client_fd, "output transform set\n");
+  } else if (streq("dpms", subcmd)) {
+    if (num < 2) {
+      send_failure(client_fd, "output dpms: missing state\n");
+      return;
+    }
+    args++;
+    num--;
+
+    if (streq("on", *args)) {
+      oc->dpms_state = OUTPUT_CONFIG_DPMS_ON;
+    } else if (streq("off", *args)) {
+      oc->dpms_state = OUTPUT_CONFIG_DPMS_OFF;
+    } else {
+      send_failure(client_fd, "output dpms: invalid state (on/off)\n");
+      return;
+    }
+
+    output_config_apply(oc);
+    send_success(client_fd, "output dpms set\n");
+  } else if (streq("adaptive_sync", subcmd) || streq("vrr", subcmd)) {
+    if (num < 2) {
+      send_failure(client_fd, "output adaptive_sync: missing state\n");
+      return;
+    }
+    args++;
+    num--;
+
+    if (streq("on", *args) || streq("enable", *args)) {
+      oc->adaptive_sync = OUTPUT_CONFIG_ADAPTIVE_SYNC_ENABLED;
+    } else if (streq("off", *args) || streq("disable", *args)) {
+      oc->adaptive_sync = OUTPUT_CONFIG_ADAPTIVE_SYNC_DISABLED;
+    } else {
+      send_failure(client_fd, "output adaptive_sync: invalid state (on/off)\n");
+      return;
+    }
+
+    output_config_apply(oc);
+    send_success(client_fd, "output adaptive_sync set\n");
+  } else if (streq("render_bit_depth", subcmd)) {
+    if (num < 2) {
+      send_failure(client_fd, "output render_bit_depth: missing value\n");
+      return;
+    }
+    args++;
+    num--;
+
+    if (streq("8", *args) || streq("8-bit", *args)) {
+      oc->render_bit_depth = OUTPUT_CONFIG_RENDER_BIT_DEPTH_8;
+    } else if (streq("10", *args) || streq("10-bit", *args)) {
+      oc->render_bit_depth = OUTPUT_CONFIG_RENDER_BIT_DEPTH_10;
+    } else {
+      send_failure(client_fd, "output render_bit_depth: invalid value (8/10)\n");
+      return;
+    }
+
+    output_config_apply(oc);
+    send_success(client_fd, "output render_bit_depth set\n");
+  } else {
+    send_failure(client_fd, "output: unknown subcommand\n");
+  }
 }
 
 static desktop_t *find_desktop_by_name_in_monitor(monitor_t *mon, const char *name) {
@@ -701,6 +913,8 @@ static void process_ipc_message(char *msg, int msg_len, int client_fd) {
     ipc_cmd_config(++args, --num, client_fd);
   } else if (streq("quit", *args)) {
     ipc_cmd_quit(++args, --num, client_fd);
+  } else if (streq("output", *args)) {
+    ipc_cmd_output(++args, --num, client_fd);
   } else {
     send_failure(client_fd, "unknown command\n");
   }

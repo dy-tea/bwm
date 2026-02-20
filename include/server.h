@@ -7,6 +7,8 @@
 #include <xkbcommon/xkbcommon.h>
 #include <wlr/types/wlr_ext_workspace_v1.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_output_power_management_v1.h>
+#include <wlr/types/wlr_output_management_v1.h>
 
 enum cursor_mode {
   CURSOR_PASSTHROUGH,
@@ -64,6 +66,13 @@ struct bwm_server {
   struct wlr_output_layout *output_layout;
   struct wl_list outputs;
   struct wl_listener new_output;
+
+  struct wlr_output_power_manager_v1 *output_power_manager;
+  struct wl_listener output_power_set_mode;
+
+  struct wlr_output_manager_v1 *output_manager;
+  struct wl_listener output_manager_apply;
+  struct wl_listener output_manager_test;
 
   struct wlr_session_lock_manager_v1 *session_lock_manager;
   struct wl_listener new_session_lock;

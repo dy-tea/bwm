@@ -27,6 +27,7 @@ wayland_scanner = find_program(
 protocols = [
 	wl_protocol_dir / 'stable' / 'xdg-shell' / 'xdg-shell.xml',
 	'protocols' / 'wlr-layer-shell-unstable-v1.xml',
+	'protocols' / 'wlr-output-power-management-unstable-v1.xml',
 ]
 
 wl_protos_src = []
@@ -61,6 +62,7 @@ executable(
 		'src' / 'server.c',
 		'src' / 'cursor.c',
 		'src' / 'output.c',
+		'src' / 'output_config.c',
 		'src' / 'tree.c',
 		'src' / 'toplevel.c',
 		'src' / 'popup.c',

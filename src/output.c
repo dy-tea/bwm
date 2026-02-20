@@ -2,6 +2,7 @@
 #include "server.h"
 #include "layer.h"
 #include "lock.h"
+#include "output_config.h"
 #include <time.h>
 #include <stdlib.h>
 #include <wlr/types/wlr_output.h>
@@ -116,4 +117,6 @@ void handle_new_output(struct wl_listener *listener, void *data) {
           server.focused_monitor->rectangle.x,
           server.focused_monitor->rectangle.y);
   }
+
+  output_update_manager_config();
 }

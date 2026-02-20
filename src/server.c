@@ -9,6 +9,7 @@
 #include "layer.h"
 #include "config.h"
 #include "lock.h"
+#include "output_config.h"
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,12 +56,16 @@
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_color_management_v1.h>
 #include <wlr/types/wlr_color_representation_v1.h>
+#include <wlr/types/wlr_output_power_management_v1.h>
 
 void handle_request_start_drag(struct wl_listener *listener, void *data);
 void handle_start_drag(struct wl_listener *listener, void *data);
 void handle_drag_icon_destroy(struct wl_listener *listener, void *data);
 void request_set_selection(struct wl_listener *listener, void *data);
 void handle_new_input(struct wl_listener *listener, void *data);
+void handle_output_power_set_mode(struct wl_listener *listener, void *data);
+void handle_output_manager_apply(struct wl_listener *listener, void *data);
+void handle_output_manager_test(struct wl_listener *listener, void *data);
 
 void server_init(void) {
   server = (struct bwm_server){0};
@@ -107,6 +112,16 @@ void server_init(void) {
 
   server.output_layout = wlr_output_layout_create(server.wl_display);
   wlr_xdg_output_manager_v1_create(server.wl_display, server.output_layout);
+
+  server.output_power_manager = wlr_output_power_manager_v1_create(server.wl_display);
+  server.output_power_set_mode.notify = handle_output_power_set_mode;
+  wl_signal_add(&server.output_power_manager->events.set_mode, &server.output_power_set_mode);
+
+  server.output_manager = wlr_output_manager_v1_create(server.wl_display);
+  server.output_manager_apply.notify = handle_output_manager_apply;
+  wl_signal_add(&server.output_manager->events.apply, &server.output_manager_apply);
+  server.output_manager_test.notify = handle_output_manager_test;
+  wl_signal_add(&server.output_manager->events.test, &server.output_manager_test);
 
   wl_list_init(&server.outputs);
 
@@ -336,6 +351,7 @@ void server_init(void) {
   transaction_init();
   workspace_init();
   ipc_init();
+  output_config_init();
   config_init();
 }
 
@@ -344,11 +360,99 @@ static int ipc_socket_handler(int fd, uint32_t mask, void *data) {
   (void)data;
   if (mask & WL_EVENT_READABLE) {
     int client_fd = accept(ipc_get_socket_fd(), NULL, NULL);
-    if (client_fd >= 0) {
+    if (client_fd >= 0)
       ipc_handle_incoming(client_fd);
-    }
   }
   return 0;
+}
+
+void handle_output_power_set_mode(struct wl_listener *listener, void *data) {
+  (void)listener;
+  struct wlr_output_power_v1_set_mode_event *event = data;
+  output_set_power(event->output, event->mode);
+}
+
+static void apply_output_head_config(struct wlr_output_configuration_head_v1 *config_head) {
+  struct wlr_output *output = config_head->state.output;
+  if (!output)
+    return;
+
+  struct wlr_output_state state;
+  wlr_output_state_init(&state);
+
+  wlr_output_state_set_enabled(&state, config_head->state.enabled);
+
+  if (config_head->state.mode) {
+    wlr_output_state_set_mode(&state, config_head->state.mode);
+  } else if (config_head->state.custom_mode.width > 0) {
+    wlr_output_state_set_custom_mode(&state,
+        config_head->state.custom_mode.width,
+        config_head->state.custom_mode.height,
+        config_head->state.custom_mode.refresh);
+  }
+
+  wlr_output_state_set_scale(&state, config_head->state.scale);
+  wlr_output_state_set_transform(&state, config_head->state.transform);
+  wlr_output_state_set_adaptive_sync_enabled(&state, config_head->state.adaptive_sync_enabled);
+
+  wlr_output_commit_state(output, &state);
+  wlr_output_state_finish(&state);
+
+  if (config_head->state.x >= 0 && config_head->state.y >= 0)
+    wlr_output_layout_add(server.output_layout, output, config_head->state.x, config_head->state.y);
+}
+
+void handle_output_manager_apply(struct wl_listener *listener, void *data) {
+  (void)listener;
+  struct wlr_output_configuration_v1 *config = data;
+
+  struct wlr_output_configuration_head_v1 *head;
+  wl_list_for_each(head, &config->heads, link) {
+    apply_output_head_config(head);
+  }
+
+  wlr_output_configuration_v1_send_succeeded(config);
+  output_update_manager_config();
+}
+
+void handle_output_manager_test(struct wl_listener *listener, void *data) {
+  (void)listener;
+  struct wlr_output_configuration_v1 *config = data;
+
+  struct wlr_output_configuration_head_v1 *head;
+  wl_list_for_each(head, &config->heads, link) {
+    struct wlr_output *output = head->state.output;
+    if (!output)
+      continue;
+
+    struct wlr_output_state state;
+    wlr_output_state_init(&state);
+
+    wlr_output_state_set_enabled(&state, head->state.enabled);
+
+    if (head->state.mode) {
+      wlr_output_state_set_mode(&state, head->state.mode);
+    } else if (head->state.custom_mode.width > 0) {
+      wlr_output_state_set_custom_mode(&state,
+        head->state.custom_mode.width,
+        head->state.custom_mode.height,
+        head->state.custom_mode.refresh);
+    }
+
+    wlr_output_state_set_scale(&state, head->state.scale);
+    wlr_output_state_set_transform(&state, head->state.transform);
+    wlr_output_state_set_adaptive_sync_enabled(&state, head->state.adaptive_sync_enabled);
+
+    if (!wlr_output_test_state(output, &state)) {
+      wlr_output_configuration_v1_send_failed(config);
+      wlr_output_state_finish(&state);
+      return;
+    }
+
+    wlr_output_state_finish(&state);
+  }
+
+  wlr_output_configuration_v1_send_succeeded(config);
 }
 
 static int hotkey_reload_handler(int fd, uint32_t mask, void *data) {
