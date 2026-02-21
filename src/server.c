@@ -548,6 +548,7 @@ void server_fini(void) {
   wl_list_remove(&server.start_drag.link);
   wl_list_remove(&server.new_session_lock.link);
   wl_list_remove(&server.xdg_activation_request_activate.link);
+  wl_list_remove(&server.output_power_set_mode.link);
 
   wlr_scene_node_destroy(&server.scene->tree.node);
   wlr_cursor_destroy(server.cursor);

@@ -161,12 +161,6 @@ static void apply_node_state(node_t *node,
 
   // node is destroying, hide it now atomically with other changes
   if (node->destroying) {
-    if (node->client->toplevel
-        && node->client->toplevel->saved_surface_tree
-        && node->client->toplevel->content_tree) {
-      toplevel_remove_saved_buffer(node->client->toplevel);
-      wlr_log(WLR_DEBUG, "Removed saved buffer for destroying node %u", node->id);
-    }
     node->client->shown = false;
     return;
   }
@@ -192,7 +186,7 @@ static void apply_node_state(node_t *node,
     else
       rect = &instruction->tiled_rectangle;
 
-    if (node->client->toplevel->saved_surface_tree) {
+    if (node->client->toplevel && node->client->toplevel->saved_surface_tree) {
       toplevel_remove_saved_buffer(node->client->toplevel);
       wlr_log(WLR_DEBUG, "Removed saved buffer for node %u", node->id);
     }

@@ -321,6 +321,8 @@ void toplevel_destroy(struct wl_listener *listener, void *data) {
     toplevel->node = NULL;
   }
 
+  toplevel->saved_surface_tree = NULL;
+
   wl_list_remove(&toplevel->map.link);
   wl_list_remove(&toplevel->unmap.link);
   wl_list_remove(&toplevel->commit.link);
