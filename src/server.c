@@ -377,7 +377,6 @@ void server_init(void) {
   workspace_init();
   ipc_init();
   output_config_init();
-  config_init();
   input_init();
 }
 
@@ -412,9 +411,9 @@ static void apply_output_head_config(struct wlr_output_configuration_head_v1 *co
     wlr_output_state_set_mode(&state, config_head->state.mode);
   } else if (config_head->state.custom_mode.width > 0) {
     wlr_output_state_set_custom_mode(&state,
-        config_head->state.custom_mode.width,
-        config_head->state.custom_mode.height,
-        config_head->state.custom_mode.refresh);
+      config_head->state.custom_mode.width,
+      config_head->state.custom_mode.height,
+      config_head->state.custom_mode.refresh);
   }
 
   wlr_output_state_set_scale(&state, config_head->state.scale);

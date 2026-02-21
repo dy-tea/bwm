@@ -251,7 +251,7 @@ static void handle_workspace_request(struct wl_listener *listener, void *data) {
       break;
     case WLR_EXT_WORKSPACE_V1_REQUEST_ACTIVATE:
       if (request->activate.workspace)
-          workspace_switch_to_desktop(request->activate.workspace->name);
+        workspace_switch_to_desktop(request->activate.workspace->name);
       break;
     case WLR_EXT_WORKSPACE_V1_REQUEST_DEACTIVATE:
       break;
