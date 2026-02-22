@@ -159,6 +159,7 @@ extern child_polarity_t initial_polarity;
 extern bool single_monocle;
 extern bool borderless_monocle;
 extern bool gapless_monocle;
+extern bool removal_adjustment;
 extern padding_t monocle_padding;
 extern int border_width;
 extern int window_gap;

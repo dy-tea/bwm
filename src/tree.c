@@ -14,6 +14,7 @@ child_polarity_t initial_polarity = FIRST_CHILD;
 bool single_monocle = false;
 bool borderless_monocle = false;
 bool gapless_monocle = false;
+bool removal_adjustment = true;
 padding_t monocle_padding = {0, 0, 0, 0};
 int border_width = 2;
 int window_gap = 10;
@@ -583,7 +584,7 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
     n->second_child = NULL;
 
     // adjust tree structure
-    if (!n->vacant) {
+    if (!n->vacant && removal_adjustment) {
       if (automatic_scheme == SCHEME_SPIRAL) {
         if (is_first_child(n))
           rotate_tree(b, 270);
