@@ -28,71 +28,71 @@ alt + m
 
 # window navigation
 alt + h
-	focus_west
+	bmsg focus west
 alt + j
-	focus_south
+	bmsg focus south
 alt + k
-	focus_north
+	bmsg focus north
 alt + l
-	focus_east
+	bmsg focus east
 
 # window swapping
 alt + shift + h
-	swap_west
+	bmsg swap west
 alt + shift + j
-	swap_south
+	bmsg swap south
 alt + shift + k
-	swap_north
+	bmsg swap north
 alt + shift + l
-	swap_east
+	bmsg swap east
 
 # preselection
 alt + ctrl + h
-	presel_west
+	bmsg presel west
 alt + ctrl + j
-	presel_south
+	bmsg presel south
 alt + ctrl + k
-	presel_north
+	bmsg presel north
 alt + ctrl + l
-	presel_east
+	bmsg presel east
 
 # cancel preselection
 alt + ctrl + space
-	cancel_presel
+	bmsg presel cancel
 
 # rotate
 alt + r
-	rotate_clockwise
+	bmsg rotate clockwise
 alt + shift + r
-	rotate_counterclockwise
+	bmsg rotate counterclockwise
 
 # flip
 alt + comma
-	flip_horizontal
+	bmsg flip horizontal
 alt + period
-	flip_vertical
+	bmsg flip vertical
 
 # desktop switching (1-based index)
 alt + 1
-	desktop 1
+	bmsg desktop 1
 alt + 2
-	desktop 2
+	bmsg desktop 2
 alt + 3
-	desktop 3
+	bmsg desktop 3
 alt + 4
-	desktop 4
+	bmsg desktop 4
 alt + 5
-	desktop 5
+	bmsg desktop 5
 alt + 6
-	desktop 6
+	bmsg desktop 6
 alt + 7
-	desktop 7
+	bmsg desktop 7
 alt + 8
-	desktop 8
+	bmsg desktop 8
 alt + 9
-	desktop 9
+	bmsg desktop 9
 alt + 0
-	desktop 10
+	bmsg desktop 10
 
 # send to desktop (1-based index)
 alt + shift + 1
@@ -118,9 +118,9 @@ alt + shift + 0
 
 # send to next/prev desktop
 alt + shift + Right
-	send_to_next
+	bmsg send next
 alt + shift + Left
-	send_to_prev
+	bmsg send prev
 
 # quit
 alt + alt + q

@@ -102,98 +102,66 @@ static bind_action_t parse_action(const char *cmd, int *desktop_index) {
   if (!cmd || cmd[0] == '\0')
     return BIND_NONE;
 
-  char buf[MAXLEN];
-  snprintf(buf, sizeof(buf), "%s", cmd);
+  if (strncmp(cmd, "bmsg ", 5) == 0) {
+    char buf[MAXLEN];
+    snprintf(buf, sizeof(buf), "%s", cmd + 5);
 
-  if (strncmp(buf, "bmsg ", 5) == 0)
-    memmove(buf, buf + 5, strlen(buf + 5) + 1);
-
-  char *args[16];
-  int argc = 0;
-  char *saveptr;
-  char *token = strtok_r(buf, " \t", &saveptr);
-  while (token && argc < 16) {
-    args[argc++] = token;
-    token = strtok_r(NULL, " \t", &saveptr);
-  }
-
-  if (argc == 0)
-    return BIND_NONE;
-
-  if (strcmp(args[0], "quit") == 0)
-    return BIND_QUIT;
-
-  if (strcmp(args[0], "node") == 0 && argc >= 2) {
-    if (strcmp(args[1], "-c") == 0 || strcmp(args[1], "--close") == 0)
-      return BIND_NODE_CLOSE;
-
-    if (strcmp(args[1], "-f") == 0 || strcmp(args[1], "--focus") == 0)
-      return BIND_NODE_FOCUS;
-
-    if ((strcmp(args[1], "-t") == 0 || strcmp(args[1], "--state") == 0) && argc >= 3) {
-      if (strcmp(args[2], "tiled") == 0) return BIND_NODE_STATE_TILED;
-      if (strcmp(args[2], "floating") == 0) return BIND_NODE_STATE_FLOATING;
-      if (strcmp(args[2], "fullscreen") == 0) return BIND_NODE_STATE_FULLSCREEN;
+    char *args[16];
+    int argc = 0;
+    char *saveptr;
+    char *token = strtok_r(buf, " \t", &saveptr);
+    while (token && argc < 16) {
+      args[argc++] = token;
+      token = strtok_r(NULL, " \t", &saveptr);
     }
 
-    if (strcmp(args[1], "-d") == 0 || strcmp(args[1], "--to-desktop") == 0) {
-      if (argc >= 3) {
-        int d = atoi(args[2]);
-        if (d >= 1 && d <= 10) {
-          *desktop_index = d;
-          return BIND_SEND_TO_DESKTOP_1;
-        }
+    if (argc == 0)
+      return BIND_NONE;
+
+    if (strcmp(args[0], "quit") == 0)
+      return BIND_QUIT;
+
+    if (strcmp(args[0], "node") == 0 && argc >= 2) {
+      if (strcmp(args[1], "-c") == 0 || strcmp(args[1], "--close") == 0)
+        return BIND_NODE_CLOSE;
+
+      if (strcmp(args[1], "-f") == 0 || strcmp(args[1], "--focus") == 0)
+        return BIND_NODE_FOCUS;
+
+      if ((strcmp(args[1], "-t") == 0 || strcmp(args[1], "--state") == 0) && argc >= 3) {
+        if (strcmp(args[2], "tiled") == 0) return BIND_NODE_STATE_TILED;
+        if (strcmp(args[2], "floating") == 0) return BIND_NODE_STATE_FLOATING;
+        if (strcmp(args[2], "fullscreen") == 0) return BIND_NODE_STATE_FULLSCREEN;
       }
-      return BIND_NODE_TO_DESKTOP;
+
+      if (strcmp(args[1], "-d") == 0 || strcmp(args[1], "--to-desktop") == 0) {
+        if (argc >= 3) {
+          int d = atoi(args[2]);
+          if (d >= 1 && d <= 10) {
+            *desktop_index = d;
+            return BIND_SEND_TO_DESKTOP_1;
+          }
+        }
+        return BIND_NODE_TO_DESKTOP;
+      }
+    }
+
+    if (strcmp(args[0], "desktop") == 0 && argc >= 2) {
+      if (strcmp(args[1], "-f") == 0 || strcmp(args[1], "--focus") == 0)
+        return BIND_DESKTOP_FOCUS;
+
+      if ((strcmp(args[1], "-l") == 0 || strcmp(args[1], "--layout") == 0) && argc >= 3) {
+        if (strcmp(args[2], "tiled") == 0) return BIND_DESKTOP_LAYOUT_TILED;
+        if (strcmp(args[2], "monocle") == 0) return BIND_DESKTOP_LAYOUT_MONOCLE;
+      }
+
+      int d = atoi(args[1]);
+      if (d >= 1 && d <= 10) {
+        *desktop_index = d;
+        return BIND_DESKTOP_1;
+      }
     }
   }
-
-  if (strcmp(args[0], "desktop") == 0 && argc >= 2) {
-    if (strcmp(args[1], "-f") == 0 || strcmp(args[1], "--focus") == 0)
-      return BIND_DESKTOP_FOCUS;
-
-    if ((strcmp(args[1], "-l") == 0 || strcmp(args[1], "--layout") == 0) && argc >= 3) {
-      if (strcmp(args[2], "tiled") == 0) return BIND_DESKTOP_LAYOUT_TILED;
-      if (strcmp(args[2], "monocle") == 0) return BIND_DESKTOP_LAYOUT_MONOCLE;
-    }
-
-    int d = atoi(args[1]);
-    if (d >= 1 && d <= 10) {
-      *desktop_index = d;
-      return BIND_DESKTOP_1;
-    }
-  }
-
-  if (strcmp(args[0], "focus_west") == 0 || strcmp(args[0], "west") == 0) return BIND_FOCUS_WEST;
-  if (strcmp(args[0], "focus_south") == 0 || strcmp(args[0], "south") == 0) return BIND_FOCUS_SOUTH;
-  if (strcmp(args[0], "focus_north") == 0 || strcmp(args[0], "north") == 0) return BIND_FOCUS_NORTH;
-  if (strcmp(args[0], "focus_east") == 0 || strcmp(args[0], "east") == 0) return BIND_FOCUS_EAST;
-
-  if (strcmp(args[0], "swap_west") == 0) return BIND_SWAP_WEST;
-  if (strcmp(args[0], "swap_south") == 0) return BIND_SWAP_SOUTH;
-  if (strcmp(args[0], "swap_north") == 0) return BIND_SWAP_NORTH;
-  if (strcmp(args[0], "swap_east") == 0) return BIND_SWAP_EAST;
-
-  if (strcmp(args[0], "presel_west") == 0 || (strcmp(args[0], "node") == 0 && argc >= 3 && strcmp(args[1], "-p") == 0 && strcmp(args[2], "west") == 0)) return BIND_PRESEL_WEST;
-  if (strcmp(args[0], "presel_south") == 0 || (strcmp(args[0], "node") == 0 && argc >= 3 && strcmp(args[1], "-p") == 0 && strcmp(args[2], "south") == 0)) return BIND_PRESEL_SOUTH;
-  if (strcmp(args[0], "presel_north") == 0 || (strcmp(args[0], "node") == 0 && argc >= 3 && strcmp(args[1], "-p") == 0 && strcmp(args[2], "north") == 0)) return BIND_PRESEL_NORTH;
-  if (strcmp(args[0], "presel_east") == 0 || (strcmp(args[0], "node") == 0 && argc >= 3 && strcmp(args[1], "-p") == 0 && strcmp(args[2], "east") == 0)) return BIND_PRESEL_EAST;
-  if (strcmp(args[0], "cancel_presel") == 0 || (strcmp(args[0], "node") == 0 && argc >= 3 && strcmp(args[1], "-p") == 0 && strcmp(args[2], "cancel") == 0)) return BIND_PRESEL_CANCEL;
-
-  if (strcmp(args[0], "toggle_floating") == 0) return BIND_TOGGLE_FLOATING;
-  if (strcmp(args[0], "toggle_fullscreen") == 0) return BIND_TOGGLE_FULLSCREEN;
-  if (strcmp(args[0], "toggle_monocle") == 0) return BIND_TOGGLE_MONOCLE;
-
-  if (strcmp(args[0], "rotate_clockwise") == 0) return BIND_ROTATE_CW;
-  if (strcmp(args[0], "rotate_counterclockwise") == 0) return BIND_ROTATE_CCW;
-  if (strcmp(args[0], "flip_horizontal") == 0) return BIND_FLIP_HORIZONTAL;
-  if (strcmp(args[0], "flip_vertical") == 0) return BIND_FLIP_VERTICAL;
-
-  if (strcmp(args[0], "desktop_next") == 0 || (strcmp(args[0], "desktop") == 0 && argc >= 2 && strcmp(args[1], "-f") == 0 && strcmp(args[2], "next.local") == 0)) return BIND_DESKTOP_NEXT;
-  if (strcmp(args[0], "desktop_prev") == 0 || (strcmp(args[0], "desktop") == 0 && argc >= 2 && strcmp(args[1], "-f") == 0 && strcmp(args[2], "prev.local") == 0)) return BIND_DESKTOP_PREV;
-
-  if (strcmp(args[0], "send_to_next") == 0) return BIND_SEND_TO_DESKTOP_NEXT;
-  if (strcmp(args[0], "send_to_prev") == 0) return BIND_SEND_TO_DESKTOP_PREV;
 
   return BIND_EXTERNAL;
 }

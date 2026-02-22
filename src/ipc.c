@@ -7,6 +7,7 @@
 #include "tree.h"
 #include "output_config.h"
 #include "input.h"
+#include "keyboard.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -571,6 +572,16 @@ static void ipc_cmd_desktop(char **args, int num, int client_fd) {
     return;
   }
 
+  if (streq("next", *args)) {
+    focus_next_desktop();
+    send_success(client_fd, "focused\n");
+    return;
+  } else if (streq("prev", *args) || streq("previous", *args)) {
+    focus_prev_desktop();
+    send_success(client_fd, "focused\n");
+    return;
+  }
+
   desktop_t *desk = mon->desk;
   if ((*args)[0] != '-') {
     desk = find_desktop_by_name_in_monitor(mon, *args);
@@ -588,8 +599,16 @@ static void ipc_cmd_desktop(char **args, int num, int client_fd) {
   }
 
   if (streq("-f", *args) || streq("--focus", *args)) {
-    focus_node(mon, desk, desk->focus);
-    send_success(client_fd, "focused\n");
+    if (num >= 2 && (streq("next", *args) || streq("next.local", *args))) {
+      focus_next_desktop();
+      send_success(client_fd, "focused\n");
+    } else if (num >= 2 && (streq("prev", *args) || streq("prev.local", *args) || streq("previous", *args))) {
+      focus_prev_desktop();
+      send_success(client_fd, "focused\n");
+    } else {
+      focus_node(mon, desk, desk->focus);
+      send_success(client_fd, "focused\n");
+    }
   } else if (streq("-l", *args) || streq("--layout", *args)) {
     if (num < 2) {
       send_failure(client_fd, "desktop -l: missing layout argument\n");
@@ -941,6 +960,149 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
   }
 }
 
+static void ipc_cmd_focus(char **args, int num, int client_fd) {
+  if (num < 1) {
+    send_failure(client_fd, "focus: missing direction\n");
+    return;
+  }
+
+  if (streq("west", *args) || streq("w", *args)) {
+    focus_west();
+    send_success(client_fd, "focused\n");
+  } else if (streq("east", *args) || streq("e", *args)) {
+    focus_east();
+    send_success(client_fd, "focused\n");
+  } else if (streq("north", *args) || streq("n", *args)) {
+    focus_north();
+    send_success(client_fd, "focused\n");
+  } else if (streq("south", *args) || streq("s", *args)) {
+    focus_south();
+    send_success(client_fd, "focused\n");
+  } else {
+    send_failure(client_fd, "focus: unknown direction\n");
+  }
+}
+
+static void ipc_cmd_swap(char **args, int num, int client_fd) {
+  if (num < 1) {
+    send_failure(client_fd, "swap: missing direction\n");
+    return;
+  }
+
+  if (streq("west", *args) || streq("w", *args)) {
+    swap_west();
+    send_success(client_fd, "swapped\n");
+  } else if (streq("east", *args) || streq("e", *args)) {
+    swap_east();
+    send_success(client_fd, "swapped\n");
+  } else if (streq("north", *args) || streq("n", *args)) {
+    swap_north();
+    send_success(client_fd, "swapped\n");
+  } else if (streq("south", *args) || streq("s", *args)) {
+    swap_south();
+    send_success(client_fd, "swapped\n");
+  } else {
+    send_failure(client_fd, "swap: unknown direction\n");
+  }
+}
+
+static void ipc_cmd_presel(char **args, int num, int client_fd) {
+  if (num < 1) {
+    send_failure(client_fd, "presel: missing direction\n");
+    return;
+  }
+
+  if (streq("west", *args) || streq("w", *args)) {
+    presel_west();
+    send_success(client_fd, "presel set\n");
+  } else if (streq("east", *args) || streq("e", *args)) {
+    presel_east();
+    send_success(client_fd, "presel set\n");
+  } else if (streq("north", *args) || streq("n", *args)) {
+    presel_north();
+    send_success(client_fd, "presel set\n");
+  } else if (streq("south", *args) || streq("s", *args)) {
+    presel_south();
+    send_success(client_fd, "presel set\n");
+  } else if (streq("cancel", *args)) {
+    cancel_presel();
+    send_success(client_fd, "presel cancelled\n");
+  } else {
+    send_failure(client_fd, "presel: unknown direction\n");
+  }
+}
+
+static void ipc_cmd_toggle(char **args, int num, int client_fd) {
+  if (num < 1) {
+    send_failure(client_fd, "toggle: missing property\n");
+    return;
+  }
+
+  if (streq("floating", *args)) {
+    toggle_floating();
+    send_success(client_fd, "toggled\n");
+  } else if (streq("fullscreen", *args)) {
+    toggle_fullscreen();
+    send_success(client_fd, "toggled\n");
+  } else if (streq("monocle", *args)) {
+    toggle_monocle();
+    send_success(client_fd, "toggled\n");
+  } else {
+    send_failure(client_fd, "toggle: unknown property\n");
+  }
+}
+
+static void ipc_cmd_rotate(char **args, int num, int client_fd) {
+  if (num < 1) {
+    send_failure(client_fd, "rotate: missing direction\n");
+    return;
+  }
+
+  if (streq("clockwise", *args) || streq("cw", *args)) {
+    rotate_clockwise();
+    send_success(client_fd, "rotated\n");
+  } else if (streq("counterclockwise", *args) || streq("ccw", *args)) {
+    rotate_counterclockwise();
+    send_success(client_fd, "rotated\n");
+  } else {
+    send_failure(client_fd, "rotate: unknown direction\n");
+  }
+}
+
+static void ipc_cmd_flip(char **args, int num, int client_fd) {
+  if (num < 1) {
+    send_failure(client_fd, "flip: missing direction\n");
+    return;
+  }
+
+  if (streq("horizontal", *args) || streq("h", *args)) {
+    flip_horizontal();
+    send_success(client_fd, "flipped\n");
+  } else if (streq("vertical", *args) || streq("v", *args)) {
+    flip_vertical();
+    send_success(client_fd, "flipped\n");
+  } else {
+    send_failure(client_fd, "flip: unknown direction\n");
+  }
+}
+
+static void ipc_cmd_send(char **args, int num, int client_fd) {
+  if (num < 1) {
+    send_failure(client_fd, "send: missing direction\n");
+    return;
+  }
+
+  if (streq("next", *args)) {
+    send_to_next_desktop();
+    send_success(client_fd, "sent\n");
+  } else if (streq("prev", *args) || streq("previous", *args)) {
+    send_to_prev_desktop();
+    send_success(client_fd, "sent\n");
+  } else {
+    send_failure(client_fd, "send: unknown direction\n");
+  }
+}
+
 static void process_ipc_message(char *msg, int msg_len, int client_fd) {
   wlr_log(WLR_DEBUG, "IPC: processing message: %.*s", msg_len, msg);
   int cap = 16;
@@ -993,6 +1155,20 @@ static void process_ipc_message(char *msg, int msg_len, int client_fd) {
     ipc_cmd_output(++args, --num, client_fd);
   } else if (streq("input", *args)) {
     ipc_cmd_input(++args, --num, client_fd);
+  } else if (streq("focus", *args)) {
+    ipc_cmd_focus(++args, --num, client_fd);
+  } else if (streq("swap", *args)) {
+    ipc_cmd_swap(++args, --num, client_fd);
+  } else if (streq("presel", *args)) {
+    ipc_cmd_presel(++args, --num, client_fd);
+  } else if (streq("toggle", *args)) {
+    ipc_cmd_toggle(++args, --num, client_fd);
+  } else if (streq("rotate", *args)) {
+    ipc_cmd_rotate(++args, --num, client_fd);
+  } else if (streq("flip", *args)) {
+    ipc_cmd_flip(++args, --num, client_fd);
+  } else if (streq("send", *args)) {
+    ipc_cmd_send(++args, --num, client_fd);
   } else {
     send_failure(client_fd, "unknown command\n");
   }
