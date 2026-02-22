@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=bwm
+Comment=Start a bwm session
+Exec=bwm
+Type=Application
+DesktopNames=bwm;wlroots
