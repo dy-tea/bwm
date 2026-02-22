@@ -355,7 +355,9 @@ void toplevel_request_resize(struct wl_listener *listener, void *data) {
   struct bwm_toplevel *toplevel =
       wl_container_of(listener, toplevel, request_resize);
   wlr_log(WLR_DEBUG, "Toplevel requested resize");
-  if (toplevel->node && toplevel->node->client && toplevel->node->client->state == STATE_FLOATING)
+  if (!event || !toplevel->node || !toplevel->node->client)
+    return;
+  if (toplevel->node->client->state == STATE_FLOATING)
       begin_interactive(toplevel, CURSOR_RESIZE, event->edges);
   else if (toplevel->xdg_toplevel->base->initialized)
       wlr_xdg_surface_schedule_configure(toplevel->xdg_toplevel->base);
@@ -371,20 +373,24 @@ void toplevel_request_maximize(struct wl_listener *listener, void *data) {
 }
 
 void toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
+	(void)data;
   struct bwm_toplevel *toplevel =
       wl_container_of(listener, toplevel, request_fullscreen);
-  struct wlr_xdg_toplevel_requested *event = data;
+
+  if (!toplevel->xdg_toplevel->base->initialized)
+  	return;
 
   if (toplevel->node == NULL || toplevel->node->client == NULL)
     return;
 
-  if (event->fullscreen == (toplevel->node->client->state == STATE_FULLSCREEN))
+  bool requested_fullscreen = toplevel->xdg_toplevel->requested.fullscreen;
+  if (requested_fullscreen == (toplevel->node->client->state == STATE_FULLSCREEN))
     return;
 
   monitor_t *m = toplevel->node->monitor;
   desktop_t *d = m ? m->desk : NULL;
 
-  if (event->fullscreen) {
+  if (requested_fullscreen) {
     set_state(m, d, toplevel->node, STATE_FULLSCREEN);
     wlr_scene_node_reparent(&toplevel->scene_tree->node, server.full_tree);
   } else {
@@ -397,7 +403,7 @@ void toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
     wlr_scene_node_reparent(&toplevel->scene_tree->node, server.tile_tree);
   }
 
-  wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, event->fullscreen);
+  wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, requested_fullscreen);
   update_foreign_toplevel_state(toplevel);
 }
 
