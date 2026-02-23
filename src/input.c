@@ -374,6 +374,9 @@ void input_config_apply(input_config_t *config, struct wlr_input_device *device)
   if (!config || !device)
     return;
 
+  if (!wlr_input_device_is_libinput(device))
+    return;
+
   switch (device->type) {
   case WLR_INPUT_DEVICE_KEYBOARD: {
     struct wlr_keyboard *keyboard = wlr_keyboard_from_input_device(device);
@@ -436,9 +439,6 @@ void input_config_apply(input_config_t *config, struct wlr_input_device *device)
         wlr_log(WLR_INFO, "Applied xcursor theme '%s' size %d", theme ? theme : "default", size);
       }
     }
-
-    if (!wlr_input_device_is_libinput(device))
-      return;
 
     struct libinput_device *libinput_dev = wlr_libinput_get_device_handle(device);
     if (libinput_dev) {
@@ -581,7 +581,7 @@ void input_config_apply(input_config_t *config, struct wlr_input_device *device)
 }
 
 void input_apply_config(struct wlr_input_device *device) {
-  if (!device)
+  if (!device || !wlr_input_device_is_libinput(device))
     return;
 
   enum input_config_type type = device_type_to_input_type(device);
