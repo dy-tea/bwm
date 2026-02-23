@@ -330,8 +330,13 @@ static void ipc_cmd_input(char **args, int num, int client_fd) {
 
   char *identifier = NULL;
   enum input_config_type type = INPUT_CONFIG_TYPE_ANY;
+  if (num > 0 && strncmp(*args, "type:", 5) != 0) {
+    identifier = *args;
+    args++;
+    num--;
+  }
 
-  if (strncmp(*args, "type:", 5) == 0) {
+  if (num > 0 && strncmp(*args, "type:", 5) == 0) {
     char *type_str = *args + 5;
     while (*type_str == ' ') type_str++;
 
@@ -355,12 +360,10 @@ static void ipc_cmd_input(char **args, int num, int client_fd) {
       send_failure(client_fd, "input: unknown type\n");
       return;
     }
-  } else if (!streq(*args, "*")) {
-    identifier = *args;
-  }
 
-  args++;
-  num--;
+    args++;
+    num--;
+  }
 
   if (num < 1) {
     send_failure(client_fd, "input: missing property\n");
@@ -375,7 +378,35 @@ static void ipc_cmd_input(char **args, int num, int client_fd) {
   if (num > 0)
     value = *args;
 
-  input_config_t *config = input_config_create(identifier);
+  input_config_t *config = NULL;
+  for (size_t i = 0; i < num_input_configs; i++) {
+    input_config_t *cfg = input_configs[i];
+    if (identifier) {
+      if (cfg->identifier && strcmp(cfg->identifier, identifier) == 0) {
+        config = cfg;
+        break;
+      }
+    } else if (cfg->type == type && cfg->identifier == NULL) {
+      config = cfg;
+      break;
+    }
+  }
+
+  if (!config) {
+    config = input_config_create(identifier);
+    if (!config) {
+      send_failure(client_fd, "input: failed to create config\n");
+      return;
+    }
+    config->type = type;
+    input_config_add(config);
+  }
+
+  if (!input_config_set_value(config, property, value)) {
+    send_failure(client_fd, "input: unknown property\n");
+    return;
+  }
+
   if (!config) {
     send_failure(client_fd, "input: failed to create config\n");
     return;
@@ -388,28 +419,8 @@ static void ipc_cmd_input(char **args, int num, int client_fd) {
     return;
   }
 
-  input_config_add(config);
-
-  switch (type) {
-  case INPUT_CONFIG_TYPE_KEYBOARD:
-    input_apply_config_all_keyboards();
-    break;
-  case INPUT_CONFIG_TYPE_POINTER:
-  case INPUT_CONFIG_TYPE_TOUCHPAD:
-  case INPUT_CONFIG_TYPE_TOUCH:
-  case INPUT_CONFIG_TYPE_TABLET:
-    input_apply_config_all_pointers();
-    break;
-  default:
-    input_apply_config_all_keyboards();
-    input_apply_config_all_pointers();
-  }
-
-  char buf[256];
-  snprintf(buf, sizeof(buf), "input: set %s %s %s\n",
-      identifier ? identifier : (type != INPUT_CONFIG_TYPE_ANY ? "type:xxx" : "*"),
-      property, value);
-  send_success(client_fd, buf);
+  input_apply_config_all_pointers();
+  input_apply_config_all_keyboards();
 }
 
 static desktop_t *find_desktop_by_name_in_monitor(monitor_t *mon, const char *name) {

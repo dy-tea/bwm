@@ -110,3 +110,7 @@ void input_apply_config_all_keyboards(void);
 void input_apply_config_all_pointers(void);
 
 const char *input_config_type_str(enum input_config_type type);
+
+
+static input_config_t *input_configs[MAX_INPUT_CONFIGS];
+static size_t num_input_configs = 0;

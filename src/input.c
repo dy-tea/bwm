@@ -13,9 +13,6 @@
 
 extern struct bwm_server server;
 
-static input_config_t *input_configs[MAX_INPUT_CONFIGS];
-static size_t num_input_configs = 0;
-
 static int parse_bool(const char *value, int default_val);
 static int parse_scancode(const char *value);
 
@@ -24,9 +21,11 @@ static enum input_config_type device_type_to_input_type(struct wlr_input_device 
   case WLR_INPUT_DEVICE_KEYBOARD:
     return INPUT_CONFIG_TYPE_KEYBOARD;
   case WLR_INPUT_DEVICE_POINTER: {
-    struct libinput_device *libinput_dev = wlr_libinput_get_device_handle(device);
-    if (libinput_dev && libinput_device_config_tap_get_finger_count(libinput_dev) > 0)
-      return INPUT_CONFIG_TYPE_TOUCHPAD;
+  	if (wlr_input_device_is_libinput(device)) {
+	    struct libinput_device *libinput_dev = wlr_libinput_get_device_handle(device);
+	    if (libinput_dev && libinput_device_config_tap_get_finger_count(libinput_dev) > 0)
+	      return INPUT_CONFIG_TYPE_TOUCHPAD;
+   	}
     return INPUT_CONFIG_TYPE_POINTER;
   }
   case WLR_INPUT_DEVICE_TOUCH:
@@ -44,9 +43,6 @@ static enum input_config_type device_type_to_input_type(struct wlr_input_device 
 
 static bool device_is_touchpad(struct wlr_input_device *device) {
   if (device->type != WLR_INPUT_DEVICE_POINTER)
-    return false;
-
-  if (!wlr_input_device_is_libinput(device))
     return false;
 
   struct libinput_device *libinput_dev = wlr_libinput_get_device_handle(device);
@@ -68,7 +64,7 @@ input_config_t *input_config_create(const char *identifier) {
   config->repeat_delay = 600;
   config->pointer_accel = FLT_MIN;
   config->accel_profile = -1;
-  config->tap_button_map = -1;
+  config->tap_button_map = INPUT_CONFIG_TAP_BUTTON_MAP_LRM;
   config->drag_lock = INPUT_CONFIG_DRAG_LOCK_DISABLED;
   config->scroll_factor = FLT_MIN;
   config->scroll_button = -1;
@@ -81,7 +77,7 @@ input_config_t *input_config_create(const char *identifier) {
   config->left_handed = -1;
   config->dwt = -1;
   config->dwtp = -1;
-  config->click_method = -1;
+  config->click_method = INPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS;
   config->middle_emulation = -1;
   config->scroll_method = -1;
 
@@ -104,6 +100,7 @@ void input_config_destroy(input_config_t *config) {
 }
 
 input_config_t *input_config_get(const char *identifier) {
+  if (!identifier) return NULL;
   for (size_t i = 0; i < num_input_configs; i++) {
     if (input_configs[i] && input_configs[i]->identifier &&
       strcmp(input_configs[i]->identifier, identifier) == 0) {
@@ -114,41 +111,28 @@ input_config_t *input_config_get(const char *identifier) {
 }
 
 input_config_t *input_config_get_for_device(const char *identifier, enum input_config_type type) {
-  input_config_t *result = NULL;
+  input_config_t *effective = input_config_create(identifier);
+  if (!effective)
+    return NULL;
+
+  input_config_t *global = input_config_get("*");
+  if (global)
+    input_config_merge(effective, global);
 
   for (size_t i = 0; i < num_input_configs; i++) {
     input_config_t *cfg = input_configs[i];
-    if (!cfg)
-      continue;
+    if (cfg && !cfg->identifier && cfg->type == type)
+    	input_config_merge(effective, cfg);
+  }
 
-    if (cfg->identifier && identifier && strcmp(cfg->identifier, identifier) == 0)
+  for (size_t i = 0; i < num_input_configs; i++) {
+    input_config_t *cfg = input_configs[i];
+    if (cfg && cfg->identifier && identifier && strcmp(cfg->identifier, identifier) == 0)
       if (cfg->type == INPUT_CONFIG_TYPE_ANY || cfg->type == type)
-        return cfg;
+        input_config_merge(effective, cfg);
   }
 
-  for (size_t i = 0; i < num_input_configs; i++) {
-    input_config_t *cfg = input_configs[i];
-    if (!cfg)
-      continue;
-
-    if (cfg->type != INPUT_CONFIG_TYPE_ANY && cfg->type == type && !cfg->identifier)
-      if (!result)
-        result = cfg;
-  }
-
-  if (!result) {
-    for (size_t i = 0; i < num_input_configs; i++) {
-      input_config_t *cfg = input_configs[i];
-      if (!cfg)
-        continue;
-
-      if (cfg->identifier == NULL && cfg->type == INPUT_CONFIG_TYPE_ANY)
-        if (!result)
-          result = cfg;
-    }
-  }
-
-  return result;
+  return effective;
 }
 
 bool input_config_add(input_config_t *config) {
@@ -200,10 +184,10 @@ void input_config_merge(input_config_t *base, input_config_t *overlay) {
   if (overlay->xkb_capslock != -1)
     base->xkb_capslock = overlay->xkb_capslock;
 
-  if (overlay->pointer_accel != FLT_MIN || (int)overlay->accel_profile != -1) {
+  if (overlay->pointer_accel != FLT_MIN)
     base->pointer_accel = overlay->pointer_accel;
+  if ((int)overlay->accel_profile != -1)
     base->accel_profile = overlay->accel_profile;
-  }
 
   if (overlay->natural_scroll != -1)
     base->natural_scroll = overlay->natural_scroll;
@@ -374,9 +358,6 @@ void input_config_apply(input_config_t *config, struct wlr_input_device *device)
   if (!config || !device)
     return;
 
-  if (!wlr_input_device_is_libinput(device))
-    return;
-
   switch (device->type) {
   case WLR_INPUT_DEVICE_KEYBOARD: {
     struct wlr_keyboard *keyboard = wlr_keyboard_from_input_device(device);
@@ -440,139 +421,112 @@ void input_config_apply(input_config_t *config, struct wlr_input_device *device)
       }
     }
 
+    if (!wlr_input_device_is_libinput(device))
+      return;
     struct libinput_device *libinput_dev = wlr_libinput_get_device_handle(device);
-    if (libinput_dev) {
-      bool is_touchpad = device_is_touchpad(device);
+    if (!libinput_dev)
+    	return;
 
-      if (is_touchpad) {
-        if (config->tap != -1) {
-          enum libinput_config_tap_state tap = config->tap ? LIBINPUT_CONFIG_TAP_ENABLED : LIBINPUT_CONFIG_TAP_DISABLED;
-          libinput_device_config_tap_set_enabled(libinput_dev, tap);
-        }
-
-        if (config->drag != -1) {
-          enum libinput_config_drag_state drag = config->drag ? LIBINPUT_CONFIG_DRAG_ENABLED : LIBINPUT_CONFIG_DRAG_DISABLED;
-          libinput_device_config_tap_set_drag_enabled(libinput_dev, drag);
-        }
-
-        if (config->drag_lock == INPUT_CONFIG_DRAG_LOCK_ENABLED)
-          libinput_device_config_tap_set_drag_lock_enabled(libinput_dev, LIBINPUT_CONFIG_DRAG_LOCK_ENABLED);
-        else if (config->drag != -1)
-          libinput_device_config_tap_set_drag_lock_enabled(libinput_dev, LIBINPUT_CONFIG_DRAG_LOCK_DISABLED);
-
-        if ((int)config->tap_button_map != -1) {
-          enum libinput_config_tap_button_map map = (config->tap_button_map == INPUT_CONFIG_TAP_BUTTON_MAP_LMR) ?
-            LIBINPUT_CONFIG_TAP_MAP_LMR : LIBINPUT_CONFIG_TAP_MAP_LRM;
-          libinput_device_config_tap_set_button_map(libinput_dev, map);
-        }
-
-        if (config->natural_scroll != -1 && libinput_device_config_scroll_has_natural_scroll(libinput_dev))
-          libinput_device_config_scroll_set_natural_scroll_enabled(libinput_dev, config->natural_scroll);
-
-        if (config->dwt != -1 && libinput_device_config_dwt_is_available(libinput_dev)) {
-          enum libinput_config_dwt_state dwt = config->dwt ? LIBINPUT_CONFIG_DWT_ENABLED : LIBINPUT_CONFIG_DWT_DISABLED;
-          libinput_device_config_dwt_set_enabled(libinput_dev, dwt);
-        }
-
-        if (config->left_handed != -1 && libinput_device_config_left_handed_is_available(libinput_dev))
-          libinput_device_config_left_handed_set(libinput_dev, config->left_handed);
-
-        if (config->middle_emulation != -1 && libinput_device_config_middle_emulation_is_available(libinput_dev)) {
-          enum libinput_config_middle_emulation_state mid = config->middle_emulation ?
-            LIBINPUT_CONFIG_MIDDLE_EMULATION_ENABLED : LIBINPUT_CONFIG_MIDDLE_EMULATION_DISABLED;
-          libinput_device_config_middle_emulation_set_enabled(libinput_dev, mid);
-        }
-
-        if ((int)config->scroll_method != -1 && libinput_device_config_scroll_get_methods(libinput_dev) != LIBINPUT_CONFIG_SCROLL_NO_SCROLL) {
-          enum libinput_config_scroll_method method;
-          switch (config->scroll_method) {
-          case INPUT_CONFIG_SCROLL_METHOD_EDGE:
-            method = LIBINPUT_CONFIG_SCROLL_EDGE;
-            break;
-          case INPUT_CONFIG_SCROLL_METHOD_BUTTON:
-            method = LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN;
-            break;
-          case INPUT_CONFIG_SCROLL_METHOD_TWOFINGER:
-            method = LIBINPUT_CONFIG_SCROLL_2FG;
-            break;
-          case INPUT_CONFIG_SCROLL_METHOD_NONE:
-            method = LIBINPUT_CONFIG_SCROLL_NO_SCROLL;
-            break;
-          default:
-            method = LIBINPUT_CONFIG_SCROLL_2FG;
-          }
-          libinput_device_config_scroll_set_method(libinput_dev, method);
-        }
-
-        if (config->scroll_button != -1 && libinput_device_config_scroll_get_methods(libinput_dev) != LIBINPUT_CONFIG_SCROLL_NO_SCROLL) {
-          libinput_device_config_scroll_set_button(libinput_dev, config->scroll_button);
-        }
-
-        if (config->scroll_button_lock != -1 && libinput_device_config_scroll_get_methods(libinput_dev) != LIBINPUT_CONFIG_SCROLL_NO_SCROLL) {
-          enum libinput_config_scroll_button_lock_state lock = config->scroll_button_lock ?
-            LIBINPUT_CONFIG_SCROLL_BUTTON_LOCK_ENABLED : LIBINPUT_CONFIG_SCROLL_BUTTON_LOCK_DISABLED;
-          libinput_device_config_scroll_set_button_lock(libinput_dev, lock);
-        }
-
-        if ((int)config->click_method != -1 && libinput_device_config_click_get_methods(libinput_dev) != LIBINPUT_CONFIG_CLICK_METHOD_NONE) {
-          enum libinput_config_click_method method;
-          switch (config->click_method) {
-          case INPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS:
-            method = LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS;
-            break;
-          case INPUT_CONFIG_CLICK_METHOD_CLICKFINGER:
-            method = LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER;
-            break;
-          case INPUT_CONFIG_CLICK_METHOD_NONE:
-            method = LIBINPUT_CONFIG_CLICK_METHOD_NONE;
-            break;
-          default:
-            method = LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS;
-          }
-          libinput_device_config_click_set_method(libinput_dev, method);
-        }
-
-        if (libinput_device_config_accel_is_available(libinput_dev)) {
-          if (config->pointer_accel != FLT_MIN)
-            libinput_device_config_accel_set_speed(libinput_dev, config->pointer_accel);
-
-          if ((int)config->accel_profile != -1) {
-            enum libinput_config_accel_profile profile = (config->accel_profile == INPUT_CONFIG_ACCEL_PROFILE_FLAT) ?
-              LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT : LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
-            libinput_device_config_accel_set_profile(libinput_dev, profile);
-          }
-        }
-      } else {
-        if (config->natural_scroll != -1 && libinput_device_config_scroll_has_natural_scroll(libinput_dev))
-          libinput_device_config_scroll_set_natural_scroll_enabled(libinput_dev, config->natural_scroll);
-
-        if (config->scroll_button != -1)
-          libinput_device_config_scroll_set_button(libinput_dev, config->scroll_button);
-
-        if (config->scroll_button_lock != -1) {
-          enum libinput_config_scroll_button_lock_state lock = config->scroll_button_lock ?
-            LIBINPUT_CONFIG_SCROLL_BUTTON_LOCK_ENABLED : LIBINPUT_CONFIG_SCROLL_BUTTON_LOCK_DISABLED;
-          libinput_device_config_scroll_set_button_lock(libinput_dev, lock);
-        }
-
-        if (config->left_handed != -1 && libinput_device_config_left_handed_is_available(libinput_dev))
-          libinput_device_config_left_handed_set(libinput_dev, config->left_handed);
-
-        if (libinput_device_config_accel_is_available(libinput_dev)) {
-          if (config->pointer_accel != FLT_MIN)
-            libinput_device_config_accel_set_speed(libinput_dev, config->pointer_accel);
-
-          if ((int)config->accel_profile != -1) {
-            enum libinput_config_accel_profile profile = (config->accel_profile == INPUT_CONFIG_ACCEL_PROFILE_FLAT) ?
-              LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT : LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
-            libinput_device_config_accel_set_profile(libinput_dev, profile);
-          }
-        }
+    if (device_is_touchpad(device)) {
+      if (config->tap != -1) {
+        enum libinput_config_tap_state tap = config->tap ? LIBINPUT_CONFIG_TAP_ENABLED : LIBINPUT_CONFIG_TAP_DISABLED;
+        libinput_device_config_tap_set_enabled(libinput_dev, tap);
       }
-      wlr_log(WLR_INFO, "Applied libinput config for device %s (type %s)", device->name, is_touchpad ? "touchpad" : "mouse");
-    } else {
-      wlr_log(WLR_INFO, "Applied libinput config for device %s (type %d)", device->name, device->type);
+
+      if (config->drag != -1) {
+        enum libinput_config_drag_state drag = config->drag ? LIBINPUT_CONFIG_DRAG_ENABLED : LIBINPUT_CONFIG_DRAG_DISABLED;
+        libinput_device_config_tap_set_drag_enabled(libinput_dev, drag);
+      }
+
+      if (config->drag_lock == INPUT_CONFIG_DRAG_LOCK_ENABLED)
+        libinput_device_config_tap_set_drag_lock_enabled(libinput_dev, LIBINPUT_CONFIG_DRAG_LOCK_ENABLED);
+      else if (config->drag != -1)
+        libinput_device_config_tap_set_drag_lock_enabled(libinput_dev, LIBINPUT_CONFIG_DRAG_LOCK_DISABLED);
+
+      if ((int)config->tap_button_map != -1) {
+        enum libinput_config_tap_button_map map = (config->tap_button_map == INPUT_CONFIG_TAP_BUTTON_MAP_LMR) ?
+          LIBINPUT_CONFIG_TAP_MAP_LMR : LIBINPUT_CONFIG_TAP_MAP_LRM;
+        libinput_device_config_tap_set_button_map(libinput_dev, map);
+      }
     }
+
+    if (config->natural_scroll != -1 && libinput_device_config_scroll_has_natural_scroll(libinput_dev))
+      libinput_device_config_scroll_set_natural_scroll_enabled(libinput_dev, config->natural_scroll);
+
+    if (config->dwt != -1 && libinput_device_config_dwt_is_available(libinput_dev)) {
+      enum libinput_config_dwt_state dwt = config->dwt ? LIBINPUT_CONFIG_DWT_ENABLED : LIBINPUT_CONFIG_DWT_DISABLED;
+      libinput_device_config_dwt_set_enabled(libinput_dev, dwt);
+    }
+
+    if (config->left_handed != -1 && libinput_device_config_left_handed_is_available(libinput_dev))
+      libinput_device_config_left_handed_set(libinput_dev, config->left_handed);
+
+    if (config->middle_emulation != -1 && libinput_device_config_middle_emulation_is_available(libinput_dev)) {
+      enum libinput_config_middle_emulation_state mid = config->middle_emulation ?
+        LIBINPUT_CONFIG_MIDDLE_EMULATION_ENABLED : LIBINPUT_CONFIG_MIDDLE_EMULATION_DISABLED;
+      libinput_device_config_middle_emulation_set_enabled(libinput_dev, mid);
+    }
+
+    if ((int)config->scroll_method != -1 && libinput_device_config_scroll_get_methods(libinput_dev) != LIBINPUT_CONFIG_SCROLL_NO_SCROLL) {
+      enum libinput_config_scroll_method method;
+      switch (config->scroll_method) {
+      case INPUT_CONFIG_SCROLL_METHOD_EDGE:
+        method = LIBINPUT_CONFIG_SCROLL_EDGE;
+        break;
+      case INPUT_CONFIG_SCROLL_METHOD_BUTTON:
+        method = LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN;
+        break;
+      case INPUT_CONFIG_SCROLL_METHOD_TWOFINGER:
+        method = LIBINPUT_CONFIG_SCROLL_2FG;
+        break;
+      case INPUT_CONFIG_SCROLL_METHOD_NONE:
+        method = LIBINPUT_CONFIG_SCROLL_NO_SCROLL;
+        break;
+      default:
+        method = LIBINPUT_CONFIG_SCROLL_2FG;
+      }
+      libinput_device_config_scroll_set_method(libinput_dev, method);
+    }
+
+    if (config->scroll_button != -1 && libinput_device_config_scroll_get_methods(libinput_dev) != LIBINPUT_CONFIG_SCROLL_NO_SCROLL) {
+      libinput_device_config_scroll_set_button(libinput_dev, config->scroll_button);
+    }
+
+    if (config->scroll_button_lock != -1 && libinput_device_config_scroll_get_methods(libinput_dev) != LIBINPUT_CONFIG_SCROLL_NO_SCROLL) {
+      enum libinput_config_scroll_button_lock_state lock = config->scroll_button_lock ?
+        LIBINPUT_CONFIG_SCROLL_BUTTON_LOCK_ENABLED : LIBINPUT_CONFIG_SCROLL_BUTTON_LOCK_DISABLED;
+      libinput_device_config_scroll_set_button_lock(libinput_dev, lock);
+    }
+
+    if ((int)config->click_method != -1 && libinput_device_config_click_get_methods(libinput_dev) != LIBINPUT_CONFIG_CLICK_METHOD_NONE) {
+      enum libinput_config_click_method method;
+      switch (config->click_method) {
+      case INPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS:
+        method = LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS;
+        break;
+      case INPUT_CONFIG_CLICK_METHOD_CLICKFINGER:
+        method = LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER;
+        break;
+      case INPUT_CONFIG_CLICK_METHOD_NONE:
+        method = LIBINPUT_CONFIG_CLICK_METHOD_NONE;
+        break;
+      default:
+        method = LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS;
+      }
+      libinput_device_config_click_set_method(libinput_dev, method);
+    }
+
+    if (libinput_device_config_accel_is_available(libinput_dev)) {
+      if (config->pointer_accel != FLT_MIN)
+        libinput_device_config_accel_set_speed(libinput_dev, config->pointer_accel);
+
+      if ((int)config->accel_profile != -1) {
+        enum libinput_config_accel_profile profile = (config->accel_profile == INPUT_CONFIG_ACCEL_PROFILE_FLAT) ?
+          LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT : LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
+        libinput_device_config_accel_set_profile(libinput_dev, profile);
+      }
+    }
+    wlr_log(WLR_INFO, "Applied libinput config for device %s (type %d)", device->name, device->type);
     break;
   }
   default:
@@ -587,8 +541,11 @@ void input_apply_config(struct wlr_input_device *device) {
   enum input_config_type type = device_type_to_input_type(device);
   input_config_t *config = input_config_get_for_device(device->name, type);
 
-  if (config)
+  if (config) {
+    wlr_log(WLR_DEBUG, "Applying config for %s (tap: %d)", device->name, config->tap);
     input_config_apply(config, device);
+    input_config_destroy(config);
+  }
 }
 
 void input_apply_config_all_keyboards(void) {
