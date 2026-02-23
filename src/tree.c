@@ -3,6 +3,7 @@
 #include "types.h"
 #include "transaction.h"
 #include "output.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <wlr/util/log.h>
 #include <wlr/types/wlr_xdg_shell.h>
@@ -13,6 +14,7 @@ automatic_scheme_t automatic_scheme = SCHEME_SPIRAL;
 child_polarity_t initial_polarity = FIRST_CHILD;
 bool single_monocle = false;
 bool borderless_monocle = false;
+bool borderless_singleton = false;
 bool gapless_monocle = false;
 bool removal_adjustment = true;
 padding_t monocle_padding = {0, 0, 0, 0};
@@ -258,8 +260,10 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
     if (n->client == NULL)
       return;
 
+    bool the_only_window = (mon_head == mon_tail) && d->root && d->root->client;
     unsigned int bw = (
         (borderless_monocle && d->layout == LAYOUT_MONOCLE && IS_TILED(n->client))
+        || (borderless_singleton && the_only_window)
         || n->client->state == STATE_FULLSCREEN)
                           ? 0
                           : n->client->border_width;
@@ -272,20 +276,19 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
     } else if (d->layout == LAYOUT_MONOCLE && IS_TILED(n->client)) {
       r = root_rect;
       int wg = gapless_monocle ? 0 : d->window_gap;
+      int bleed = wg + 2 * bw;
       r.x += bw;
       r.y += bw;
-      r.width -= (wg + bw);
-      r.height -= (wg + bw);
+      r.width = (bleed < r.width ? r.width - bleed : 1);
+      r.height = (bleed < r.height ? r.height - bleed : 1);
     } else {
       r = rect;
-
-      int wg =
-          (gapless_monocle && d->layout == LAYOUT_MONOCLE) ? 0 : d->window_gap;
-
+      int wg = (gapless_monocle && d->layout == LAYOUT_MONOCLE) ? 0 : d->window_gap;
+      int bleed = wg + 2 * bw;
       r.x += bw;
       r.y += bw;
-      r.width -= (wg + bw);
-      r.height -= (wg + bw);
+      r.width = (bleed < r.width ? r.width - bleed : 1);
+      r.height = (bleed < r.height ? r.height - bleed : 1);
     }
 
     // Enforce minimum size constraints
@@ -319,9 +322,21 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
       } else {
         first_rect = rect;
         second_rect = rect;
-        first_rect.width = (int)(n->split_ratio * rect.width);
-        second_rect.x += first_rect.width;
-        second_rect.width = rect.width - first_rect.width;
+        int fence = (int)(n->split_ratio * rect.width);
+        uint16_t first_min = n->first_child ? n->first_child->constraints.min_width : 0;
+        uint16_t second_min = n->second_child ? n->second_child->constraints.min_width : 0;
+        if (first_min + second_min <= rect.width) {
+          if (fence < first_min) {
+            fence = first_min;
+            n->split_ratio = (double)fence / rect.width;
+          } else if (fence > rect.width - second_min) {
+            fence = rect.width - second_min;
+            n->split_ratio = (double)fence / rect.width;
+          }
+        }
+        first_rect.width = fence;
+        second_rect.x += fence;
+        second_rect.width = rect.width - fence;
       }
     } else {
       if ((first_hidden || first_fullscreen) && n->second_child && !(second_hidden || second_fullscreen)) {
@@ -333,9 +348,21 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
       } else {
         first_rect = rect;
         second_rect = rect;
-        first_rect.height = (int)(n->split_ratio * rect.height);
-        second_rect.y += first_rect.height;
-        second_rect.height = rect.height - first_rect.height;
+        int fence = (int)(n->split_ratio * rect.height);
+        uint16_t first_min = n->first_child ? n->first_child->constraints.min_height : 0;
+        uint16_t second_min = n->second_child ? n->second_child->constraints.min_height : 0;
+        if (first_min + second_min <= rect.height) {
+          if (fence < first_min) {
+            fence = first_min;
+            n->split_ratio = (double)fence / rect.height;
+          } else if (fence > rect.height - second_min) {
+            fence = rect.height - second_min;
+            n->split_ratio = (double)fence / rect.height;
+          }
+        }
+        first_rect.height = fence;
+        second_rect.y += fence;
+        second_rect.height = rect.height - fence;
       }
     }
 
@@ -919,4 +946,30 @@ void node_set_pending_hidden(node_t *n, bool hidden) {
 
   n->pending.hidden = hidden;
   node_set_dirty(n);
+}
+
+void print_tree(node_t *n, int depth) {
+  if (n == NULL)
+    return;
+
+  for (int i = 0; i < depth; i++)
+    printf("  ");
+
+  if (is_leaf(n)) {
+    printf("node %u: rect=(%d,%d %dx%d)", n->id, n->rectangle.x, n->rectangle.y,
+           n->rectangle.width, n->rectangle.height);
+    if (n->client) {
+      printf(" client=%s", n->client->app_id[0] ? n->client->app_id : "(none)");
+    } else {
+      printf(" client=NULL");
+    }
+    printf("\n");
+  } else {
+    const char *st = n->split_type == TYPE_VERTICAL ? "V" : "H";
+    printf("node %u: rect=(%d,%d %dx%d) split=%s ratio=%.2f\n", n->id,
+           n->rectangle.x, n->rectangle.y, n->rectangle.width, n->rectangle.height,
+           st, n->split_ratio);
+    print_tree(n->first_child, depth + 1);
+    print_tree(n->second_child, depth + 1);
+  }
 }

@@ -947,6 +947,14 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
     } else {
       send_success(client_fd, borderless_monocle ? "true\n" : "false\n");
     }
+  } else if (streq("borderless_singleton", *args)) {
+    if (num >= 2) {
+      borderless_singleton = (strcmp(args[1], "true") == 0);
+      transaction_commit_dirty();
+      send_success(client_fd, "borderless_singleton set\n");
+    } else {
+      send_success(client_fd, borderless_singleton ? "true\n" : "false\n");
+    }
   } else if (streq("gapless_monocle", *args)) {
     if (num >= 2) {
       gapless_monocle = (strcmp(args[1], "true") == 0);

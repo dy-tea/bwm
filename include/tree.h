@@ -68,6 +68,9 @@ void node_set_pending_position(node_t *n, int x, int y);
 void node_set_pending_rectangle(node_t *n, struct wlr_box rect);
 void node_set_pending_hidden(node_t *n, bool hidden);
 
+// Debug helpers
+void print_tree(node_t *n, int depth);
+
 // macros for state checking
 #define IS_TILED(c) (is_tiled(c))
 #define IS_FLOATING(c) (is_floating(c))

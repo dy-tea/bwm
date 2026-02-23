@@ -158,6 +158,7 @@ extern automatic_scheme_t automatic_scheme;
 extern child_polarity_t initial_polarity;
 extern bool single_monocle;
 extern bool borderless_monocle;
+extern bool borderless_singleton;
 extern bool gapless_monocle;
 extern bool removal_adjustment;
 extern padding_t monocle_padding;
