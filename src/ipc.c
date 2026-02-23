@@ -928,6 +928,11 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
     if (num >= 2) {
       int val = atoi(args[1]);
       border_width = val;
+      for (monitor_t *m = server.monitors; m != NULL; m = m->next) {
+        m->border_width = border_width;
+        for (desktop_t *d = m->desk; d != NULL; d = d->next)
+          d->border_width = border_width;
+      }
       transaction_commit_dirty();
       send_success(client_fd, "border_width set\n");
     } else {
@@ -939,6 +944,11 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
     if (num >= 2) {
       int val = atoi(args[1]);
       window_gap = val;
+      for (monitor_t *m = server.monitors; m != NULL; m = m->next) {
+        m->window_gap = window_gap;
+        for (desktop_t *d = m->desk; d != NULL; d = d->next)
+          d->window_gap = window_gap;
+      }
       transaction_commit_dirty();
       send_success(client_fd, "window_gap set\n");
     } else {

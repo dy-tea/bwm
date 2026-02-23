@@ -212,13 +212,11 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   insert_node(m, d, n, focus);
 
   // notify client of scale
-  float scale = 1.0f;
-  if (server.focused_monitor && server.focused_monitor->output)
-  	scale = server.focused_monitor->output->wlr_output->scale;
-  else if (toplevel->node->monitor && toplevel->node->monitor->output)
-  	scale = toplevel->node->monitor->output->wlr_output->scale;
-  wlr_fractional_scale_v1_notify_scale(toplevel->xdg_toplevel->base->surface, scale);
-  wlr_surface_set_preferred_buffer_scale(toplevel->xdg_toplevel->base->surface, ceil(scale));
+  if (m->output) {
+    float scale = m->output->wlr_output->scale;
+    wlr_fractional_scale_v1_notify_scale(toplevel->xdg_toplevel->base->surface, scale);
+    wlr_surface_set_preferred_buffer_scale(toplevel->xdg_toplevel->base->surface, ceil(scale));
+  }
 
   focus_node(m, d, n);
   arrange(m, d, true);
