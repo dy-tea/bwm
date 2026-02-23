@@ -580,6 +580,7 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
     return;
 
   node_t *p = n->parent;
+  bool n_is_first = is_first_child(n);
 
   if (p == NULL) {
     d->root = NULL;
@@ -613,7 +614,7 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
     // adjust tree structure
     if (!n->vacant && removal_adjustment) {
       if (automatic_scheme == SCHEME_SPIRAL) {
-        if (is_first_child(n))
+        if (n_is_first)
           rotate_tree(b, 270);
         else
           rotate_tree(b, 90);
