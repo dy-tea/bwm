@@ -39,6 +39,16 @@ enum output_config_render_bit_depth {
   OUTPUT_CONFIG_RENDER_BIT_DEPTH_10 = 10,
 };
 
+enum output_config_subpixel {
+  OUTPUT_CONFIG_SUBPIXEL_AUTO = 0,
+  OUTPUT_CONFIG_SUBPIXEL_UNKNOWN = 1,
+  OUTPUT_CONFIG_SUBPIXEL_NONE = 2,
+  OUTPUT_CONFIG_SUBPIXEL_HORIZONTAL_RGB = 3,
+  OUTPUT_CONFIG_SUBPIXEL_HORIZONTAL_BGR = 4,
+  OUTPUT_CONFIG_SUBPIXEL_VERTICAL_RGB = 5,
+  OUTPUT_CONFIG_SUBPIXEL_VERTICAL_BGR = 6,
+};
+
 struct output_config {
   struct wl_list link;
   char *name;
@@ -54,6 +64,7 @@ struct output_config {
   enum output_config_scale_filter scale_filter;
   enum output_config_adaptive_sync adaptive_sync;
   enum output_config_render_bit_depth render_bit_depth;
+  enum output_config_subpixel subpixel;
 };
 
 struct output_config *output_config_create(const char *name);

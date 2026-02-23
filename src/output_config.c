@@ -36,6 +36,7 @@ struct output_config *output_config_create(const char *name) {
   oc->scale_filter = OUTPUT_CONFIG_SCALE_FILTER_AUTO;
   oc->adaptive_sync = OUTPUT_CONFIG_ADAPTIVE_SYNC_AUTO;
   oc->render_bit_depth = OUTPUT_CONFIG_RENDER_BIT_DEPTH_AUTO;
+  oc->subpixel = OUTPUT_CONFIG_SUBPIXEL_AUTO;
 
   return oc;
 }
@@ -151,10 +152,35 @@ void output_config_apply(struct output_config *oc) {
     wlr_output_layout_add_auto(server.output_layout, wlr_output);
 
   if (oc->scale > 0)
-    wlr_output_state_set_scale(&state, oc->scale);
+    wlr_output_state_set_scale(&state, round(oc->scale * 120) / 120);
 
   if (oc->transform >= 0)
     wlr_output_state_set_transform(&state, oc->transform);
+
+  if (oc->subpixel != OUTPUT_CONFIG_SUBPIXEL_AUTO) {
+    enum wl_output_subpixel subpixel;
+    switch (oc->subpixel) {
+    case OUTPUT_CONFIG_SUBPIXEL_NONE:
+      subpixel = WL_OUTPUT_SUBPIXEL_NONE;
+      break;
+    case OUTPUT_CONFIG_SUBPIXEL_HORIZONTAL_RGB:
+      subpixel = WL_OUTPUT_SUBPIXEL_HORIZONTAL_RGB;
+      break;
+    case OUTPUT_CONFIG_SUBPIXEL_HORIZONTAL_BGR:
+      subpixel = WL_OUTPUT_SUBPIXEL_HORIZONTAL_BGR;
+      break;
+    case OUTPUT_CONFIG_SUBPIXEL_VERTICAL_RGB:
+      subpixel = WL_OUTPUT_SUBPIXEL_VERTICAL_RGB;
+      break;
+    case OUTPUT_CONFIG_SUBPIXEL_VERTICAL_BGR:
+      subpixel = WL_OUTPUT_SUBPIXEL_VERTICAL_BGR;
+      break;
+    default:
+      subpixel = WL_OUTPUT_SUBPIXEL_UNKNOWN;
+      break;
+    }
+    wlr_output_state_set_subpixel(&state, subpixel);
+  }
 
   if (oc->adaptive_sync != OUTPUT_CONFIG_ADAPTIVE_SYNC_AUTO)
     wlr_output_state_set_adaptive_sync_enabled(&state,
@@ -180,14 +206,6 @@ void output_apply_all_config(void) {
   struct output_config *oc;
   wl_list_for_each(oc, &output_configs, link)
     output_config_apply(oc);
-}
-
-struct bwm_output *output_from_wlr_output(struct wlr_output *wlr_output) {
-  struct bwm_output *o;
-  wl_list_for_each(o, &server.outputs, link)
-    if (o->wlr_output == wlr_output)
-      return o;
-  return NULL;
 }
 
 void output_config_update_from_wlr_output(struct bwm_output *output) {

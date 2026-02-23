@@ -9,6 +9,9 @@
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
+#include <wlr/util/transform.h>
+
+static void handle_output_destroy(struct wl_listener *listener, void *data);
 
 void output_frame(struct wl_listener *listener, void *data) {
 	(void)data;
@@ -26,13 +29,24 @@ void output_frame(struct wl_listener *listener, void *data) {
   wlr_scene_output_send_frame_done(scene_output, &now);
 }
 
+static void handle_output_present(struct wl_listener *listener, void *data) {
+  struct bwm_output *output = wl_container_of(listener, output, present);
+  struct wlr_output_event_present *event = data;
+
+  if (!output->enabled || !event->presented)
+    return;
+
+  output->last_presentation = event->when;
+  output->refresh_nsec = event->refresh;
+}
+
 void output_request_state(struct wl_listener *listener, void *data) {
   struct bwm_output *output = wl_container_of(listener, output, request_state);
   struct wlr_output_event_request_state *event = data;
   wlr_output_commit_state(output->wlr_output, event->state);
 }
 
-void output_destroy(struct wl_listener *listener, void *data) {
+static void handle_output_destroy(struct wl_listener *listener, void *data) {
 	(void)data;
   struct bwm_output *output = wl_container_of(listener, output, destroy);
   struct bwm_layer_surface *layer, *tmp;
@@ -44,7 +58,11 @@ void output_destroy(struct wl_listener *listener, void *data) {
   if (output->lock_surface)
     destroy_lock_surface(&output->destroy_lock_surface, NULL);
 
+  if (output->enabled)
+    output_disable(output);
+
   wl_list_remove(&output->frame.link);
+  wl_list_remove(&output->present.link);
   wl_list_remove(&output->request_state.link);
   wl_list_remove(&output->destroy.link);
   wl_list_remove(&output->link);
@@ -81,7 +99,10 @@ void handle_new_output(struct wl_listener *listener, void *data) {
   o->request_state.notify = output_request_state;
   wl_signal_add(&wlr_output->events.request_state, &o->request_state);
 
-  o->destroy.notify = output_destroy;
+  o->present.notify = handle_output_present;
+  wl_signal_add(&wlr_output->events.present, &o->present);
+
+  o->destroy.notify = handle_output_destroy;
   wl_signal_add(&wlr_output->events.destroy, &o->destroy);
 
   for (int i = 0; i < 4; i++)
@@ -118,5 +139,101 @@ void handle_new_output(struct wl_listener *listener, void *data) {
           server.focused_monitor->rectangle.y);
   }
 
+  output_enable(o);
   output_update_manager_config();
+}
+
+void output_enable(struct bwm_output *output) {
+  if (output->enabled)
+    return;
+
+  output->enabled = true;
+  output->lx = output->rectangle.x;
+  output->ly = output->rectangle.y;
+  output->width = output->rectangle.width;
+  output->height = output->rectangle.height;
+
+  output->detected_subpixel = output->wlr_output->subpixel;
+  output->scale_filter_mode = SCALE_FILTER_NEAREST;
+
+  output_update_usable_area(output);
+}
+
+void output_disable(struct bwm_output *output) {
+  if (!output->enabled)
+    return;
+
+  output->enabled = false;
+
+  if (output->monitor && output->monitor->desk) {
+    output->monitor->desk->monitor = NULL;
+    output->monitor->desk = NULL;
+  }
+
+  output->monitor = NULL;
+}
+
+void output_destroy(struct bwm_output *output) {
+  if (!output)
+    return;
+
+  if (output->layer_bg)
+    wlr_scene_node_destroy(&output->layer_bg->node);
+  if (output->layer_bottom)
+    wlr_scene_node_destroy(&output->layer_bottom->node);
+  if (output->layer_top)
+    wlr_scene_node_destroy(&output->layer_top->node);
+  if (output->layer_overlay)
+    wlr_scene_node_destroy(&output->layer_overlay->node);
+
+  free(output);
+}
+
+struct bwm_output *output_from_wlr_output(struct wlr_output *wlr_output) {
+  if (!wlr_output)
+    return NULL;
+  return wlr_output->data;
+}
+
+struct bwm_output *output_get_in_direction(struct bwm_output *reference, uint32_t direction) {
+  if (!reference || !direction)
+    return NULL;
+
+  struct wlr_box output_box;
+  wlr_output_layout_get_box(server.output_layout, reference->wlr_output, &output_box);
+
+  int lx = output_box.x + output_box.width / 2;
+  int ly = output_box.y + output_box.height / 2;
+
+  struct wlr_output *wlr_adjacent = wlr_output_layout_adjacent_output(
+      server.output_layout, direction, reference->wlr_output, lx, ly);
+
+  if (!wlr_adjacent)
+    return NULL;
+
+  return output_from_wlr_output(wlr_adjacent);
+}
+
+void output_update_usable_area(struct bwm_output *output) {
+  if (!output || !output->enabled)
+    return;
+
+  output->usable_area.x = 0;
+  output->usable_area.y = 0;
+  output->usable_area.width = output->width;
+  output->usable_area.height = output->height;
+}
+
+void output_set_scale_filter(struct bwm_output *output, enum scale_filter_mode mode) {
+  if (!output)
+    return;
+  output->scale_filter_mode = mode;
+}
+
+void output_get_identifier(char *identifier, size_t len, struct bwm_output *output) {
+  struct wlr_output *wlr_output = output->wlr_output;
+  snprintf(identifier, len, "%s %s %s",
+      wlr_output->make ? wlr_output->make : "Unknown",
+      wlr_output->model ? wlr_output->model : "Unknown",
+      wlr_output->serial ? wlr_output->serial : "Unknown");
 }
