@@ -100,8 +100,6 @@ void output_config_apply(struct output_config *oc) {
     }
   }
 
-  (void)output;
-
   if (!wlr_output) {
     wlr_log(WLR_DEBUG, "Output %s not found, cannot apply config", oc->name);
     return;
@@ -151,8 +149,11 @@ void output_config_apply(struct output_config *oc) {
   else
     wlr_output_layout_add_auto(server.output_layout, wlr_output);
 
+  bool scale_changed = oc->scale > 0;
+  float new_scale = oc->scale > 0 ? round(oc->scale * 120) / 120 : 1.0f;
+
   if (oc->scale > 0)
-    wlr_output_state_set_scale(&state, round(oc->scale * 120) / 120);
+    wlr_output_state_set_scale(&state, new_scale);
 
   if (oc->transform >= 0)
     wlr_output_state_set_transform(&state, oc->transform);
@@ -195,6 +196,9 @@ void output_config_apply(struct output_config *oc) {
 
   wlr_output_commit_state(wlr_output, &state);
   wlr_output_state_finish(&state);
+
+  if (scale_changed && output)
+    output_update_scale(output, new_scale);
 
   if (oc->dpms_state == OUTPUT_CONFIG_DPMS_OFF)
     output_set_power(wlr_output, ZWLR_OUTPUT_POWER_V1_MODE_OFF);

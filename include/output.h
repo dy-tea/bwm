@@ -52,3 +52,4 @@ struct bwm_output *output_get_in_direction(struct bwm_output *reference, uint32_
 void output_update_usable_area(struct bwm_output *output);
 void output_set_scale_filter(struct bwm_output *output, enum scale_filter_mode mode);
 void output_get_identifier(char *identifier, size_t len, struct bwm_output *output);
+void output_update_scale(struct bwm_output *output, float scale);

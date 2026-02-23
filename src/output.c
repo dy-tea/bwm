@@ -3,11 +3,15 @@
 #include "layer.h"
 #include "lock.h"
 #include "output_config.h"
+#include "toplevel.h"
+#include "tree.h"
 #include <time.h>
 #include <stdlib.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
+#include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
 #include <wlr/util/transform.h>
 
@@ -236,4 +240,64 @@ void output_get_identifier(char *identifier, size_t len, struct bwm_output *outp
       wlr_output->make ? wlr_output->make : "Unknown",
       wlr_output->model ? wlr_output->model : "Unknown",
       wlr_output->serial ? wlr_output->serial : "Unknown");
+}
+
+void output_update_scale(struct bwm_output *output, float scale) {
+  if (!output || !output->wlr_output)
+    return;
+
+  struct wlr_output *wlr_output = output->wlr_output;
+
+  wlr_log(WLR_INFO, "Updating output '%s' scale to %.2f", wlr_output->name, scale);
+
+  struct wlr_box layout_box;
+  wlr_output_layout_get_box(server.output_layout, wlr_output, &layout_box);
+  output->rectangle = layout_box;
+  output->usable_area = layout_box;
+  output->lx = layout_box.x;
+  output->ly = layout_box.y;
+  output->width = layout_box.width;
+  output->height = layout_box.height;
+
+  if (output->monitor) {
+    output->monitor->rectangle = layout_box;
+    wlr_log(WLR_INFO, "Monitor rectangle updated after scale: %dx%d at %d,%d",
+            layout_box.width, layout_box.height, layout_box.x, layout_box.y);
+  }
+
+  struct bwm_toplevel *toplevel;
+  wl_list_for_each(toplevel, &server.toplevels, link) {
+    if (!toplevel->xdg_toplevel || !toplevel->xdg_toplevel->base ||
+        !toplevel->xdg_toplevel->base->surface || !toplevel->node)
+      continue;
+
+    node_t *n = toplevel->node;
+    if (n->monitor && n->monitor->output == output) {
+      struct wlr_surface *surface = toplevel->xdg_toplevel->base->surface;
+      wlr_log(WLR_DEBUG, "Notifying toplevel of scale %.2f", scale);
+      wlr_fractional_scale_v1_notify_scale(surface, scale);
+      wlr_surface_set_preferred_buffer_scale(surface, ceil(scale));
+    }
+  }
+
+  // Notify all layer surfaces on this output
+  for (int i = 0; i < 4; i++) {
+    struct bwm_layer_surface *layer;
+    wl_list_for_each(layer, &output->layers[i], link) {
+      if (!layer->layer_surface || !layer->layer_surface->surface)
+        continue;
+
+      struct wlr_surface *surface = layer->layer_surface->surface;
+      wlr_log(WLR_DEBUG, "Notifying layer surface of scale %.2f", scale);
+      wlr_fractional_scale_v1_notify_scale(surface, scale);
+      wlr_surface_set_preferred_buffer_scale(surface, ceil(scale));
+    }
+  }
+
+  // Rearrange all desktops on this monitor
+  if (output->monitor) {
+    monitor_t *m = output->monitor;
+    for (desktop_t *d = m->desk; d != NULL; d = d->next)
+      arrange(m, d, true);
+  }
 }

@@ -407,6 +407,8 @@ static void apply_output_head_config(struct wlr_output_configuration_head_v1 *co
   if (!output)
     return;
 
+  struct bwm_output *bwm_output = output_from_wlr_output(output);
+
   struct wlr_output_state state;
   wlr_output_state_init(&state);
 
@@ -427,6 +429,9 @@ static void apply_output_head_config(struct wlr_output_configuration_head_v1 *co
 
   wlr_output_commit_state(output, &state);
   wlr_output_state_finish(&state);
+
+  if (bwm_output)
+    output_update_scale(bwm_output, config_head->state.scale);
 
   if (config_head->state.x >= 0 && config_head->state.y >= 0)
     wlr_output_layout_add(server.output_layout, output, config_head->state.x, config_head->state.y);
