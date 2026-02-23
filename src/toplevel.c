@@ -351,41 +351,49 @@ void toplevel_destroy(struct wl_listener *listener, void *data) {
 
 void toplevel_request_move(struct wl_listener *listener, void *data) {
 	(void)data;
-  struct bwm_toplevel *toplevel =
-      wl_container_of(listener, toplevel, request_move);
+  struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, request_move);
   wlr_log(WLR_DEBUG, "Toplevel requested move");
   if (toplevel->node && toplevel->node->client && toplevel->node->client->state == STATE_FLOATING)
-      begin_interactive(toplevel, CURSOR_MOVE, 0);
+    begin_interactive(toplevel, CURSOR_MOVE, 0);
   else if (toplevel->xdg_toplevel->base->initialized)
-      wlr_xdg_surface_schedule_configure(toplevel->xdg_toplevel->base);
+    wlr_xdg_surface_schedule_configure(toplevel->xdg_toplevel->base);
 }
 
 void toplevel_request_resize(struct wl_listener *listener, void *data) {
   struct wlr_xdg_toplevel_resize_event *event = data;
-  struct bwm_toplevel *toplevel =
-      wl_container_of(listener, toplevel, request_resize);
+  struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, request_resize);
   wlr_log(WLR_DEBUG, "Toplevel requested resize");
   if (!event || !toplevel->node || !toplevel->node->client)
     return;
   if (toplevel->node->client->state == STATE_FLOATING)
-      begin_interactive(toplevel, CURSOR_RESIZE, event->edges);
+    begin_interactive(toplevel, CURSOR_RESIZE, event->edges);
   else if (toplevel->xdg_toplevel->base->initialized)
-      wlr_xdg_surface_schedule_configure(toplevel->xdg_toplevel->base);
+    wlr_xdg_surface_schedule_configure(toplevel->xdg_toplevel->base);
 }
 
 void toplevel_request_maximize(struct wl_listener *listener, void *data) {
 	(void)data;
-  struct bwm_toplevel *toplevel =
-      wl_container_of(listener, toplevel, request_maximize);
+  struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, request_maximize);
 
-  if (toplevel->node && toplevel->node->client)
-      toggle_monocle();
+  if (!toplevel->xdg_toplevel->base->initialized)
+  	return;
+
+  if (toplevel->node == NULL || toplevel->node->client == NULL)
+    return;
+
+  if (mon == NULL || mon->desk == NULL)
+    return;
+
+  bool requested_maximized = toplevel->xdg_toplevel->requested.maximized;
+  if (requested_maximized == (mon->desk->layout == LAYOUT_MONOCLE))
+    return;
+
+  toggle_monocle();
 }
 
 void toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
 	(void)data;
-  struct bwm_toplevel *toplevel =
-      wl_container_of(listener, toplevel, request_fullscreen);
+  struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, request_fullscreen);
 
   if (!toplevel->xdg_toplevel->base->initialized)
   	return;
@@ -405,11 +413,10 @@ void toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
     wlr_scene_node_reparent(&toplevel->scene_tree->node, server.full_tree);
   } else {
     client_state_t last = toplevel->node->client->last_state;
-    if (last == STATE_FLOATING) {
+    if (last == STATE_FLOATING)
       set_state(m, d, toplevel->node, STATE_FLOATING);
-    } else {
+    else
       set_state(m, d, toplevel->node, STATE_TILED);
-    }
     wlr_scene_node_reparent(&toplevel->scene_tree->node, server.tile_tree);
   }
 
@@ -419,8 +426,7 @@ void toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
 
 void toplevel_set_title(struct wl_listener *listener, void *data) {
 	(void)data;
-  struct bwm_toplevel *toplevel =
-      wl_container_of(listener, toplevel, set_title);
+  struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, set_title);
 
   if (toplevel->node && toplevel->node->client) {
     const char *title = toplevel->xdg_toplevel->title;
@@ -440,8 +446,7 @@ void toplevel_set_title(struct wl_listener *listener, void *data) {
 
 void toplevel_set_app_id(struct wl_listener *listener, void *data) {
 	(void)data;
-  struct bwm_toplevel *toplevel =
-      wl_container_of(listener, toplevel, set_app_id);
+  struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, set_app_id);
 
   if (toplevel->node && toplevel->node->client) {
     const char *app_id = toplevel->xdg_toplevel->app_id;
@@ -476,7 +481,7 @@ void focus_toplevel(struct bwm_toplevel *toplevel) {
 
   if (prev_surface != NULL) {
     struct wlr_xdg_toplevel *prev_toplevel =
-        wlr_xdg_toplevel_try_from_wlr_surface(prev_surface);
+      wlr_xdg_toplevel_try_from_wlr_surface(prev_surface);
     if (prev_toplevel != NULL)
       wlr_xdg_toplevel_set_activated(prev_toplevel, false);
   }
@@ -485,9 +490,8 @@ void focus_toplevel(struct bwm_toplevel *toplevel) {
 
   wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, true);
 
-  if (toplevel->foreign_toplevel) {
+  if (toplevel->foreign_toplevel)
     wlr_foreign_toplevel_handle_v1_set_activated(toplevel->foreign_toplevel, true);
-  }
 
   if (seat->keyboard_state.keyboard != NULL)
     wlr_seat_keyboard_notify_enter(seat, surface,
