@@ -13,6 +13,7 @@ enum input_config_type {
   INPUT_CONFIG_TYPE_ANY,
   INPUT_CONFIG_TYPE_KEYBOARD,
   INPUT_CONFIG_TYPE_POINTER,
+  INPUT_CONFIG_TYPE_TOUCHPAD,
   INPUT_CONFIG_TYPE_TOUCH,
   INPUT_CONFIG_TYPE_TABLET,
   INPUT_CONFIG_TYPE_TABLET_PAD,
@@ -88,6 +89,9 @@ typedef struct {
 
   float calibration_matrix[6];
   bool calibration_matrix_set;
+
+  char *xcursor_theme;
+  int xcursor_size;
 } input_config_t;
 
 input_config_t *input_config_create(const char *identifier);
@@ -103,5 +107,6 @@ void input_init(void);
 void input_fini(void);
 void input_apply_config(struct wlr_input_device *device);
 void input_apply_config_all_keyboards(void);
+void input_apply_config_all_pointers(void);
 
 const char *input_config_type_str(enum input_config_type type);

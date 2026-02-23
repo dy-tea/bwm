@@ -340,7 +340,7 @@ static void ipc_cmd_input(char **args, int num, int client_fd) {
     } else if (streq(type_str, "pointer")) {
       type = INPUT_CONFIG_TYPE_POINTER;
     } else if (streq(type_str, "touchpad")) {
-      type = INPUT_CONFIG_TYPE_TOUCH;
+      type = INPUT_CONFIG_TYPE_TOUCHPAD;
     } else if (streq(type_str, "touchscreen")) {
       type = INPUT_CONFIG_TYPE_TOUCH;
     } else if (streq(type_str, "tablet")) {
@@ -390,8 +390,20 @@ static void ipc_cmd_input(char **args, int num, int client_fd) {
 
   input_config_add(config);
 
-  if (type == INPUT_CONFIG_TYPE_KEYBOARD || type == INPUT_CONFIG_TYPE_ANY)
+  switch (type) {
+  case INPUT_CONFIG_TYPE_KEYBOARD:
     input_apply_config_all_keyboards();
+    break;
+  case INPUT_CONFIG_TYPE_POINTER:
+  case INPUT_CONFIG_TYPE_TOUCHPAD:
+  case INPUT_CONFIG_TYPE_TOUCH:
+  case INPUT_CONFIG_TYPE_TABLET:
+    input_apply_config_all_pointers();
+    break;
+  default:
+    input_apply_config_all_keyboards();
+    input_apply_config_all_pointers();
+  }
 
   char buf[256];
   snprintf(buf, sizeof(buf), "input: set %s %s %s\n",

@@ -298,9 +298,14 @@ void handle_new_input(struct wl_listener *listener, void *data) {
   switch (device->type) {
   case WLR_INPUT_DEVICE_KEYBOARD:
     handle_new_keyboard(device);
+    input_apply_config(device);
     break;
   case WLR_INPUT_DEVICE_POINTER:
     wlr_cursor_attach_input_device(server.cursor, device);
+    struct wlr_pointer *pointer = wlr_pointer_from_input_device(device);
+    struct bwm_pointer *bwm_ptr = calloc(1, sizeof(struct bwm_pointer));
+    bwm_ptr->wlr_pointer = pointer;
+    wl_list_insert(&server.pointers, &bwm_ptr->link);
     input_apply_config(device);
     break;
   default:

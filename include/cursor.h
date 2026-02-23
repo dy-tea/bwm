@@ -2,6 +2,12 @@
 
 #include "server.h"
 #include "toplevel.h"
+#include <wlr/types/wlr_pointer.h>
+
+struct bwm_pointer {
+	struct wlr_pointer *wlr_pointer;
+	struct wl_list link;
+};
 
 struct bwm_cursor_constraint {
 	struct wlr_pointer_constraint_v1 *constraint;

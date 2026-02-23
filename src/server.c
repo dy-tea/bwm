@@ -214,6 +214,7 @@ void server_init(void) {
   // seat
   server.seat = wlr_seat_create(server.wl_display, "seat0");
   wl_list_init(&server.keyboards);
+  wl_list_init(&server.pointers);
 
   uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
   wlr_seat_set_capabilities(server.seat, caps);

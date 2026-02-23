@@ -75,6 +75,7 @@ struct bwm_server {
   struct wl_listener request_start_drag;
   struct wl_listener start_drag;
   struct wl_list keyboards;
+  struct wl_list pointers;
 
   struct wlr_output_layout *output_layout;
   struct wl_list outputs;
