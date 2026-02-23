@@ -445,27 +445,25 @@ void input_config_apply(input_config_t *config, struct wlr_input_device *device)
       bool is_touchpad = device_is_touchpad(device);
 
       if (is_touchpad) {
-        if (libinput_device_config_tap_get_finger_count(libinput_dev) > 0) {
-          if (config->tap != -1) {
-            enum libinput_config_tap_state tap = config->tap ? LIBINPUT_CONFIG_TAP_ENABLED : LIBINPUT_CONFIG_TAP_DISABLED;
-            libinput_device_config_tap_set_enabled(libinput_dev, tap);
-          }
+        if (config->tap != -1) {
+          enum libinput_config_tap_state tap = config->tap ? LIBINPUT_CONFIG_TAP_ENABLED : LIBINPUT_CONFIG_TAP_DISABLED;
+          libinput_device_config_tap_set_enabled(libinput_dev, tap);
+        }
 
-          if (config->drag != -1) {
-            enum libinput_config_drag_state drag = config->drag ? LIBINPUT_CONFIG_DRAG_ENABLED : LIBINPUT_CONFIG_DRAG_DISABLED;
-            libinput_device_config_tap_set_drag_enabled(libinput_dev, drag);
-          }
+        if (config->drag != -1) {
+          enum libinput_config_drag_state drag = config->drag ? LIBINPUT_CONFIG_DRAG_ENABLED : LIBINPUT_CONFIG_DRAG_DISABLED;
+          libinput_device_config_tap_set_drag_enabled(libinput_dev, drag);
+        }
 
-          if (config->drag_lock == INPUT_CONFIG_DRAG_LOCK_ENABLED)
-            libinput_device_config_tap_set_drag_lock_enabled(libinput_dev, LIBINPUT_CONFIG_DRAG_LOCK_ENABLED);
-          else if (config->drag != -1)
-            libinput_device_config_tap_set_drag_lock_enabled(libinput_dev, LIBINPUT_CONFIG_DRAG_LOCK_DISABLED);
+        if (config->drag_lock == INPUT_CONFIG_DRAG_LOCK_ENABLED)
+          libinput_device_config_tap_set_drag_lock_enabled(libinput_dev, LIBINPUT_CONFIG_DRAG_LOCK_ENABLED);
+        else if (config->drag != -1)
+          libinput_device_config_tap_set_drag_lock_enabled(libinput_dev, LIBINPUT_CONFIG_DRAG_LOCK_DISABLED);
 
-          if ((int)config->tap_button_map != -1) {
-            enum libinput_config_tap_button_map map = (config->tap_button_map == INPUT_CONFIG_TAP_BUTTON_MAP_LMR) ?
-              LIBINPUT_CONFIG_TAP_MAP_LMR : LIBINPUT_CONFIG_TAP_MAP_LRM;
-            libinput_device_config_tap_set_button_map(libinput_dev, map);
-          }
+        if ((int)config->tap_button_map != -1) {
+          enum libinput_config_tap_button_map map = (config->tap_button_map == INPUT_CONFIG_TAP_BUTTON_MAP_LMR) ?
+            LIBINPUT_CONFIG_TAP_MAP_LMR : LIBINPUT_CONFIG_TAP_MAP_LRM;
+          libinput_device_config_tap_set_button_map(libinput_dev, map);
         }
 
         if (config->natural_scroll != -1 && libinput_device_config_scroll_has_natural_scroll(libinput_dev))
