@@ -138,26 +138,27 @@ void output_config_apply(struct output_config *oc) {
         else
           wlr_output_state_set_custom_mode(&state, oc->width, oc->height, mhz);
       }
+    } else if (!wl_list_empty(&wlr_output->modes)) {
+      struct wlr_output_mode *preferred = wlr_output_preferred_mode(wlr_output);
+      if (preferred)
+        wlr_output_state_set_mode(&state, preferred);
     }
   }
 
-  if (oc->x >= 0 && oc->y >= 0) {
-    wlr_output_state_finish(&state);
+  if (oc->x >= 0 && oc->y >= 0)
     wlr_output_layout_add(server.output_layout, wlr_output, oc->x, oc->y);
-  }
+  else
+    wlr_output_layout_add_auto(server.output_layout, wlr_output);
 
-  if (oc->scale > 0) {
+  if (oc->scale > 0)
     wlr_output_state_set_scale(&state, oc->scale);
-  }
 
-  if (oc->transform >= 0) {
+  if (oc->transform >= 0)
     wlr_output_state_set_transform(&state, oc->transform);
-  }
 
-  if (oc->adaptive_sync != OUTPUT_CONFIG_ADAPTIVE_SYNC_AUTO) {
+  if (oc->adaptive_sync != OUTPUT_CONFIG_ADAPTIVE_SYNC_AUTO)
     wlr_output_state_set_adaptive_sync_enabled(&state,
         oc->adaptive_sync == OUTPUT_CONFIG_ADAPTIVE_SYNC_ENABLED);
-  }
 
   if (oc->render_bit_depth != OUTPUT_CONFIG_RENDER_BIT_DEPTH_AUTO) {
     uint32_t render_format = DRM_FORMAT_XRGB8888;

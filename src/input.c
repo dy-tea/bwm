@@ -1,10 +1,13 @@
 #include "input.h"
 #include "keyboard.h"
+#include "server.h"
 #include <stdlib.h>
 #include <string.h>
 #include <wlr/util/log.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <libinput.h>
+
+extern struct bwm_server server;
 
 static input_config_t *input_configs[MAX_INPUT_CONFIGS];
 static size_t num_input_configs = 0;
@@ -300,7 +303,7 @@ bool input_config_set_value(input_config_t *config, const char *name, const char
     config->middle_emulation = parse_bool(value, -1);
   } else if (strcmp(name, "scroll_method") == 0) {
     if (strcmp(value, "edge") == 0)
-        config->scroll_method = INPUT_CONFIG_SCROLL_METHOD_EDGE;
+      config->scroll_method = INPUT_CONFIG_SCROLL_METHOD_EDGE;
     else if (strcmp(value, "button") == 0)
       config->scroll_method = INPUT_CONFIG_SCROLL_METHOD_BUTTON;
     else if (strcmp(value, "twofinger") == 0)
@@ -362,9 +365,9 @@ void input_config_apply(input_config_t *config, struct wlr_input_device *device)
     if (config->xkb_numlock == 1 || config->xkb_capslock == 1) {
       uint32_t leds = 0;
       if (config->xkb_numlock == 1)
-          leds |= WLR_LED_NUM_LOCK;
+        leds |= WLR_LED_NUM_LOCK;
       if (config->xkb_capslock == 1)
-          leds |= WLR_LED_CAPS_LOCK;
+        leds |= WLR_LED_CAPS_LOCK;
       wlr_keyboard_led_update(keyboard, leds);
     }
 
@@ -393,6 +396,14 @@ void input_apply_config(struct wlr_input_device *device) {
 
   if (config)
     input_config_apply(config, device);
+}
+
+void input_apply_config_all_keyboards(void) {
+  struct bwm_keyboard *keyboard;
+  wl_list_for_each(keyboard, &server.keyboards, link) {
+    struct wlr_input_device *device = &keyboard->wlr_keyboard->base;
+    input_apply_config(device);
+  }
 }
 
 void input_init(void) {

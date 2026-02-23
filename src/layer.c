@@ -10,6 +10,7 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
 
 extern struct bwm_server server;
 
@@ -151,6 +152,10 @@ void handle_new_layer_surface(struct wl_listener *listener, void *data) {
   wl_signal_add(&layer_surface->surface->events.commit, &layer->surface_commit);
 
   wl_list_insert(&output->layers[layer_surface->pending.layer], &layer->link);
+
+  // fractional scale
+  wlr_fractional_scale_v1_notify_scale(layer_surface->surface, layer->output->wlr_output->scale);
+  wlr_surface_set_preferred_buffer_scale(layer_surface->surface, ceil(layer->output->wlr_output->scale));
 
   wlr_surface_send_enter(layer_surface->surface, layer_surface->output);
 

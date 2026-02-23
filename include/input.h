@@ -102,5 +102,6 @@ void input_config_apply(input_config_t *config, struct wlr_input_device *device)
 void input_init(void);
 void input_fini(void);
 void input_apply_config(struct wlr_input_device *device);
+void input_apply_config_all_keyboards(void);
 
 const char *input_config_type_str(enum input_config_type type);

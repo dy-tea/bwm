@@ -390,6 +390,9 @@ static void ipc_cmd_input(char **args, int num, int client_fd) {
 
   input_config_add(config);
 
+  if (type == INPUT_CONFIG_TYPE_KEYBOARD || type == INPUT_CONFIG_TYPE_ANY)
+    input_apply_config_all_keyboards();
+
   char buf[256];
   snprintf(buf, sizeof(buf), "input: set %s %s %s\n",
       identifier ? identifier : (type != INPUT_CONFIG_TYPE_ANY ? "type:xxx" : "*"),

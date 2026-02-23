@@ -61,6 +61,7 @@
 #include <wlr/types/wlr_color_management_v1.h>
 #include <wlr/types/wlr_color_representation_v1.h>
 #include <wlr/types/wlr_output_power_management_v1.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
 
 void handle_request_start_drag(struct wl_listener *listener, void *data);
 void handle_start_drag(struct wl_listener *listener, void *data);
@@ -316,6 +317,9 @@ void server_init(void) {
 
   // viewporter
   wlr_viewporter_create(server.wl_display);
+
+  // fractional scale
+  wlr_fractional_scale_manager_v1_create(server.wl_display, 1);
 
   // presentation
   wlr_presentation_create(server.wl_display, server.backend, 2);

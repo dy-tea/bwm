@@ -1,5 +1,6 @@
 #include "toplevel.h"
 #include "keyboard.h"
+#include "output.h"
 #include "popup.h"
 #include "server.h"
 #include "tree.h"
@@ -7,9 +8,11 @@
 #include "types.h"
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/util/log.h>
 
 extern struct bwm_server server;
@@ -207,6 +210,13 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   // insert node into tree
   node_t *focus = d->focus;
   insert_node(m, d, n, focus);
+
+  // notify client of scale
+  if (toplevel->node->monitor && toplevel->node->monitor->output) {
+    float scale = toplevel->node->monitor->output->wlr_output->scale;
+    wlr_fractional_scale_v1_notify_scale(toplevel->xdg_toplevel->base->surface, scale);
+    wlr_surface_set_preferred_buffer_scale(toplevel->xdg_toplevel->base->surface, ceil(scale));
+  }
 
   focus_node(m, d, n);
   arrange(m, d, true);
@@ -553,6 +563,7 @@ void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
   xdg_toplevel->base->data = toplevel->scene_tree;
 
   wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
+
 
   // register event listeners
   toplevel->map.notify = toplevel_map;
