@@ -25,6 +25,7 @@ keybind_t keybinds[MAX_KEYBINDS];
 size_t num_keybinds = 0;
 static int hotkey_watch_fd = -1;
 static char hotkey_config_path[PATH_MAX];
+static void setup_inotify_watch(const char *config_path);
 
 static const char *get_config_home(void) {
   if (custom_config_dir)
@@ -290,6 +291,7 @@ static void parse_hotkey_line(const char *hotkey_str, const char *command_str) {
 }
 
 static char config_path[PATH_MAX];
+static char hotkey_init_path[PATH_MAX];
 static bool config_ran = false;
 
 void run_config(const char *config_path_arg) {
@@ -307,12 +309,20 @@ void run_config_idle(void *data) {
   config_ran = true;
 
   wlr_log(WLR_INFO, "Running config: %s", config_path);
-  pid_t pid = fork();
-  if (pid == 0) {
+  if (fork() == 0) {
     setsid();
     execl("/bin/sh", "/bin/sh", config_path, NULL);
     _exit(1);
   }
+}
+
+void load_hotkeys_idle(void *data) {
+  (void)data;
+  if (hotkey_init_path[0] == '\0')
+    return;
+
+  load_hotkeys(hotkey_init_path);
+  setup_inotify_watch(hotkey_init_path);
 }
 
 void load_hotkeys(const char *config_path) {
@@ -421,8 +431,7 @@ void config_init_with_config_dir(const char *config_dir) {
 
   char hotkey_path[PATH_MAX];
   snprintf(hotkey_path, sizeof(hotkey_path), "%s/%s", config_home, BWMHKRC_NAME);
-  load_hotkeys(hotkey_path);
-  setup_inotify_watch(hotkey_path);
+  snprintf(hotkey_init_path, sizeof(hotkey_init_path), "%s", hotkey_path);
 }
 
 void config_fini(void) {

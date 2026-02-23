@@ -84,6 +84,7 @@ void config_init_with_config_dir(const char *config_dir);
 void config_fini(void);
 void run_config(const char *config_path);
 void run_config_idle(void *data);
+void load_hotkeys_idle(void *data);
 void load_hotkeys(const char *config_path);
 void reload_hotkeys(void);
 bool keybind_matches(keybind_t *kb, uint32_t modifiers, xkb_keysym_t keysym, uint32_t keycode);

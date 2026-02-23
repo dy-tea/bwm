@@ -523,6 +523,7 @@ int server_run(void) {
 
   // run config after server is fully initialized
   wl_event_loop_add_idle(event_loop, run_config_idle, NULL);
+  wl_event_loop_add_idle(event_loop, load_hotkeys_idle, NULL);
 
   wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s", socket);
   wl_display_run(server.wl_display);
