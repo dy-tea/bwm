@@ -52,6 +52,7 @@
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_export_dmabuf_v1.h>
+#include <wlr/types/wlr_data_control_v1.h>
 #include <wlr/types/wlr_ext_data_control_v1.h>
 #include <wlr/types/wlr_gamma_control_v1.h>
 #include <wlr/types/wlr_ext_image_capture_source_v1.h>
@@ -327,6 +328,9 @@ void server_init(void) {
 
   // export dmabuf
   wlr_export_dmabuf_manager_v1_create(server.wl_display);
+
+  // wlr data control
+  wlr_data_control_manager_v1_create(server.wl_display);
 
   // ext data control
   wlr_ext_data_control_manager_v1_create(server.wl_display, 1);
