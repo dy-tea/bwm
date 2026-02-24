@@ -565,13 +565,17 @@ void server_fini(void) {
   wl_list_remove(&server.cursor_frame.link);
   wl_list_remove(&server.request_cursor.link);
   wl_list_remove(&server.pointer_focus_change.link);
+  wl_list_remove(&server.new_pointer_constraint.link);
   wl_list_remove(&server.request_set_selection.link);
   wl_list_remove(&server.request_start_drag.link);
   wl_list_remove(&server.start_drag.link);
+  wl_list_remove(&server.cursor_request_set_shape.link);
   wl_list_remove(&server.new_session_lock.link);
   wl_list_remove(&server.xdg_activation_request_activate.link);
   wl_list_remove(&server.output_power_set_mode.link);
   wl_list_remove(&server.new_idle_inhibitor.link);
+  wl_list_remove(&server.output_manager_apply.link);
+  wl_list_remove(&server.output_manager_test.link);
 
   wlr_scene_node_destroy(&server.scene->tree.node);
   wlr_cursor_destroy(server.cursor);
