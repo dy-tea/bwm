@@ -16,7 +16,7 @@ static struct wlr_ext_workspace_handle_v1 *find_workspace_by_name(const char *na
   struct wlr_ext_workspace_handle_v1 *workspace;
   wl_list_for_each(workspace, &server.workspace_manager->workspaces, link)
     if (strcmp(workspace->name, name) == 0)
-        return workspace;
+      return workspace;
   return NULL;
 }
 
@@ -56,20 +56,20 @@ void workspace_init(void) {
   wl_list_for_each(output, &server.outputs, link)
     wlr_ext_workspace_group_handle_v1_output_enter(group, output->wlr_output);
 
-  desktop_t *d = mon_head->desk_head;
+  desktop_t *d = mon_head->desk_tail;
   while (d != NULL) {
     struct wlr_ext_workspace_handle_v1 *workspace =
       wlr_ext_workspace_handle_v1_create(server.workspace_manager, NULL, 0);
     if (!workspace) {
       wlr_log(WLR_ERROR, "Failed to create workspace: %s", d->name);
-      d = d->next;
+      d = d->prev;
       continue;
     }
 
     wlr_ext_workspace_handle_v1_set_name(workspace, d->name);
     wlr_ext_workspace_handle_v1_set_group(workspace, group);
 
-    d = d->next;
+    d = d->prev;
   }
 
   struct wlr_ext_workspace_handle_v1 *active = find_workspace_by_name(mon_head->desk->name);
@@ -94,20 +94,20 @@ void workspace_sync(void) {
   if (!mon_head)
     return;
 
-  desktop_t *d = mon_head->desk_head;
+  desktop_t *d = mon_head->desk_tail;
   while (d != NULL) {
     struct wlr_ext_workspace_handle_v1 *workspace =
       wlr_ext_workspace_handle_v1_create(server.workspace_manager, NULL, 0);
     if (!workspace) {
       wlr_log(WLR_ERROR, "Failed to create workspace: %s", d->name);
-      d = d->next;
+      d = d->prev;
       continue;
     }
 
     wlr_ext_workspace_handle_v1_set_name(workspace, d->name);
     wlr_ext_workspace_handle_v1_set_group(workspace, group);
 
-    d = d->next;
+    d = d->prev;
   }
 
   struct wlr_ext_workspace_handle_v1 *active = find_workspace_by_name(mon_head->desk->name);
@@ -219,9 +219,8 @@ void workspace_switch_to_desktop(const char *name) {
   desktop_t *old_desktop = server.focused_monitor->desk;
 
   // hide old desktop
-  if (old_desktop) {
+  if (old_desktop)
     hide_desktop(old_desktop);
-  }
 
   // show new desktop
   show_desktop(d, server.focused_monitor);
