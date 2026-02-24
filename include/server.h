@@ -94,6 +94,9 @@ struct bwm_server {
   struct wlr_session_lock_v1 *current_session_lock;
   bool locked;
 
+  struct wlr_idle_inhibit_manager_v1 *idle_inhibit_manager;
+  struct wl_listener new_idle_inhibitor;
+
   struct wlr_ext_foreign_toplevel_list_v1 *foreign_toplevel_list;
   struct wlr_foreign_toplevel_manager_v1 *foreign_toplevel_manager;
 

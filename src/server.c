@@ -11,6 +11,7 @@
 #include "lock.h"
 #include "output_config.h"
 #include "input.h"
+#include "idle.h"
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,6 +59,7 @@
 #include <wlr/types/wlr_ext_image_capture_source_v1.h>
 #include <wlr/types/wlr_ext_image_copy_capture_v1.h>
 #include <wlr/types/wlr_alpha_modifier_v1.h>
+#include <wlr/types/wlr_idle_inhibit_v1.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_color_management_v1.h>
 #include <wlr/types/wlr_color_representation_v1.h>
@@ -248,6 +250,11 @@ void server_init(void) {
   wlr_output_layout_get_box(server.output_layout, NULL, &full_geo);
   server.lock_background = wlr_scene_rect_create(server.lock_tree, full_geo.width, full_geo.height, lockcolor);
   wlr_scene_node_set_enabled(&server.lock_background->node, false);
+
+  // idle inhibitor
+  server.idle_inhibit_manager = wlr_idle_inhibit_v1_create(server.wl_display);
+  server.new_idle_inhibitor.notify = handle_new_idle_inhibitor;
+  wl_signal_add(&server.idle_inhibit_manager->events.new_inhibitor, &server.new_idle_inhibitor);
 
   // color manager
   if (server.renderer->features.input_color_transform) {
@@ -564,6 +571,7 @@ void server_fini(void) {
   wl_list_remove(&server.new_session_lock.link);
   wl_list_remove(&server.xdg_activation_request_activate.link);
   wl_list_remove(&server.output_power_set_mode.link);
+  wl_list_remove(&server.new_idle_inhibitor.link);
 
   wlr_scene_node_destroy(&server.scene->tree.node);
   wlr_cursor_destroy(server.cursor);

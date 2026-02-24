@@ -75,6 +75,7 @@ executable(
 		'src' / 'config.c',
 		'src' / 'lock.c',
 		'src' / 'input.c',
+		'src' / 'idle.c',
 		wl_protos_src,
 	],
 	include_directories: inc,

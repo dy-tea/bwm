@@ -2,6 +2,7 @@
 #include "server.h"
 #include "layer.h"
 #include "lock.h"
+#include "idle.h"
 #include "output_config.h"
 #include "toplevel.h"
 #include "tree.h"
@@ -300,4 +301,6 @@ void output_update_scale(struct bwm_output *output, float scale) {
     for (desktop_t *d = m->desk; d != NULL; d = d->next)
       arrange(m, d, true);
   }
+
+  update_idle_inhibitors(NULL);
 }
