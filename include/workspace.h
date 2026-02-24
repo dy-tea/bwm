@@ -5,6 +5,7 @@
 
 void workspace_init(void);
 void workspace_fini(void);
+void workspace_sync(void);
 void workspace_create_desktop(const char *name);
 void workspace_switch_to_desktop(const char *name);
 void workspace_switch_to_desktop_by_index(int index);

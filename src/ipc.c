@@ -846,6 +846,7 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
     }
 
     transaction_commit_dirty();
+    workspace_sync();
 
     if (mon->desk) {
       focus_node(mon, mon->desk, mon->desk->focus);

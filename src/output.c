@@ -162,6 +162,12 @@ void output_enable(struct bwm_output *output) {
   output->scale_filter_mode = SCALE_FILTER_NEAREST;
 
   output_update_usable_area(output);
+
+  if (server.workspace_manager && !wl_list_empty(&server.workspace_manager->groups)) {
+    struct wlr_ext_workspace_group_handle_v1 *group;
+    group = wl_container_of(server.workspace_manager->groups.next, group, link);
+    wlr_ext_workspace_group_handle_v1_output_enter(group, output->wlr_output);
+  }
 }
 
 void output_disable(struct bwm_output *output) {

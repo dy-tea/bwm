@@ -26,7 +26,7 @@ struct desktop_t *find_desktop_by_name(const char *name) {
     desktop_t *d = m->desk_head;
     while (d != NULL) {
       if (strcmp(d->name, name) == 0)
-          return d;
+        return d;
       d = d->next;
     }
     m = m->next;
@@ -59,7 +59,7 @@ void workspace_init(void) {
   desktop_t *d = mon_head->desk_head;
   while (d != NULL) {
     struct wlr_ext_workspace_handle_v1 *workspace =
-      wlr_ext_workspace_handle_v1_create(server.workspace_manager, d->name, 0);
+      wlr_ext_workspace_handle_v1_create(server.workspace_manager, NULL, 0);
     if (!workspace) {
       wlr_log(WLR_ERROR, "Failed to create workspace: %s", d->name);
       d = d->next;
@@ -79,13 +79,51 @@ void workspace_init(void) {
   wlr_log(WLR_INFO, "Workspace manager initialized");
 }
 
-void workspace_fini(void) {
+void workspace_sync(void) {
   if (!server.workspace_manager)
-      return;
+    return;
+
+  struct wlr_ext_workspace_group_handle_v1 *group = NULL;
+  if (!wl_list_empty(&server.workspace_manager->groups))
+    group = wl_container_of(server.workspace_manager->groups.next, group, link);
 
   struct wlr_ext_workspace_handle_v1 *workspace, *tmp;
   wl_list_for_each_safe(workspace, tmp, &server.workspace_manager->workspaces, link)
-      wlr_ext_workspace_handle_v1_destroy(workspace);
+    wlr_ext_workspace_handle_v1_destroy(workspace);
+
+  if (!mon_head)
+    return;
+
+  desktop_t *d = mon_head->desk_head;
+  while (d != NULL) {
+    struct wlr_ext_workspace_handle_v1 *workspace =
+      wlr_ext_workspace_handle_v1_create(server.workspace_manager, NULL, 0);
+    if (!workspace) {
+      wlr_log(WLR_ERROR, "Failed to create workspace: %s", d->name);
+      d = d->next;
+      continue;
+    }
+
+    wlr_ext_workspace_handle_v1_set_name(workspace, d->name);
+    wlr_ext_workspace_handle_v1_set_group(workspace, group);
+
+    d = d->next;
+  }
+
+  struct wlr_ext_workspace_handle_v1 *active = find_workspace_by_name(mon_head->desk->name);
+  if (active)
+    wlr_ext_workspace_handle_v1_set_active(active, true);
+
+  wlr_log(WLR_INFO, "Workspace manager synced");
+}
+
+void workspace_fini(void) {
+  if (!server.workspace_manager)
+    return;
+
+  struct wlr_ext_workspace_handle_v1 *workspace, *tmp;
+  wl_list_for_each_safe(workspace, tmp, &server.workspace_manager->workspaces, link)
+    wlr_ext_workspace_handle_v1_destroy(workspace);
 
   struct wlr_ext_workspace_group_handle_v1 *group, *tmp_group;
   wl_list_for_each_safe(group, tmp_group, &server.workspace_manager->groups, link)
@@ -108,7 +146,7 @@ void workspace_create_desktop(const char *name) {
     group = wl_container_of(server.workspace_manager->groups.next, group, link);
 
   struct wlr_ext_workspace_handle_v1 *workspace =
-      wlr_ext_workspace_handle_v1_create(server.workspace_manager, name, 0);
+    wlr_ext_workspace_handle_v1_create(server.workspace_manager, NULL, 0);
   if (!workspace) {
     wlr_log(WLR_ERROR, "Failed to create workspace: %s", name);
     return;
@@ -183,9 +221,6 @@ void workspace_switch_to_desktop(const char *name) {
   // hide old desktop
   if (old_desktop) {
     hide_desktop(old_desktop);
-    struct wlr_ext_workspace_handle_v1 *old_ws = find_workspace_by_name(old_desktop->name);
-    if (old_ws)
-      wlr_ext_workspace_handle_v1_set_hidden(old_ws, true);
   }
 
   // show new desktop
