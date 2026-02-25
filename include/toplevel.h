@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.h"
+#include <wayland-server-core.h>
 #include <wayland-server.h>
 #include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
@@ -14,6 +15,11 @@ struct bwm_toplevel {
 
   struct wlr_ext_foreign_toplevel_handle_v1 *ext_foreign_toplevel;
   struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel;
+
+  struct wlr_ext_image_capture_source_v1 *image_capture_source;
+  struct wlr_scene_surface *image_capture_surface;
+  struct wlr_scene *image_capture;
+  struct wlr_scene_tree *image_capture_tree;
 
   node_t *node;
 
@@ -54,3 +60,5 @@ bool toplevel_is_ready(struct bwm_toplevel *toplevel);
 void toplevel_save_buffer(struct bwm_toplevel *toplevel);
 void toplevel_remove_saved_buffer(struct bwm_toplevel *toplevel);
 void toplevel_send_frame_done(struct bwm_toplevel *toplevel);
+
+void handle_new_toplevel_capture_request(struct wl_listener *listener, void *data);

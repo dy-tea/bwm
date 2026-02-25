@@ -87,3 +87,4 @@ executable(
 executable('bmsg', 'bmsg' / 'bmsg.c', install: true, install_dir: get_option('bindir'))
 
 install_data('bwm.desktop', install_dir: '/usr/share/wayland-sessions')
+install_data('bwm-portals.conf', install_dir: get_option('datadir') / 'xdg-desktop-portal')

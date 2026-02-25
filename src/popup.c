@@ -10,7 +10,8 @@
 #include "output.h"
 #include "toplevel.h"
 
-static void create_xdg_popup(struct wlr_xdg_popup *xdg_popup, struct wlr_scene_tree *parent_tree);
+static void create_xdg_popup(struct wlr_xdg_popup *xdg_popup,
+	struct wlr_scene_tree *parent_tree, struct wlr_scene_tree *image_capture_parent_tree);
 
 void popup_unconstrain(struct bwm_popup *popup) {
 	int lx, ly;
@@ -37,7 +38,7 @@ void popup_unconstrain(struct bwm_popup *popup) {
 
 void popup_new_popup(struct wl_listener *listener, void *data) {
   struct bwm_popup *popup = wl_container_of(listener, popup, new_popup);
-  create_xdg_popup(data, popup->parent_tree);
+  create_xdg_popup(data, popup->parent_tree, popup->image_capture_tree);
 }
 
 void popup_commit(struct wl_listener *listener, void *data) {
@@ -68,11 +69,17 @@ void popup_destroy(struct wl_listener *listener, void *data) {
   free(popup);
 }
 
-static void create_xdg_popup(struct wlr_xdg_popup *xdg_popup, struct wlr_scene_tree *parent_tree) {
+static void create_xdg_popup(struct wlr_xdg_popup *xdg_popup,
+	struct wlr_scene_tree *parent_tree, struct wlr_scene_tree *image_capture_parent_tree) {
   struct bwm_popup *popup = calloc(1, sizeof(struct bwm_popup));
   popup->xdg_popup = xdg_popup;
   popup->parent_tree = wlr_scene_xdg_surface_create(parent_tree, xdg_popup->base);
   xdg_popup->base->data = popup->parent_tree;
+
+  if (image_capture_parent_tree != NULL) {
+  	popup->image_capture_tree = wlr_scene_tree_create(image_capture_parent_tree);
+    wlr_scene_surface_create(popup->image_capture_tree, xdg_popup->base->surface);
+  }
 
   popup->commit.notify = popup_commit;
   wl_signal_add(&xdg_popup->base->surface->events.commit, &popup->commit);
@@ -90,11 +97,11 @@ static void create_xdg_popup(struct wlr_xdg_popup *xdg_popup, struct wlr_scene_t
 void handle_new_xdg_popup(struct wl_listener *listener, void *data) {
 	struct wlr_xdg_popup *xdg_popup = data;
 	struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, new_xdg_popup);
-  create_xdg_popup(xdg_popup, toplevel->scene_tree);
+  create_xdg_popup(xdg_popup, toplevel->scene_tree, toplevel->image_capture_tree);
 }
 
 void handle_new_layer_popup(struct wl_listener *listener, void *data) {
   struct wlr_xdg_popup *xdg_popup = data;
   struct bwm_layer_surface *layer = wl_container_of(listener, layer, new_popup);
-  create_xdg_popup(xdg_popup, layer->scene_tree);
+  create_xdg_popup(xdg_popup, layer->scene_tree, NULL);
 }

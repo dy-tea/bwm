@@ -313,6 +313,12 @@ void server_init(void) {
   // foreign toplevel manager
   server.foreign_toplevel_manager = wlr_foreign_toplevel_manager_v1_create(server.wl_display);
 
+  // foreign toplevel image capture source
+  server.foreign_toplevel_image_capture_source_manager = wlr_ext_foreign_toplevel_image_capture_source_manager_v1_create(server.wl_display, 1);
+
+  server.new_toplevel_capture_request.notify = handle_new_toplevel_capture_request;
+  wl_signal_add(&server.foreign_toplevel_image_capture_source_manager->events.new_request, &server.new_toplevel_capture_request);
+
   // xdg foreign
   struct wlr_xdg_foreign_registry *xdg_foreign_registry = wlr_xdg_foreign_registry_create(server.wl_display);
   wlr_xdg_foreign_v1_create(server.wl_display, xdg_foreign_registry);
@@ -525,6 +531,7 @@ int server_run(void) {
   }
 
   setenv("WAYLAND_DISPLAY", socket, true);
+  setenv("XDG_CURRENT_DESKTOP", "bwm", true);
 
   // add IPC socket to event loop
   struct wl_event_loop *event_loop = wl_display_get_event_loop(server.wl_display);
@@ -576,6 +583,7 @@ void server_fini(void) {
   wl_list_remove(&server.new_idle_inhibitor.link);
   wl_list_remove(&server.output_manager_apply.link);
   wl_list_remove(&server.output_manager_test.link);
+  wl_list_remove(&server.new_toplevel_capture_request.link);
 
   wlr_scene_node_destroy(&server.scene->tree.node);
   wlr_cursor_destroy(server.cursor);

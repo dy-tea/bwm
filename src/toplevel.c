@@ -13,6 +13,7 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
+#include <wlr/types/wlr_ext_image_capture_source_v1.h>
 #include <wlr/util/log.h>
 
 extern struct bwm_server server;
@@ -221,6 +222,9 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   focus_node(m, d, n);
   arrange(m, d, true);
 
+  toplevel->image_capture_surface = wlr_scene_surface_create(
+  	&toplevel->image_capture->tree, toplevel->xdg_toplevel->base->surface);
+
   update_foreign_toplevel_state(toplevel);
 
   wlr_log(WLR_INFO, "Window mapped and tiled: %s",
@@ -235,6 +239,8 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
 
   toplevel->mapped = false;
   toplevel->configured = false;
+
+  toplevel->image_capture_surface = NULL;
 
   if (toplevel->ext_foreign_toplevel) {
     wlr_ext_foreign_toplevel_handle_v1_destroy(toplevel->ext_foreign_toplevel);
@@ -318,7 +324,7 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
     if (toplevel->node && toplevel->node->client && toplevel->node->client->toplevel) {
       node_t *node = toplevel->node;
       client_t *c = node->client;
-      
+
       if (c->state == STATE_FLOATING && c->floating_rectangle.width > 0) {
         c->floating_rectangle.width = new_geo->width;
         c->floating_rectangle.height = new_geo->height;
@@ -364,6 +370,11 @@ void toplevel_destroy(struct wl_listener *listener, void *data) {
   if (toplevel->node && toplevel->node->client) {
     toplevel->node->client->toplevel = NULL;
     toplevel->node = NULL;
+  }
+
+  if (toplevel->image_capture != NULL) {
+ 		wlr_scene_node_destroy(&toplevel->image_capture->tree.node);
+   	toplevel->image_capture = NULL;
   }
 
   toplevel->saved_surface_tree = NULL;
@@ -606,6 +617,9 @@ void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 
   wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
 
+  // create image capture
+  toplevel->image_capture = wlr_scene_create();
+  toplevel->image_capture_tree = wlr_scene_tree_create(&toplevel->image_capture->tree);
 
   // register event listeners
   toplevel->map.notify = toplevel_map;
@@ -767,4 +781,23 @@ void toplevel_send_frame_done(struct bwm_toplevel *toplevel) {
   struct wlr_scene_node *node;
   wl_list_for_each(node, &toplevel->content_tree->children, link)
     wlr_scene_node_for_each_buffer(node, send_frame_done_iterator, &when);
+}
+
+void handle_new_toplevel_capture_request(struct wl_listener *listener, void *data) {
+	(void)listener;
+	struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request *request = data;
+	struct bwm_toplevel *toplevel = request->toplevel_handle->data;
+
+	if (toplevel->image_capture_source == NULL) {
+		// no image capture source, create one
+    toplevel->image_capture_source = wlr_ext_image_capture_source_v1_create_with_scene_node(
+      &toplevel->image_capture->tree.node, wl_display_get_event_loop(server.wl_display),
+      server.allocator, server.renderer);
+
+    if (toplevel->image_capture_source == NULL)
+    	return;
+	}
+
+ 	wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request_accept(
+  	request, toplevel->image_capture_source);
 }
