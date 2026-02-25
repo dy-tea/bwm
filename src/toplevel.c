@@ -286,8 +286,9 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
 void toplevel_commit(struct wl_listener *listener, void *data) {
 	(void)data;
   struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, commit);
+  struct wlr_xdg_surface *xdg_surface = toplevel->xdg_toplevel->base;
 
-  if (toplevel->xdg_toplevel->base->initial_commit) {
+  if (xdg_surface->initial_commit) {
     wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, 0, 0);
 
     wlr_xdg_toplevel_set_wm_capabilities(toplevel->xdg_toplevel,
@@ -296,8 +297,42 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
     return;
   }
 
-  if (toplevel->mapped && toplevel->xdg_toplevel->base->surface->mapped) {
-    uint32_t serial = toplevel->xdg_toplevel->base->current.configure_serial;
+  if (!xdg_surface->surface->mapped) {
+    return;
+  }
+
+  struct wlr_box *new_geo = &xdg_surface->geometry;
+  bool new_size = new_geo->width != toplevel->geometry.width ||
+      new_geo->height != toplevel->geometry.height ||
+      new_geo->x != toplevel->geometry.x ||
+      new_geo->y != toplevel->geometry.y;
+
+  if (new_size) {
+    wlr_log(WLR_DEBUG, "Client geometry changed: was %dx%d at %d,%d, now %dx%d at %d,%d",
+        toplevel->geometry.width, toplevel->geometry.height,
+        toplevel->geometry.x, toplevel->geometry.y,
+        new_geo->width, new_geo->height, new_geo->x, new_geo->y);
+
+    memcpy(&toplevel->geometry, new_geo, sizeof(struct wlr_box));
+
+    if (toplevel->node && toplevel->node->client && toplevel->node->client->toplevel) {
+      node_t *node = toplevel->node;
+      client_t *c = node->client;
+      
+      if (c->state == STATE_FLOATING && c->floating_rectangle.width > 0) {
+        c->floating_rectangle.width = new_geo->width;
+        c->floating_rectangle.height = new_geo->height;
+        wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel,
+            new_geo->width, new_geo->height);
+      } else if (c->state != STATE_FULLSCREEN && node->instruction == NULL) {
+        wlr_log(WLR_DEBUG, "Client size mismatch with no pending instruction, scheduling configure");
+        wlr_xdg_surface_schedule_configure(xdg_surface);
+      }
+    }
+  }
+
+  if (toplevel->node && toplevel->node->client && toplevel->node->client->toplevel) {
+    uint32_t serial = xdg_surface->current.configure_serial;
     bool successful = transaction_notify_view_ready_by_serial(toplevel, serial);
 
     if (successful) {
@@ -381,12 +416,14 @@ void toplevel_request_maximize(struct wl_listener *listener, void *data) {
   if (toplevel->node == NULL || toplevel->node->client == NULL)
     return;
 
-  if (mon == NULL || mon->desk == NULL)
+  if (toplevel->node->client->state == STATE_FULLSCREEN)
     return;
 
   bool requested_maximized = toplevel->xdg_toplevel->requested.maximized;
-  if (requested_maximized == (mon->desk->layout == LAYOUT_MONOCLE))
+  if (requested_maximized == toplevel->client_maximized)
     return;
+
+  toplevel->client_maximized = requested_maximized;
 
   toggle_monocle();
 }
@@ -535,6 +572,7 @@ void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
   toplevel->xdg_toplevel = xdg_toplevel;
   toplevel->mapped = false;
   toplevel->configured = false;
+  toplevel->client_maximized = false;
 
   // create parent scene tree container
   toplevel->scene_tree = wlr_scene_tree_create(server.tile_tree);

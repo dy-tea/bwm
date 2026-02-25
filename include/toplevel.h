@@ -17,8 +17,11 @@ struct bwm_toplevel {
 
   node_t *node;
 
+  struct wlr_box geometry;  // Client-committed surface geometry
+
   bool mapped;
   bool configured;
+  bool client_maximized;
 
   // listeners
   struct wl_listener map;

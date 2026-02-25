@@ -548,10 +548,28 @@ void toggle_monocle(void) {
   if (d->layout == LAYOUT_MONOCLE) {
     d->layout = d->user_layout;
     wlr_log(WLR_INFO, "Switched to tiled layout");
+
+    if (d->root) {
+      for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root)) {
+        if (n->client && n->client->toplevel && n->client->state != STATE_FULLSCREEN) {
+          n->client->toplevel->client_maximized = false;
+          wlr_xdg_toplevel_set_maximized(n->client->toplevel->xdg_toplevel, false);
+        }
+      }
+    }
   } else {
     d->user_layout = d->layout;
     d->layout = LAYOUT_MONOCLE;
     wlr_log(WLR_INFO, "Switched to monocle layout");
+
+    if (d->root) {
+      for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root)) {
+        if (n->client && n->client->toplevel && n->client->state != STATE_FULLSCREEN) {
+          n->client->toplevel->client_maximized = true;
+          wlr_xdg_toplevel_set_maximized(n->client->toplevel->xdg_toplevel, true);
+        }
+      }
+    }
   }
 
   arrange(mon, d, true);

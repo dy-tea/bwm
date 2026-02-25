@@ -186,25 +186,33 @@ static void apply_node_state(node_t *node,
     else
       rect = &instruction->tiled_rectangle;
 
-    if (node->client->toplevel && node->client->toplevel->saved_surface_tree) {
-      toplevel_remove_saved_buffer(node->client->toplevel);
-      wlr_log(WLR_DEBUG, "Removed saved buffer for node %u", node->id);
-    }
-
     wlr_log(WLR_DEBUG, "Applying geometry to node %u: pos=(%d,%d) size=(%dx%d) serial=%u",
             node->id, rect->x, rect->y, rect->width, rect->height, instruction->serial);
 
     wlr_scene_node_set_position(&node->client->toplevel->scene_tree->node, rect->x, rect->y);
 
+    struct bwm_toplevel *toplevel = node->client->toplevel;
+    bool geometry_matches = toplevel->geometry.width == rect->width &&
+        toplevel->geometry.height == rect->height;
+
     if (node->client->shown) {
-      wlr_scene_node_set_enabled(&node->client->toplevel->scene_tree->node, true);
-      wlr_log(WLR_DEBUG, "Applied layout to node %u [already shown]", node->id);
-    } else if (node->client->toplevel->configured) {
-      wlr_scene_node_set_enabled(&node->client->toplevel->scene_tree->node, true);
+      if (geometry_matches && toplevel->saved_surface_tree) {
+        toplevel_remove_saved_buffer(toplevel);
+        wlr_log(WLR_DEBUG, "Removed saved buffer for node %u (geometry matches)", node->id);
+      }
+      wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
+      wlr_log(WLR_DEBUG, "Applied layout to node %u [already shown] matches=%d", node->id, geometry_matches);
+    } else if (toplevel->configured && geometry_matches) {
+      if (toplevel->saved_surface_tree) {
+        toplevel_remove_saved_buffer(toplevel);
+        wlr_log(WLR_DEBUG, "Removed saved buffer for node %u (first show)", node->id);
+      }
+      wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
       node->client->shown = true;
       wlr_log(WLR_DEBUG, "Applied layout to node %u [FIRST SHOW]", node->id);
     } else {
-      wlr_log(WLR_DEBUG, "Applied layout to node %u [waiting for configure]", node->id);
+      wlr_log(WLR_DEBUG, "Applied layout to node %u [waiting for configure] configured=%d matches=%d",
+          node->id, toplevel->configured, geometry_matches);
     }
   }
 }
@@ -493,6 +501,28 @@ bool transaction_notify_view_ready_by_serial(struct bwm_toplevel *toplevel,
   struct bwm_transaction_inst *instruction = node->instruction;
 
   if (instruction->serial == serial && instruction->waiting) {
+    struct wlr_box *expected_rect;
+    if (node->client->state == STATE_FULLSCREEN) {
+      monitor_t *m = node->monitor;
+      if (m)
+        expected_rect = &m->rectangle;
+      else
+        expected_rect = &instruction->rectangle;
+    } else if (node->client->state == STATE_FLOATING)
+      expected_rect = &instruction->floating_rectangle;
+    else
+      expected_rect = &instruction->tiled_rectangle;
+
+    if (toplevel->geometry.width != expected_rect->width ||
+        toplevel->geometry.height != expected_rect->height) {
+      wlr_log(WLR_DEBUG, "View ready by serial %u for node %u but geometry mismatch: "
+          "expected %dx%d, got %dx%d - not marking ready",
+          serial, node->id,
+          expected_rect->width, expected_rect->height,
+          toplevel->geometry.width, toplevel->geometry.height);
+      return false;
+    }
+
     wlr_log(WLR_DEBUG, "View ready by serial %u for node %u",
             serial, node->id);
     set_instruction_ready(instruction);
