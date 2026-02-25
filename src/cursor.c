@@ -429,36 +429,38 @@ void handle_constraint_set_region(struct wl_listener *listener, void *data) {
 }
 
 void handle_constraint_destroy(struct wl_listener *listener, void *data) {
-	(void)data;
 	struct bwm_cursor_constraint *constraint = wl_container_of(listener, constraint, destroy);
+	struct wlr_pointer_constraint_v1 *wlr_constraint = data;
+
 	wl_list_remove(&constraint->set_region.link);
 	wl_list_remove(&constraint->destroy.link);
 
-  if (server.active_pointer_constraint == constraint->constraint) {
-    cursor_warp_to_constraint_hint();
+	if (server.active_pointer_constraint == wlr_constraint) {
+		cursor_warp_to_constraint_hint();
 
-    if (constraint->constraint->link.next)
-      wl_list_remove(&server.pointer_constraint_commit.link);
+		if (server.pointer_constraint_commit.link.next != NULL)
+			wl_list_remove(&server.pointer_constraint_commit.link);
 
-    wl_list_init(&server.pointer_constraint_commit.link);
-    server.active_pointer_constraint = NULL;
-  }
+		wl_list_init(&server.pointer_constraint_commit.link);
+		server.active_pointer_constraint = NULL;
+	}
+
+	free(constraint);
 }
 
 void handle_pointer_constraint(struct wl_listener *listener, void *data) {
 	(void)listener;
-  struct wlr_pointer_constraint_v1 *constraint = data;
+	struct wlr_pointer_constraint_v1 *constraint = data;
 
-  if (constraint->surface == server.seat->pointer_state.focused_surface) {
-    server.active_pointer_constraint = constraint;
+	struct bwm_cursor_constraint *cursor_constraint = calloc(1, sizeof(struct bwm_cursor_constraint));
+	cursor_constraint->constraint = constraint;
+	cursor_constraint->set_region.notify = handle_constraint_set_region;
+	wl_signal_add(&constraint->events.set_region, &cursor_constraint->set_region);
+	cursor_constraint->destroy.notify = handle_constraint_destroy;
+	wl_signal_add(&constraint->events.destroy, &cursor_constraint->destroy);
 
-    struct bwm_cursor_constraint *cursor_constraint = calloc(1, sizeof(struct bwm_cursor_constraint));
-    cursor_constraint->constraint = constraint;
-    cursor_constraint->set_region.notify = handle_constraint_set_region;
-    wl_signal_add(&constraint->events.set_region, &cursor_constraint->set_region);
-    cursor_constraint->destroy.notify = handle_constraint_destroy;
-    wl_signal_add(&constraint->events.destroy, &cursor_constraint->destroy);
-  }
+	if (constraint->surface == server.seat->pointer_state.focused_surface)
+		server.active_pointer_constraint = constraint;
 }
 
 void handle_cursor_request_set_shape(struct wl_listener *listener, void *data) {
