@@ -6,6 +6,8 @@
 #include "tree.h"
 #include "transaction.h"
 #include "types.h"
+#include "workspace.h"
+#include "rule.h"
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -176,6 +178,34 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   wlr_log(WLR_INFO, "New window: %s (%s)", title ? title : "untitled",
           app_id ? app_id : "unknown");
 
+  rule_consequence_t *rule = find_matching_rule(app_id, title);
+
+  if (rule && rule->has_manage && !rule->manage) {
+    wlr_log(WLR_INFO, "Window %s ignored by rule (manage=off)", app_id ? app_id : "?");
+    free_node(n);
+    free(n->client);
+    return;
+  }
+
+  if (rule && rule->has_state)
+    n->client->state = rule->state;
+
+  desktop_t *target_desktop = d;
+  if (rule && rule->has_desktop) {
+    desktop_t *new_desk = find_desktop_by_name(rule->desktop);
+    if (new_desk)
+      target_desktop = new_desk;
+  }
+
+  if (rule && rule->has_hidden)
+    n->hidden = rule->hidden;
+
+  if (rule && rule->has_sticky)
+    n->sticky = rule->sticky;
+
+  if (rule && rule->has_locked)
+    n->locked = rule->locked;
+
   // create foreign toplevel handles
   struct wlr_ext_foreign_toplevel_handle_v1_state ext_state = {
     .app_id = app_id,
@@ -209,19 +239,43 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   if (app_id)
     wlr_foreign_toplevel_handle_v1_set_app_id(toplevel->foreign_toplevel, app_id);
 
+  monitor_t *target_monitor = target_desktop->monitor;
+  if (!target_monitor)
+    target_monitor = m;
+
+  // center to output if floating, also ensure it does not tile
+  if (rule && rule->state == STATE_FLOATING) {
+  	wlr_scene_node_reparent(&toplevel->scene_tree->node, server.float_tree);
+    struct wlr_box mon_rect = target_monitor->rectangle;
+    struct wlr_box base_rect = n->client->toplevel->xdg_toplevel->base->geometry;
+   	n->client->floating_rectangle = (struct wlr_box){
+      .x = mon_rect.x + (mon_rect.width - base_rect.width) / 2,
+      .y = mon_rect.y + (mon_rect.height - base_rect.height) / 2,
+      .width = base_rect.width,
+      .height = base_rect.height
+    };
+    wlr_scene_node_set_position(&toplevel->scene_tree->node,
+    	n->client->floating_rectangle.x, n->client->floating_rectangle.y);
+    n->client->last_state = STATE_TILED;
+    n->client->state = STATE_FLOATING;
+    n->hidden = true;
+    n->client->shown = true;
+    wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
+  }
+
   // insert node into tree
-  node_t *focus = d->focus;
-  insert_node(m, d, n, focus);
+  node_t *focus = target_desktop->focus;
+  insert_node(target_monitor, target_desktop, n, focus);
 
   // notify client of scale
-  if (m->output) {
-    float scale = m->output->wlr_output->scale;
+  if (target_monitor->output) {
+    float scale = target_monitor->output->wlr_output->scale;
     wlr_fractional_scale_v1_notify_scale(toplevel->xdg_toplevel->base->surface, scale);
     wlr_surface_set_preferred_buffer_scale(toplevel->xdg_toplevel->base->surface, ceil(scale));
   }
 
-  focus_node(m, d, n);
-  arrange(m, d, true);
+  focus_node(target_monitor, target_desktop, n);
+  arrange(target_monitor, target_desktop, true);
 
   toplevel->image_capture_surface = wlr_scene_surface_create(
   	&toplevel->image_capture->tree, toplevel->xdg_toplevel->base->surface);

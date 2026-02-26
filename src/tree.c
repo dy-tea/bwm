@@ -205,11 +205,10 @@ void arrange(monitor_t *m, desktop_t *d, bool use_transaction) {
     return;
 
   struct wlr_box rect;
-  if (m->output) {
+  if (m->output)
     rect = m->output->usable_area;
-  } else {
+  else
     rect = m->rectangle;
-  }
 
   rect.x += m->padding.left + d->padding.left;
   rect.y += m->padding.top + d->padding.top;
@@ -234,9 +233,8 @@ void arrange(monitor_t *m, desktop_t *d, bool use_transaction) {
 
   apply_layout(m, d, d->root, rect, rect);
 
-  if (use_transaction) {
+  if (use_transaction)
     transaction_commit_dirty();
-  }
 }
 
 void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
@@ -244,8 +242,10 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
   if (n == NULL)
     return;
 
-  // skip hidden nodes
+  // skip hidden or floating nodes from tiled layout
   if (n->hidden)
+    return;
+  if (n->client && n->client->state == STATE_FLOATING)
     return;
 
   // set pending

@@ -21,6 +21,18 @@ static struct wlr_ext_workspace_handle_v1 *find_workspace_by_name(const char *na
 }
 
 struct desktop_t *find_desktop_by_name(const char *name) {
+  if (!name || name[0] == '\0') return NULL;
+
+  if (name[0] == '^' && name[1] >= '1' && name[1] <= '9') {
+    int mon_idx = name[1] - '1';
+    monitor_t *m = mon_head;
+    for (int i = 0; m != NULL && i < mon_idx; m = m->next, i++)
+    	;
+    if (m && m->desk_head)
+      return m->desk_head;
+    return NULL;
+  }
+
   monitor_t *m = mon_head;
   while (m != NULL) {
     desktop_t *d = m->desk_head;

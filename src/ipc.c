@@ -8,6 +8,7 @@
 #include "output_config.h"
 #include "input.h"
 #include "keyboard.h"
+#include "rule.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1183,6 +1184,140 @@ static void ipc_cmd_send(char **args, int num, int client_fd) {
   }
 }
 
+static void ipc_cmd_rule(char **args, int num, int client_fd) {
+  if (num < 1) {
+    send_failure(client_fd, "rule: missing arguments\n");
+    return;
+  }
+
+  char *subcmd = *args;
+
+  if (streq("-a", subcmd) || streq("--add", subcmd)) {
+    if (num < 2) {
+      send_failure(client_fd, "rule -a: missing app_id\n");
+      return;
+    }
+
+    args++;
+    num--;
+
+    rule_t *r = make_rule();
+    if (!r) {
+      send_failure(client_fd, "rule: failed to create rule\n");
+      return;
+    }
+
+    char *app_id = NULL;
+    char *title = NULL;
+    r->consequence.follow = true;
+    r->consequence.has_follow = true;
+    r->consequence.focus = true;
+    r->consequence.has_focus = true;
+    r->consequence.manage = true;
+    r->consequence.has_manage = true;
+
+    while (num > 0) {
+      char *arg = *args;
+
+      if (arg[0] != '-' && app_id == NULL) {
+        app_id = arg;
+        strncpy(r->match.app_id, app_id, MAXLEN - 1);
+        r->match.app_id[MAXLEN - 1] = '\0';
+      } else if (streq("title=", arg) || strncmp(arg, "title=", 6) == 0) {
+        title = arg + 6;
+        strncpy(r->match.title, title, MAXLEN - 1);
+        r->match.title[MAXLEN - 1] = '\0';
+      } else if (streq("state=tiled", arg)) {
+        r->consequence.state = STATE_TILED;
+        r->consequence.has_state = true;
+      } else if (streq("state=floating", arg)) {
+        r->consequence.state = STATE_FLOATING;
+        r->consequence.has_state = true;
+      } else if (streq("state=fullscreen", arg)) {
+        r->consequence.state = STATE_FULLSCREEN;
+        r->consequence.has_state = true;
+      } else if (streq("state=pseudo_tiled", arg)) {
+        r->consequence.state = STATE_PSEUDO_TILED;
+        r->consequence.has_state = true;
+      } else if (streq("desktop=^", arg) || (strlen(arg) > 8 && strncmp(arg, "desktop=", 8) == 0)) {
+        char *desk = arg + 8;
+        strncpy(r->consequence.desktop, desk, SMALEN - 1);
+        r->consequence.desktop[SMALEN - 1] = '\0';
+        r->consequence.has_desktop = true;
+      } else if (streq("follow=on", arg)) {
+        r->consequence.follow = true;
+        r->consequence.has_follow = true;
+      } else if (streq("follow=off", arg)) {
+        r->consequence.follow = false;
+        r->consequence.has_follow = true;
+      } else if (streq("focus=on", arg)) {
+        r->consequence.focus = true;
+        r->consequence.has_focus = true;
+      } else if (streq("focus=off", arg)) {
+        r->consequence.focus = false;
+        r->consequence.has_focus = true;
+      } else if (streq("manage=on", arg)) {
+        r->consequence.manage = true;
+        r->consequence.has_manage = true;
+      } else if (streq("manage=off", arg)) {
+        r->consequence.manage = false;
+        r->consequence.has_manage = true;
+      } else if (streq("locked=on", arg)) {
+        r->consequence.locked = true;
+        r->consequence.has_locked = true;
+      } else if (streq("locked=off", arg)) {
+        r->consequence.locked = false;
+        r->consequence.has_locked = true;
+      } else if (streq("hidden=on", arg)) {
+        r->consequence.hidden = true;
+        r->consequence.has_hidden = true;
+      } else if (streq("hidden=off", arg)) {
+        r->consequence.hidden = false;
+        r->consequence.has_hidden = true;
+      } else if (streq("sticky=on", arg)) {
+        r->consequence.sticky = true;
+        r->consequence.has_sticky = true;
+      } else if (streq("sticky=off", arg)) {
+        r->consequence.sticky = false;
+        r->consequence.has_sticky = true;
+      } else if (streq("one_shot", arg)) {
+        r->match.one_shot = true;
+      }
+
+      args++;
+      num--;
+    }
+
+    if (!app_id && !title) {
+      free(r);
+      send_failure(client_fd, "rule -a: must specify app_id or title\n");
+      return;
+    }
+
+    add_rule(r);
+    send_success(client_fd, "rule added\n");
+
+  } else if (streq("-r", subcmd) || streq("--remove", subcmd)) {
+    if (num < 2) {
+      send_failure(client_fd, "rule -r: missing index\n");
+      return;
+    }
+    args++;
+    int idx = atoi(*args);
+    if (remove_rule_by_index(idx))
+      send_success(client_fd, "rule removed\n");
+    else
+   		send_failure(client_fd, "rule -r: invalid index\n");
+
+  } else if (streq("-l", subcmd) || streq("--list", subcmd)) {
+    char buf[BWM_BUFSIZ];
+    list_rules(buf, sizeof(buf));
+    send_success(client_fd, buf);
+  } else {
+    send_failure(client_fd, "rule: unknown subcommand (use -a, -r, or -l)\n");
+  }
+}
+
 static void process_ipc_message(char *msg, int msg_len, int client_fd) {
   wlr_log(WLR_DEBUG, "IPC: processing message: %.*s", msg_len, msg);
   int cap = 16;
@@ -1249,6 +1384,8 @@ static void process_ipc_message(char *msg, int msg_len, int client_fd) {
     ipc_cmd_flip(++args, --num, client_fd);
   } else if (streq("send", *args)) {
     ipc_cmd_send(++args, --num, client_fd);
+  } else if (streq("rule", *args)) {
+    ipc_cmd_rule(++args, --num, client_fd);
   } else {
     send_failure(client_fd, "unknown command\n");
   }

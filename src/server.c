@@ -12,6 +12,7 @@
 #include "output_config.h"
 #include "input.h"
 #include "idle.h"
+#include "rule.h"
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -398,6 +399,7 @@ void server_init(void) {
   transaction_init();
   workspace_init();
   ipc_init();
+  rule_init();
   output_config_init();
   input_init();
 }
@@ -557,6 +559,7 @@ void server_fini(void) {
   transaction_fini();
   workspace_fini();
   ipc_cleanup();
+  rule_fini();
   input_fini();
   config_fini();
   wl_display_destroy_clients(server.wl_display);
