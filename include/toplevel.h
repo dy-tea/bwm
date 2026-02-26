@@ -16,6 +16,8 @@ struct bwm_toplevel {
   struct wlr_ext_foreign_toplevel_handle_v1 *ext_foreign_toplevel;
   struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel;
 
+  char *foreign_identifier;
+
   struct wlr_ext_image_capture_source_v1 *image_capture_source;
   struct wlr_scene_surface *image_capture_surface;
   struct wlr_scene *image_capture;

@@ -184,6 +184,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   toplevel->ext_foreign_toplevel =
     wlr_ext_foreign_toplevel_handle_v1_create(server.foreign_toplevel_list, &ext_state);
   toplevel->ext_foreign_toplevel->data = toplevel;
+  toplevel->foreign_identifier = toplevel->ext_foreign_toplevel->identifier;
 
   toplevel->foreign_toplevel =
     wlr_foreign_toplevel_handle_v1_create(server.foreign_toplevel_manager);

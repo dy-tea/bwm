@@ -890,29 +890,30 @@ static void ipc_cmd_query(char **args, int num, int client_fd) {
     offset += snprintf(buf + offset, sizeof(buf) - offset, "{\n");
 
     for (monitor_t *m = server.monitors;
-      ;	m = m->next, offset += snprintf(buf + offset, sizeof(buf) - offset,
-		  		"  \"monitor\": {\"name\": \"%s\", \"id\": %u},\n",
-		     	m->name, m->id))
-     	for (desktop_t *d = m->desk;
-        ; d = d->next,  offset += snprintf(buf + offset, sizeof(buf) - offset,
-	          "  \"desktop\": {\"name\": \"%s\", \"id\": %u, \"layout\": %d},\n",
-	          d->name, d->id, d->layout))
-       	;
+      m != NULL;
+      m = m->next) {
+      offset += snprintf(buf + offset, sizeof(buf) - offset,
+        "  \"monitor\": {\"name\": \"%s\", \"id\": %u},\n",
+        m->name, m->id);
+      for (desktop_t *d = m->desk; d != NULL; d = d->next)
+        offset += snprintf(buf + offset, sizeof(buf) - offset,
+          "  \"desktop\": {\"name\": \"%s\", \"id\": %u, \"layout\": %d},\n",
+          d->name, d->id, d->layout);
+    }
 
     struct bwm_toplevel *toplevel;
     wl_list_for_each(toplevel, &server.toplevels, link)
       offset += snprintf(buf + offset, sizeof(buf) - offset,
-        "  \"toplevel\": {\"app_id\": \"%s\", \"title\": \"%s\"}\n",
+        "  \"toplevel\": {\"app_id\": \"%s\", \"title\": \"%s\", \"identifier\": \"%s\"}\n",
         toplevel->node && toplevel->node->client ? toplevel->node->client->app_id : "?",
-        toplevel->node && toplevel->node->client ? toplevel->node->client->title : "?");
+        toplevel->node && toplevel->node->client ? toplevel->node->client->title : "?",
+        toplevel->foreign_identifier ? toplevel->foreign_identifier : "?");
 
     offset += snprintf(buf + offset, sizeof(buf) - offset, "}\n");
     send_success(client_fd, buf);
   } else if (streq("-M", *args) || streq("--monitors", *args)) {
-    for (monitor_t *m = server.monitors
-      ; m != NULL
-      ; m = m->next)
-     		offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", m->name);
+    for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+     	offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", m->name);
     send_success(client_fd, buf);
   } else if (streq("-D", *args) || streq("--desktops", *args)) {
     for (monitor_t *m = server.monitors; m != NULL; m = m->next)
@@ -922,8 +923,42 @@ static void ipc_cmd_query(char **args, int num, int client_fd) {
   } else if (streq("-N", *args) || streq("--nodes", *args)) {
     struct bwm_toplevel *toplevel;
     wl_list_for_each(toplevel, &server.toplevels, link)
-      offset += snprintf(buf + offset, sizeof(buf) - offset, "%u\n",
-        toplevel->node ? toplevel->node->id : 0);
+      offset += snprintf(buf + offset, sizeof(buf) - offset, "%u %s\n",
+        toplevel->node ? toplevel->node->id : 0,
+        toplevel->foreign_identifier ? toplevel->foreign_identifier : "?");
+    send_success(client_fd, buf);
+  } else if (streq("-f", *args) || streq("--focused", *args)) {
+    monitor_t *m = server.focused_monitor;
+    if (!m || !m->desk) {
+      send_failure(client_fd, "no focused desktop\n");
+      return;
+    }
+    node_t *n = m->desk->focus;
+    if (!n) {
+      send_failure(client_fd, "no focused node\n");
+      return;
+    }
+    char *foreign_id = "?";
+    struct bwm_toplevel *toplevel;
+    wl_list_for_each(toplevel, &server.toplevels, link)
+      if (toplevel->node == n) {
+        foreign_id = toplevel->foreign_identifier ? toplevel->foreign_identifier : "?";
+        break;
+      }
+    offset += snprintf(buf + offset, sizeof(buf) - offset,
+      "{\"monitor\": \"%s\", \"desktop\": \"%s\", \"id\": %u, \"type\": %d, "
+      "\"rect\": {\"x\": %d, \"y\": %d, \"width\": %d, \"height\": %d}, "
+      "\"client\": \"%s\", \"identifier\": \"%s\"}\n",
+      m->name,
+      m->desk->name,
+      n->id,
+      n->split_type,
+      n->rectangle.x,
+      n->rectangle.y,
+      n->rectangle.width,
+      n->rectangle.height,
+      n->client && n->client->app_id[0] ? n->client->app_id : "?",
+      foreign_id);
     send_success(client_fd, buf);
   } else {
     send_failure(client_fd, "query: unknown command\n");
