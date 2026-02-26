@@ -133,6 +133,7 @@ static bind_action_t parse_action(const char *cmd, int *desktop_index) {
         if (strcmp(args[2], "tiled") == 0) return BIND_NODE_STATE_TILED;
         if (strcmp(args[2], "floating") == 0) return BIND_NODE_STATE_FLOATING;
         if (strcmp(args[2], "fullscreen") == 0) return BIND_NODE_STATE_FULLSCREEN;
+        if (strcmp(args[2], "pseudo_tiled") == 0) return BIND_TOGGLE_PSEUDO_TILED;
       }
 
       if (strcmp(args[1], "-d") == 0 || strcmp(args[1], "--to-desktop") == 0) {
@@ -547,6 +548,9 @@ void execute_keybind(keybind_t *kb) {
       break;
     case BIND_TOGGLE_FULLSCREEN:
       toggle_fullscreen();
+      break;
+    case BIND_TOGGLE_PSEUDO_TILED:
+      toggle_pseudo_tiled();
       break;
     case BIND_TOGGLE_MONOCLE:
       toggle_monocle();

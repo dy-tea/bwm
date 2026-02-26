@@ -291,6 +291,14 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
       r.height = (bleed < r.height ? r.height - bleed : 1);
     }
 
+    // pseudo tile
+    if (n->client->state == STATE_PSEUDO_TILED) {
+      if (r.width > n->client->floating_rectangle.width)
+        r.width = n->client->floating_rectangle.width;
+      if (r.height > n->client->floating_rectangle.height)
+        r.height = n->client->floating_rectangle.height;
+    }
+
     // Enforce minimum size constraints
     if (r.width < MIN_WIDTH) r.width = MIN_WIDTH;
     if (r.height < MIN_HEIGHT) r.height = MIN_HEIGHT;

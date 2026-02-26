@@ -1125,6 +1125,9 @@ static void ipc_cmd_toggle(char **args, int num, int client_fd) {
   } else if (streq("fullscreen", *args)) {
     toggle_fullscreen();
     send_success(client_fd, "toggled\n");
+  } else if (streq("pseudo_tiled", *args)) {
+    toggle_pseudo_tiled();
+    send_success(client_fd, "toggled\n");
   } else if (streq("monocle", *args)) {
     toggle_monocle();
     send_success(client_fd, "toggled\n");

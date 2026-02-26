@@ -29,6 +29,7 @@ void focus_south(void);
 void close_focused(void);
 void toggle_floating(void);
 void toggle_fullscreen(void);
+void toggle_pseudo_tiled(void);
 
 // window swapping
 void swap_west(void);

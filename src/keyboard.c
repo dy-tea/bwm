@@ -345,6 +345,30 @@ void toggle_fullscreen(void) {
   }
 }
 
+void toggle_pseudo_tiled(void) {
+  if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
+    return;
+
+  node_t *n = mon->desk->focus;
+  if (n->client == NULL)
+    return;
+
+  if (n->client->state == STATE_PSEUDO_TILED) {
+    set_state(mon, mon->desk, n, STATE_TILED);
+    wlr_log(WLR_INFO, "Window tiled");
+  } else {
+    struct wlr_box base_rect = n->client->toplevel->xdg_toplevel->base->geometry;
+    n->client->floating_rectangle = (struct wlr_box){
+      .x = 0,
+      .y = 0,
+      .width = base_rect.width,
+      .height = base_rect.height
+    };
+    set_state(mon, mon->desk, n, STATE_PSEUDO_TILED);
+    wlr_log(WLR_INFO, "Window pseudo_tiled");
+  }
+}
+
 void focus_next_desktop(void) {
   if (mon == NULL || mon->desk == NULL)
     return;

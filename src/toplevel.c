@@ -190,12 +190,23 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   if (rule && rule->has_state)
     n->client->state = rule->state;
 
+  bool should_focus = true;
+  bool should_follow = true;
+  if (rule) {
+    if (rule->has_focus && !rule->focus)
+      should_focus = false;
+    if (rule->has_follow && !rule->follow)
+      should_follow = false;
+  }
+
   desktop_t *target_desktop = d;
   if (rule && rule->has_desktop) {
     desktop_t *new_desk = find_desktop_by_name(rule->desktop);
     if (new_desk)
       target_desktop = new_desk;
   }
+
+  bool desktop_changed = (target_desktop != d);
 
   if (rule && rule->has_hidden)
     n->hidden = rule->hidden;
@@ -261,6 +272,15 @@ void toplevel_map(struct wl_listener *listener, void *data) {
     n->hidden = true;
     n->client->shown = true;
     wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
+  } else if (rule && rule->state == STATE_PSEUDO_TILED) {
+    struct wlr_box base_rect = n->client->toplevel->xdg_toplevel->base->geometry;
+    n->client->floating_rectangle = (struct wlr_box){
+      .x = 0,
+      .y = 0,
+      .width = base_rect.width,
+      .height = base_rect.height
+    };
+    n->client->state = STATE_PSEUDO_TILED;
   }
 
   // insert node into tree
@@ -274,7 +294,16 @@ void toplevel_map(struct wl_listener *listener, void *data) {
     wlr_surface_set_preferred_buffer_scale(toplevel->xdg_toplevel->base->surface, ceil(scale));
   }
 
-  focus_node(target_monitor, target_desktop, n);
+  if (should_focus) {
+    if (desktop_changed && !should_follow)
+      focus_node(m, d, d->focus);
+    else
+      focus_node(target_monitor, target_desktop, n);
+  }
+
+  if (rule && rule->state == STATE_FULLSCREEN)
+  	toggle_fullscreen();
+
   arrange(target_monitor, target_desktop, true);
 
   toplevel->image_capture_surface = wlr_scene_surface_create(
