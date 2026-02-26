@@ -8,6 +8,7 @@
 #include "tree.h"
 #include <time.h>
 #include <stdlib.h>
+#include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
@@ -18,6 +19,63 @@
 
 static void handle_output_destroy(struct wl_listener *listener, void *data);
 
+static enum wlr_scale_filter_mode get_scale_filter(struct bwm_output *output,
+		struct wlr_scene_buffer *buffer) {
+	if (buffer->dst_width > 0 && buffer->dst_height > 0 && (
+			buffer->dst_width < buffer->WLR_PRIVATE.buffer_width ||
+			buffer->dst_height < buffer->WLR_PRIVATE.buffer_height))
+		return WLR_SCALE_FILTER_BILINEAR;
+
+	switch (output->scale_filter_mode) {
+	case SCALE_FILTER_LINEAR:
+		return WLR_SCALE_FILTER_BILINEAR;
+	case SCALE_FILTER_NEAREST:
+	case SCALE_FILTER_AUTO:
+	default:
+		return WLR_SCALE_FILTER_NEAREST;
+	}
+}
+
+static void output_configure_scene_iterator(struct wlr_scene_buffer *buffer,
+		int sx, int sy, void *data) {
+	struct bwm_output *output = data;
+	if (!output)
+		return;
+
+	buffer->filter_mode = get_scale_filter(output, buffer);
+}
+
+static void output_configure_scene(struct bwm_output *output) {
+	if (!output)
+		return;
+
+	wlr_scene_node_for_each_buffer(&server.bg_tree->node,
+		output_configure_scene_iterator, output);
+	wlr_scene_node_for_each_buffer(&server.bot_tree->node,
+		output_configure_scene_iterator, output);
+	wlr_scene_node_for_each_buffer(&server.tile_tree->node,
+		output_configure_scene_iterator, output);
+	wlr_scene_node_for_each_buffer(&server.float_tree->node,
+		output_configure_scene_iterator, output);
+	wlr_scene_node_for_each_buffer(&server.top_tree->node,
+		output_configure_scene_iterator, output);
+	wlr_scene_node_for_each_buffer(&server.full_tree->node,
+		output_configure_scene_iterator, output);
+	wlr_scene_node_for_each_buffer(&server.over_tree->node,
+		output_configure_scene_iterator, output);
+	wlr_scene_node_for_each_buffer(&server.lock_tree->node,
+		output_configure_scene_iterator, output);
+
+	wlr_scene_node_for_each_buffer(&output->layer_bg->node,
+		output_configure_scene_iterator, output);
+	wlr_scene_node_for_each_buffer(&output->layer_bottom->node,
+		output_configure_scene_iterator, output);
+	wlr_scene_node_for_each_buffer(&output->layer_top->node,
+		output_configure_scene_iterator, output);
+	wlr_scene_node_for_each_buffer(&output->layer_overlay->node,
+		output_configure_scene_iterator, output);
+}
+
 void output_frame(struct wl_listener *listener, void *data) {
 	(void)data;
   struct bwm_output *output = wl_container_of(listener, output, frame);
@@ -26,6 +84,8 @@ void output_frame(struct wl_listener *listener, void *data) {
 
   if (!scene_output)
     return;
+
+  output_configure_scene(output);
 
   wlr_scene_output_commit(scene_output, NULL);
 
@@ -239,6 +299,7 @@ void output_set_scale_filter(struct bwm_output *output, enum scale_filter_mode m
   if (!output)
     return;
   output->scale_filter_mode = mode;
+  output_configure_scene(output);
 }
 
 void output_get_identifier(char *identifier, size_t len, struct bwm_output *output) {
