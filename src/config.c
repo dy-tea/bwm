@@ -23,6 +23,13 @@ static const char *custom_config_dir = NULL;
 
 keybind_t keybinds[MAX_KEYBINDS];
 size_t num_keybinds = 0;
+submap_t *active_submap = NULL;
+
+#define MAX_SUBMAPS 32
+static submap_t submaps[MAX_SUBMAPS];
+static size_t num_submaps = 0;
+static submap_t *current_parsing_submap = NULL;
+
 static int hotkey_watch_fd = -1;
 static char hotkey_config_path[PATH_MAX];
 static void setup_inotify_watch(const char *config_path);
@@ -97,11 +104,21 @@ static uint32_t parse_keycode(const char *name) {
   return 0;
 }
 
-static bind_action_t parse_action(const char *cmd, int *desktop_index) {
+static bind_action_t parse_action(const char *cmd, int *desktop_index, char *submap_name) {
   *desktop_index = 0;
+  if (submap_name)
+    submap_name[0] = '\0';
 
   if (!cmd || cmd[0] == '\0')
     return BIND_NONE;
+
+  if (cmd[0] == '@') {
+    if (strcmp(cmd, "@exit") == 0)
+      return BIND_EXIT_SUBMAP;
+    if (submap_name)
+      snprintf(submap_name, MAXLEN, "%s", cmd + 1);
+    return BIND_ENTER_SUBMAP;
+  }
 
   if (strncmp(cmd, "bmsg ", 5) == 0) {
     char buf[MAXLEN];
@@ -121,6 +138,28 @@ static bind_action_t parse_action(const char *cmd, int *desktop_index) {
 
     if (strcmp(args[0], "quit") == 0)
       return BIND_QUIT;
+
+    if (strcmp(args[0], "focus") == 0 && argc >= 2) {
+      if (strcmp(args[1], "west") == 0) return BIND_FOCUS_WEST;
+      if (strcmp(args[1], "south") == 0) return BIND_FOCUS_SOUTH;
+      if (strcmp(args[1], "north") == 0) return BIND_FOCUS_NORTH;
+      if (strcmp(args[1], "east") == 0) return BIND_FOCUS_EAST;
+    }
+
+    if (strcmp(args[0], "swap") == 0 && argc >= 2) {
+      if (strcmp(args[1], "west") == 0) return BIND_SWAP_WEST;
+      if (strcmp(args[1], "south") == 0) return BIND_SWAP_SOUTH;
+      if (strcmp(args[1], "north") == 0) return BIND_SWAP_NORTH;
+      if (strcmp(args[1], "east") == 0) return BIND_SWAP_EAST;
+    }
+
+    if (strcmp(args[0], "presel") == 0 && argc >= 2) {
+      if (strcmp(args[1], "west") == 0) return BIND_PRESEL_WEST;
+      if (strcmp(args[1], "south") == 0) return BIND_PRESEL_SOUTH;
+      if (strcmp(args[1], "north") == 0) return BIND_PRESEL_NORTH;
+      if (strcmp(args[1], "east") == 0) return BIND_PRESEL_EAST;
+      if (strcmp(args[1], "cancel") == 0) return BIND_PRESEL_CANCEL;
+    }
 
     if (strcmp(args[0], "node") == 0 && argc >= 2) {
       if (strcmp(args[1], "-c") == 0 || strcmp(args[1], "--close") == 0)
@@ -200,26 +239,44 @@ static char *expand_sequence(const char *input, char *output, size_t out_size) {
   return output;
 }
 
-static void add_keybind(uint32_t modifiers, xkb_keysym_t keysym, uint32_t keycode, bool use_keycode, bind_action_t action, int desktop_index, const char *external_cmd) {
-  if (num_keybinds >= MAX_KEYBINDS) {
-    wlr_log(WLR_ERROR, "Maximum number of keybinds reached");
-    return;
+static void add_keybind(uint32_t modifiers, xkb_keysym_t keysym, uint32_t keycode, bool use_keycode, bind_action_t action, int desktop_index, const char *external_cmd, const char *submap_name) {
+  size_t *num_ptr;
+  keybind_t *kb_array;
+
+  if (current_parsing_submap) {
+    if (current_parsing_submap->num_keybinds >= MAX_KEYBINDS) {
+      wlr_log(WLR_ERROR, "Maximum number of keybinds reached for submap %s", current_parsing_submap->name);
+      return;
+    }
+    num_ptr = &current_parsing_submap->num_keybinds;
+    kb_array = current_parsing_submap->keybinds;
+  } else {
+    if (num_keybinds >= MAX_KEYBINDS) {
+      wlr_log(WLR_ERROR, "Maximum number of keybinds reached");
+      return;
+    }
+    num_ptr = &num_keybinds;
+    kb_array = keybinds;
   }
 
-  keybind_t *kb = &keybinds[num_keybinds++];
+  keybind_t *kb = &kb_array[(*num_ptr)++];
   kb->modifiers = modifiers;
   kb->keysym = keysym;
   kb->keycode = keycode;
   kb->use_keycode = use_keycode;
   kb->action = action;
   kb->desktop_index = desktop_index;
+  if (submap_name)
+    snprintf(kb->submap_name, sizeof(kb->submap_name), "%s", submap_name);
+  else
+    kb->submap_name[0] = '\0';
   if (external_cmd)
     snprintf(kb->external_cmd, sizeof(kb->external_cmd), "%s", external_cmd);
   else
     kb->external_cmd[0] = '\0';
 
-  wlr_log(WLR_DEBUG, "Added keybind: mod=%u keysym=%u keycode=%u action=%d index=%d",
-          modifiers, keysym, keycode, action, desktop_index);
+  wlr_log(WLR_DEBUG, "Added keybind: mod=%u keysym=%u keycode=%u action=%d index=%d submap=%s",
+          modifiers, keysym, keycode, action, desktop_index, submap_name ? submap_name : "global");
 }
 
 static void parse_hotkey_line(const char *hotkey_str, const char *command_str) {
@@ -276,12 +333,14 @@ static void parse_hotkey_line(const char *hotkey_str, const char *command_str) {
         wlr_log(WLR_ERROR, "Unknown keysym: %s", single_hotkey);
       } else {
         int desktop_index = 0;
-        bind_action_t action = parse_action(single_cmd, &desktop_index);
-        wlr_log(WLR_DEBUG, "Parsed action: %d for cmd: '%s'", action, single_cmd);
+        char submap_name[MAXLEN];
+        submap_name[0] = '\0';
+        bind_action_t action = parse_action(single_cmd, &desktop_index, submap_name);
+        wlr_log(WLR_DEBUG, "Parsed action: %d for cmd: '%s' submap: '%s'", action, single_cmd, submap_name);
         if (action != BIND_EXTERNAL)
-          add_keybind(modifiers, keysym, keycode, use_keycode, action, desktop_index, NULL);
+          add_keybind(modifiers, keysym, keycode, use_keycode, action, desktop_index, NULL, submap_name[0] ? submap_name : NULL);
         else
-          add_keybind(modifiers, keysym, keycode, use_keycode, action, desktop_index, single_cmd);
+          add_keybind(modifiers, keysym, keycode, use_keycode, action, desktop_index, single_cmd, submap_name[0] ? submap_name : NULL);
       }
 
       cmd_token = strtok_r(NULL, "\t", &saveptr);
@@ -326,8 +385,28 @@ void load_hotkeys_idle(void *data) {
   setup_inotify_watch(hotkey_init_path);
 }
 
+static submap_t *find_or_create_submap(const char *name) {
+  for (size_t i = 0; i < num_submaps; i++)
+    if (strcmp(submaps[i].name, name) == 0)
+      return &submaps[i];
+
+  if (num_submaps >= MAX_SUBMAPS) {
+    wlr_log(WLR_ERROR, "Maximum number of submaps reached");
+    return NULL;
+  }
+
+  submap_t *sm = &submaps[num_submaps++];
+  snprintf(sm->name, sizeof(sm->name), "%s", name);
+  sm->num_keybinds = 0;
+  sm->parent = NULL;
+  return sm;
+}
+
 void load_hotkeys(const char *config_path) {
   num_keybinds = 0;
+  num_submaps = 0;
+  active_submap = NULL;
+  current_parsing_submap = NULL;
 
   wlr_log(WLR_DEBUG, "load_hotkeys called with path: %s", config_path);
 
@@ -343,6 +422,11 @@ void load_hotkeys(const char *config_path) {
   int offset = 0;
   hotkey[0] = '\0';
   command[0] = '\0';
+  char pending_hotkey[MAXLEN * 2];
+  char pending_command[MAXLEN * 2];
+  pending_hotkey[0] = '\0';
+  pending_command[0] = '\0';
+  size_t pending_hotkey_indent = 0;
 
   while (fgets(line, sizeof(line), f)) {
     wlr_log(WLR_DEBUG, "Config line: [%s]", line);
@@ -350,48 +434,108 @@ void load_hotkeys(const char *config_path) {
     if (len > 0 && line[len-1] == '\n')
       line[len-1] = '\0';
 
-    char first_char = line[0];
-    while (first_char == ' ' || first_char == '\t') first_char++;
+    size_t indent = 0;
+    while (line[indent] == ' ' || line[indent] == '\t') indent++;
 
-    if (first_char == '#' || first_char == '\0')
+    char *ptr = line + indent;
+    char *content_start = ptr;
+    while (*content_start == ' ' || *content_start == '\t') content_start++;
+    char first_char = *content_start;
+
+    if (line[0] == '#' || line[0] == '\0')
       continue;
 
-    char *ptr = line;
-    while (*ptr == ' ' || *ptr == '\t') ptr++;
-
-    if (isgraph((unsigned char)first_char)) {
-      if (hotkey[0] != '\0' && command[0] != '\0') {
-        wlr_log(WLR_DEBUG, "Parsed: hotkey=[%s] command=[%s]", hotkey, command);
+    if (first_char == '@') {
+      size_t flush_indent = pending_hotkey_indent;
+      if (pending_hotkey[0] != '\0') {
+        snprintf(hotkey, sizeof(hotkey), "%s", pending_hotkey);
+        snprintf(command, sizeof(command), "%s", pending_command);
         parse_hotkey_line(hotkey, command);
+        pending_hotkey[0] = '\0';
+        pending_command[0] = '\0';
       }
-      snprintf(hotkey, sizeof(hotkey), "%s", ptr);
-      command[0] = '\0';
+      if (current_parsing_submap == NULL) {
+        pending_hotkey_indent = 0;
+        char *submap_name = content_start + 1;
+        current_parsing_submap = find_or_create_submap(submap_name);
+      } else {
+        snprintf(pending_command, sizeof(pending_command), "%s", content_start);
+        pending_hotkey_indent = flush_indent;
+        offset = 0;
+      }
+      continue;
+    }
+
+    if (indent == 0 && strstr(ptr, "->")) {
+      char *arrow = strstr(ptr, "->");
+      if (arrow) {
+        if (pending_hotkey[0] != '\0') {
+          snprintf(hotkey, sizeof(hotkey), "%s", pending_hotkey);
+          snprintf(command, sizeof(command), "%s", pending_command);
+          parse_hotkey_line(hotkey, command);
+        }
+        size_t key_part_len = arrow - ptr;
+        while (key_part_len > 0 && ptr[key_part_len - 1] == ' ') key_part_len--;
+        if (key_part_len < sizeof(pending_hotkey)) {
+          strncpy(pending_hotkey, ptr, key_part_len);
+          pending_hotkey[key_part_len] = '\0';
+        }
+        char *cmd_part = arrow + 2;
+        while (*cmd_part == ' ') cmd_part++;
+        snprintf(pending_command, sizeof(pending_command), "%s", cmd_part);
+        continue;
+      }
+    }
+
+    if (isgraph((unsigned char)first_char) || (first_char != '\0' && !isspace((unsigned char)first_char))) {
+      if (pending_hotkey[0] != '\0') {
+        if (indent == 0 || indent <= pending_hotkey_indent) {
+          snprintf(hotkey, sizeof(hotkey), "%s", pending_hotkey);
+          snprintf(command, sizeof(command), "%s", pending_command);
+          parse_hotkey_line(hotkey, command);
+          pending_hotkey[0] = '\0';
+          pending_command[0] = '\0';
+          pending_hotkey_indent = 0;
+        } else {
+          snprintf(pending_command, sizeof(pending_command), "%s", content_start);
+          offset = 0;
+          continue;
+        }
+      }
+      snprintf(pending_hotkey, sizeof(pending_hotkey), "%s", content_start);
+      pending_command[0] = '\0';
+      pending_hotkey_indent = indent;
       offset = 0;
-    } else if (isspace((unsigned char)first_char) && hotkey[0] != '\0') {
-      if (command[0] != '\0' && offset > 0 && command[offset-1] != ' ') {
-        command[offset++] = ' ';
+    } else if (pending_hotkey[0] != '\0') {
+      if (pending_command[0] != '\0' && offset > 0 && pending_command[offset-1] != ' ') {
+        pending_command[offset++] = ' ';
       }
       bool last_was_space = false;
-      for (size_t i = 0; ptr[i] && offset < (int)sizeof(command) - 1; i++) {
+      for (size_t i = 0; ptr[i] && offset < (int)sizeof(pending_command) - 1; i++) {
         if (isspace((unsigned char)ptr[i])) {
-          if (!last_was_space && offset > 0 && command[offset-1] != ' ') {
-            command[offset++] = ' ';
+          if (!last_was_space && offset > 0 && pending_command[offset-1] != ' ') {
+            pending_command[offset++] = ' ';
             last_was_space = true;
           }
         } else {
-          command[offset++] = ptr[i];
+          pending_command[offset++] = ptr[i];
           last_was_space = false;
         }
       }
-      command[offset] = '\0';
+      pending_command[offset] = '\0';
     }
   }
 
-  if (hotkey[0] != '\0' && command[0] != '\0')
+  if (pending_hotkey[0] != '\0') {
+    snprintf(hotkey, sizeof(hotkey), "%s", pending_hotkey);
+    snprintf(command, sizeof(command), "%s", pending_command);
     parse_hotkey_line(hotkey, command);
+  }
+
+  current_parsing_submap = NULL;
 
   fclose(f);
-  wlr_log(WLR_INFO, "Loaded %zu keybinds from %s", num_keybinds, config_path);
+  wlr_log(WLR_INFO, "Loaded %zu keybinds and %zu submaps from %s", num_keybinds, num_submaps, config_path);
 }
 
 static void setup_inotify_watch(const char *config_path) {
@@ -612,9 +756,39 @@ void execute_keybind(keybind_t *kb) {
         }
       }
       break;
+    case BIND_ENTER_SUBMAP:
+      enter_submap(kb->submap_name);
+      break;
+    case BIND_EXIT_SUBMAP:
+      exit_submap();
+      break;
   }
 }
 
 int get_hotkey_watch_fd(void) {
   return hotkey_watch_fd;
+}
+
+static submap_t *find_submap(const char *name) {
+  for (size_t i = 0; i < num_submaps; i++)
+    if (strcmp(submaps[i].name, name) == 0)
+      return &submaps[i];
+  return NULL;
+}
+
+void enter_submap(const char *name) {
+  submap_t *sm = find_submap(name);
+  if (sm) {
+    active_submap = sm;
+    wlr_log(WLR_INFO, "Entered submap: %s", name);
+  } else {
+    wlr_log(WLR_ERROR, "Submap not found: %s", name);
+  }
+}
+
+void exit_submap(void) {
+  if (active_submap) {
+    wlr_log(WLR_INFO, "Exited submap: %s", active_submap->name);
+    active_submap = NULL;
+  }
 }

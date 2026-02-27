@@ -20,6 +20,7 @@ extern struct bwm_server server;
 
 extern keybind_t keybinds[MAX_KEYBINDS];
 extern size_t num_keybinds;
+extern submap_t *active_submap;
 
 bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed);
 
@@ -137,6 +138,17 @@ bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed) {
   if (!pressed)
     return false;
 
+  if (active_submap) {
+    for (size_t i = 0; i < active_submap->num_keybinds; i++) {
+      keybind_t *kb = &active_submap->keybinds[i];
+      if (kb->use_keycode && keybind_matches(kb, modifiers, 0, keycode)) {
+        execute_keybind(kb);
+        return true;
+      }
+    }
+    return false;
+  }
+
   for (size_t i = 0; i < num_keybinds; i++) {
     keybind_t *kb = &keybinds[i];
     if (kb->use_keycode && keybind_matches(kb, modifiers, 0, keycode)) {
@@ -150,7 +162,7 @@ bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed) {
 
 // keybind handling
 bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym) {
-  // handle vt switch - always available
+  // handle vt switch
   if (sym >= XKB_KEY_XF86Switch_VT_1 && sym <= XKB_KEY_XF86Switch_VT_12) {
     if (server.session) {
       wlr_session_change_vt(server.session,
@@ -159,7 +171,28 @@ bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym) {
     }
   }
 
-  // check user-defined keybinds
+  if (active_submap && sym == XKB_KEY_Escape) {
+    exit_submap();
+    return true;
+  }
+
+  // check if in submap
+  if (active_submap) {
+    wlr_log(WLR_DEBUG, "In submap '%s' with %zu keybinds, looking for keysym=%u mod=%u",
+        active_submap->name, active_submap->num_keybinds, sym, modifiers);
+    for (size_t i = 0; i < active_submap->num_keybinds; i++) {
+      keybind_t *kb = &active_submap->keybinds[i];
+      wlr_log(WLR_DEBUG, "  checking submap keybind %zu: keysym=%u mod=%u action=%d",
+          i, kb->keysym, kb->modifiers, kb->action);
+      if (!kb->use_keycode && keybind_matches(kb, modifiers, sym, 0)) {
+        execute_keybind(kb);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // check global user-defined keybinds
   for (size_t i = 0; i < num_keybinds; i++) {
     keybind_t *kb = &keybinds[i];
     if (!kb->use_keycode && keybind_matches(kb, modifiers, sym, 0)) {

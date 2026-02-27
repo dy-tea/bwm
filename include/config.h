@@ -7,9 +7,13 @@
 #define MAX_KEYBINDS 256
 #define MAXLEN 256
 
+typedef struct submap submap_t;
+
 typedef enum {
     BIND_NONE = 0,
     BIND_QUIT,
+    BIND_ENTER_SUBMAP,
+    BIND_EXIT_SUBMAP,
     BIND_NODE_FOCUS,
     BIND_NODE_CLOSE,
     BIND_NODE_STATE_TILED,
@@ -73,12 +77,21 @@ typedef struct {
     uint32_t keycode;
     bool use_keycode;
     bind_action_t action;
-    int desktop_index;  // 1-based index for desktop switching
+    int desktop_index;
+    char submap_name[MAXLEN];
     char external_cmd[MAXLEN];
 } keybind_t;
 
+struct submap {
+    char name[MAXLEN];
+    keybind_t keybinds[MAX_KEYBINDS];
+    size_t num_keybinds;
+    submap_t *parent;
+};
+
 extern keybind_t keybinds[MAX_KEYBINDS];
 extern size_t num_keybinds;
+extern submap_t *active_submap;
 
 void config_init(void);
 void config_init_with_config_dir(const char *config_dir);
@@ -91,3 +104,5 @@ void reload_hotkeys(void);
 bool keybind_matches(keybind_t *kb, uint32_t modifiers, xkb_keysym_t keysym, uint32_t keycode);
 void execute_keybind(keybind_t *kb);
 int get_hotkey_watch_fd(void);
+void enter_submap(const char *name);
+void exit_submap(void);

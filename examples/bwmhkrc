@@ -125,3 +125,20 @@ alt + shift + Left
 # quit
 alt + alt + q
 	bmsg quit
+
+# Focus submap
+# enter submap with alt + shift + f
+alt + shift + f -> @focus
+
+# focus with h j k l, exit with escape
+@focus
+  escape
+    @exit
+  h
+    bmsg focus west
+  j
+    bmsg focus south
+  k
+    bmsg focus north
+  l
+    bmsg focus east
