@@ -627,10 +627,12 @@ static void ipc_cmd_desktop(char **args, int num, int client_fd) {
   }
 
   if (streq("-f", *args) || streq("--focus", *args)) {
-    if (num >= 2 && (streq("next", *args) || streq("next.local", *args))) {
+    args++;
+    num--;
+    if (num >= 1 && (streq("next", *args) || streq("next.local", *args))) {
       focus_next_desktop();
       send_success(client_fd, "focused\n");
-    } else if (num >= 2 && (streq("prev", *args) || streq("prev.local", *args) || streq("previous", *args))) {
+    } else if (num >= 1 && (streq("prev", *args) || streq("prev.local", *args) || streq("previous", *args))) {
       focus_prev_desktop();
       send_success(client_fd, "focused\n");
     } else {

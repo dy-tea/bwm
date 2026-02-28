@@ -643,7 +643,7 @@ void handle_pointer_swipe_end(struct wl_listener *listener, void *data) {
   }
 
   uint32_t directions = GESTURE_DIRECTION_NONE;
-  double threshold = 50.0;
+  double threshold = 30.0;
 
   if (server.gesture_tracker.dx < -threshold)
     directions |= GESTURE_DIRECTION_LEFT;

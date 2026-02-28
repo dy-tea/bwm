@@ -420,24 +420,22 @@ void toggle_pseudo_tiled(void) {
 }
 
 void focus_next_desktop(void) {
-  if (mon == NULL || mon->desk == NULL)
+  if (!server.focused_monitor || !server.focused_monitor->desk)
     return;
 
-  desktop_t *next = mon->desk->next;
+  desktop_t *next = server.focused_monitor->desk->next;
   if (next != NULL) {
-    mon->desk = next;
-    wlr_log(WLR_INFO, "Switched to next desktop");
+    workspace_switch_to_desktop(next->name);
   }
 }
 
 void focus_prev_desktop(void) {
-  if (mon == NULL || mon->desk == NULL)
+  if (!server.focused_monitor || !server.focused_monitor->desk)
     return;
 
-  desktop_t *prev = mon->desk->prev;
+  desktop_t *prev = server.focused_monitor->desk->prev;
   if (prev != NULL) {
-    mon->desk = prev;
-    wlr_log(WLR_INFO, "Switched to previous desktop");
+   	wlr_log(WLR_DEBUG, "Focus prev desktop - %s", prev->name);
   }
 }
 

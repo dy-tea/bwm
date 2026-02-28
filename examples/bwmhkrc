@@ -128,9 +128,9 @@ alt + alt + q
 
 # Gesture bindings (touchpad)
 gesture swipe:3:left
-	bmsg desktop -f -l prev
+	bmsg desktop --focus prev
 gesture swipe:3:right
-	bmsg desktop -f -l next
+	bmsg desktop --focus next
 gesture pinch:in
 	bmsg node --state fullscreen
 gesture pinch:out
