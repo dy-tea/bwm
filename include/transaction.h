@@ -86,3 +86,10 @@ void transaction_fini(void);
  * Called by tree.c when node state changes.
  */
 void transaction_add_dirty_node(struct node_t *node);
+
+/**
+ * Notify the transaction system that a view has been unmapped.
+ * This marks any waiting instruction for this node as ready so the
+ * transaction can proceed without waiting for a destroyed client.
+ */
+void transaction_notify_view_unmapped(struct node_t *node);

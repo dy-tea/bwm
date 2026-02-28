@@ -507,6 +507,15 @@ bool transaction_notify_view_ready_by_serial(struct bwm_toplevel *toplevel,
   return false;
 }
 
+void transaction_notify_view_unmapped(node_t *node) {
+  if (!node || !node->instruction || !node->instruction->waiting)
+    return;
+
+  struct bwm_transaction_inst *instruction = node->instruction;
+  wlr_log(WLR_DEBUG, "View unmapped for node %u - marking instruction ready", node->id);
+  set_instruction_ready(instruction);
+}
+
 bool transaction_notify_view_ready_by_geometry(struct bwm_toplevel *toplevel,
                                                 int x, int y, int width, int height) {
   if (!toplevel || !toplevel->node)

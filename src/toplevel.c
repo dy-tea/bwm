@@ -345,6 +345,11 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
     return;
 
   node_t *n = toplevel->node;
+  
+  // notify transaction system that this view is unmapped
+  // so it can mark any waiting instruction as ready
+  transaction_notify_view_unmapped(n);
+
   monitor_t *m = mon;
   desktop_t *d = m ? m->desk : NULL;
 
