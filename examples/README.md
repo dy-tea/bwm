@@ -170,6 +170,66 @@ bmsg quit                           # Quit the compositor
 <shell command>                     # Execute any shell command (no bmsg prefix)
 ```
 
+### Gesture Bindings
+
+Touchpad gesture bindings are defined with the `gesture` keyword, followed by the gesture specification and command.
+
+Format:
+```
+gesture <type>[:<fingers>][:<directions>]
+	<command>
+```
+
+#### Gesture Types
+
+- `swipe` - Multi-finger swipe gesture
+- `pinch` - Multi-finger pinch gesture
+- `hold` - Multi-finger hold gesture
+
+#### Fingers
+
+- `1` to `5` - Number of fingers
+- `*` - Any number of fingers (use `*` literally)
+
+#### Directions
+
+Swipe directions:
+- `left`, `right`, `up`, `down`
+
+Pinch directions:
+- `inward` - Fingers moving together
+- `outward` - Fingers moving apart
+- `clockwise` - Fingers rotating clockwise
+- `counterclockwise` - Fingers rotating counter-clockwise
+
+Combine multiple directions with `+`, e.g., `left+up`
+
+#### Examples
+
+```
+# 3-finger swipe for desktop switching
+gesture swipe:3:left
+	bmsg desktop -f -l prev
+gesture swipe:3:right
+	bmsg desktop -f -l next
+
+# 4-finger swipe
+gesture swipe:4:up
+	bmsg desktop -f -l next
+gesture swipe:4:down
+	bmsg desktop -f -l prev
+
+# Pinch to toggle fullscreen
+gesture pinch:in
+	bmsg node --state fullscreen
+gesture pinch:out
+	bmsg node --state fullscreen
+
+# Hold to show desktop (any fingers)
+gesture hold:*
+	bmsg desktop -f -l prev
+```
+
 ## IPC Commands (Advanced)
 
 These commands can be used in scripts via `bmsg`:

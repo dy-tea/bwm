@@ -3,8 +3,10 @@
 #include <stdint.h>
 #include <xkbcommon/xkbcommon.h>
 #include <wayland-server.h>
+#include "gesture.h"
 
 #define MAX_KEYBINDS 256
+#define MAX_GESTUREBINDS 64
 #define MAXLEN 256
 
 typedef struct submap submap_t;
@@ -88,6 +90,16 @@ typedef struct {
   char external_cmd[MAXLEN];
 } keybind_t;
 
+typedef struct {
+  enum gesture_type type;
+  uint8_t fingers;
+  uint32_t directions;
+  char *input;
+  bind_action_t action;
+  int desktop_index;
+  char external_cmd[MAXLEN];
+} gesturebind_t;
+
 struct submap {
   char name[MAXLEN];
   keybind_t keybinds[MAX_KEYBINDS];
@@ -97,6 +109,8 @@ struct submap {
 
 extern keybind_t keybinds[MAX_KEYBINDS];
 extern size_t num_keybinds;
+extern gesturebind_t gesture_bindings[MAX_GESTUREBINDS];
+extern size_t num_gesturebinds;
 extern submap_t *active_submap;
 
 void config_init(void);
@@ -115,3 +129,7 @@ void exit_submap(void);
 
 keyboard_grouping_t get_keyboard_grouping(void);
 void set_keyboard_grouping(keyboard_grouping_t grouping);
+
+bool gesturebind_matches(gesturebind_t *gb, enum gesture_type type, uint8_t fingers);
+void execute_gesturebind(gesturebind_t *gb);
+void reload_gesturebinds(void);

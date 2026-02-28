@@ -126,6 +126,16 @@ alt + shift + Left
 alt + alt + q
 	bmsg quit
 
+# Gesture bindings (touchpad)
+gesture swipe:3:left
+	bmsg desktop -f -l prev
+gesture swipe:3:right
+	bmsg desktop -f -l next
+gesture pinch:in
+	bmsg node --state fullscreen
+gesture pinch:out
+	bmsg node --state fullscreen
+
 # Focus submap
 # enter submap with alt + shift + f
 alt + shift + f -> @focus

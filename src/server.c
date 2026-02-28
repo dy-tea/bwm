@@ -194,6 +194,8 @@ void server_init(void) {
   server.cursor_frame.notify = cursor_frame;
   wl_signal_add(&server.cursor->events.frame, &server.cursor_frame);
 
+  cursor_init_gestures();
+
   // relative pointer
   server.relative_pointer_manager = wlr_relative_pointer_manager_v1_create(server.wl_display);
 
@@ -211,6 +213,9 @@ void server_init(void) {
 
   server.cursor_request_set_shape.notify = handle_cursor_request_set_shape;
   wl_signal_add(&server.cursor_shape_manager->events.request_set_shape, &server.cursor_request_set_shape);
+
+  // pointer gestures
+  server.pointer_gestures = wlr_pointer_gestures_v1_create(server.wl_display);
 
   // idle notifier
   server.idle_notifier = wlr_idle_notifier_v1_create(server.wl_display);

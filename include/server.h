@@ -3,6 +3,7 @@
 #include "lock.h"
 #include "toplevel.h"
 #include "types.h"
+#include "gesture.h"
 #include <wayland-server.h>
 #include <xkbcommon/xkbcommon.h>
 #include <wlr/types/wlr_ext_workspace_v1.h>
@@ -10,6 +11,7 @@
 #include <wlr/types/wlr_output_power_management_v1.h>
 #include <wlr/types/wlr_output_management_v1.h>
 #include <wlr/types/wlr_xdg_activation_v1.h>
+#include <wlr/types/wlr_pointer_gestures_v1.h>
 
 enum cursor_mode {
   CURSOR_PASSTHROUGH,
@@ -63,6 +65,17 @@ struct bwm_server {
 
   struct wlr_cursor_shape_manager_v1 *cursor_shape_manager;
   struct wl_listener cursor_request_set_shape;
+
+  struct wlr_pointer_gestures_v1 *pointer_gestures;
+  struct gesture_tracker gesture_tracker;
+  struct wl_listener hold_begin;
+  struct wl_listener hold_end;
+  struct wl_listener pinch_begin;
+  struct wl_listener pinch_update;
+  struct wl_listener pinch_end;
+  struct wl_listener swipe_begin;
+  struct wl_listener swipe_update;
+  struct wl_listener swipe_end;
 
   struct wlr_relative_pointer_manager_v1 *relative_pointer_manager;
   struct wlr_idle_notifier_v1 *idle_notifier;

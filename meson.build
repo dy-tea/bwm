@@ -77,6 +77,7 @@ executable(
 		'src' / 'input.c',
 		'src' / 'idle.c',
 		'src' / 'rule.c',
+		'src' / 'gesture.c',
 		wl_protos_src,
 	],
 	include_directories: inc,

@@ -23,6 +23,8 @@ static const char *custom_config_dir = NULL;
 
 keybind_t keybinds[MAX_KEYBINDS];
 size_t num_keybinds = 0;
+gesturebind_t gesture_bindings[MAX_GESTUREBINDS];
+size_t num_gesturebinds = 0;
 submap_t *active_submap = NULL;
 
 #define MAX_SUBMAPS 32
@@ -281,7 +283,65 @@ static void add_keybind(uint32_t modifiers, xkb_keysym_t keysym, uint32_t keycod
           modifiers, keysym, keycode, action, desktop_index, submap_name ? submap_name : "global");
 }
 
+static void add_gesturebind(enum gesture_type type, uint8_t fingers, uint32_t directions, 
+    const char *input, bind_action_t action, int desktop_index, const char *external_cmd) {
+  if (num_gesturebinds >= MAX_GESTUREBINDS) {
+    wlr_log(WLR_ERROR, "Maximum number of gesture binds reached");
+    return;
+  }
+
+  gesturebind_t *gb = &gesture_bindings[num_gesturebinds++];
+  gb->type = type;
+  gb->fingers = fingers;
+  gb->directions = directions;
+  gb->input = input ? strdup(input) : NULL;
+  gb->action = action;
+  gb->desktop_index = desktop_index;
+  if (external_cmd) {
+    snprintf(gb->external_cmd, sizeof(gb->external_cmd), "%s", external_cmd);
+  } else {
+    gb->external_cmd[0] = '\0';
+  }
+
+  wlr_log(WLR_DEBUG, "Added gesturebind: type=%d fingers=%d dirs=%u action=%d",
+      type, fingers, directions, action);
+}
+
+static void parse_gesture_hotkey_line(const char *gesture_str, const char *command_str) {
+  char gesture_buf[MAXLEN];
+  char command_buf[MAXLEN];
+
+  snprintf(gesture_buf, sizeof(gesture_buf), "%s", gesture_str);
+  snprintf(command_buf, sizeof(command_buf), "%s", command_str);
+
+  char expanded_cmd[MAXLEN];
+  expand_sequence(command_buf, expanded_cmd, sizeof(expanded_cmd));
+
+  struct gesture gest;
+  char *err = gesture_parse(gesture_buf, &gest);
+  if (err) {
+    wlr_log(WLR_ERROR, "Failed to parse gesture '%s': %s", gesture_buf, err);
+    return;
+  }
+
+  int desktop_index = 0;
+  char submap_name[MAXLEN];
+  submap_name[0] = '\0';
+  bind_action_t action = parse_action(expanded_cmd, &desktop_index, submap_name);
+
+  if (action != BIND_EXTERNAL) {
+    add_gesturebind(gest.type, gest.fingers, gest.directions, NULL, action, desktop_index, NULL);
+  } else {
+    add_gesturebind(gest.type, gest.fingers, gest.directions, NULL, action, desktop_index, expanded_cmd);
+  }
+}
+
 static void parse_hotkey_line(const char *hotkey_str, const char *command_str) {
+  if (strncmp(hotkey_str, "gesture ", 8) == 0) {
+    parse_gesture_hotkey_line(hotkey_str + 8, command_str);
+    return;
+  }
+
   char hotkey_buf[MAXLEN];
   char command_buf[MAXLEN];
 
@@ -587,6 +647,7 @@ void config_fini(void) {
     hotkey_watch_fd = -1;
   }
   num_keybinds = 0;
+  num_gesturebinds = 0;
 }
 
 void reload_hotkeys(void) {
@@ -806,4 +867,171 @@ void set_keyboard_grouping(keyboard_grouping_t grouping) {
     extern void keyboard_reapply_grouping(void);
     keyboard_reapply_grouping();
   }
+}
+
+bool gesturebind_matches(gesturebind_t *gb, enum gesture_type type, uint8_t fingers) {
+  if (!gb) return false;
+
+  if (gb->type != type) {
+    return false;
+  }
+
+  if (gb->fingers != GESTURE_FINGERS_ANY && gb->fingers != fingers) {
+    return false;
+  }
+
+  return true;
+}
+
+void execute_gesturebind(gesturebind_t *gb) {
+  if (!gb) return;
+
+  switch (gb->action) {
+    case BIND_QUIT:
+      wl_display_terminate(server.wl_display);
+      break;
+    case BIND_NODE_FOCUS:
+      break;
+    case BIND_NODE_CLOSE:
+      close_focused();
+      break;
+    case BIND_NODE_STATE_TILED:
+      break;
+    case BIND_NODE_STATE_FLOATING:
+      toggle_floating();
+      break;
+    case BIND_NODE_STATE_FULLSCREEN:
+      toggle_fullscreen();
+      break;
+    case BIND_NODE_TO_DESKTOP:
+      if (gb->desktop_index > 0) {
+        send_to_desktop(gb->desktop_index - 1);
+      }
+      break;
+    case BIND_DESKTOP_FOCUS:
+      if (gb->desktop_index > 0) {
+        workspace_switch_to_desktop_by_index(gb->desktop_index - 1);
+      }
+      break;
+    case BIND_DESKTOP_LAYOUT_TILED:
+      break;
+    case BIND_DESKTOP_LAYOUT_MONOCLE:
+      toggle_monocle();
+      break;
+    case BIND_FOCUS_WEST:
+      focus_west();
+      break;
+    case BIND_FOCUS_SOUTH:
+      focus_south();
+      break;
+    case BIND_FOCUS_NORTH:
+      focus_north();
+      break;
+    case BIND_FOCUS_EAST:
+      focus_east();
+      break;
+    case BIND_SWAP_WEST:
+      swap_west();
+      break;
+    case BIND_SWAP_SOUTH:
+      swap_south();
+      break;
+    case BIND_SWAP_NORTH:
+      swap_north();
+      break;
+    case BIND_SWAP_EAST:
+      swap_east();
+      break;
+    case BIND_PRESEL_WEST:
+      presel_west();
+      break;
+    case BIND_PRESEL_SOUTH:
+      presel_south();
+      break;
+    case BIND_PRESEL_NORTH:
+      presel_north();
+      break;
+    case BIND_PRESEL_EAST:
+      presel_east();
+      break;
+    case BIND_PRESEL_CANCEL:
+      cancel_presel();
+      break;
+    case BIND_TOGGLE_FLOATING:
+      toggle_floating();
+      break;
+    case BIND_TOGGLE_FULLSCREEN:
+      toggle_fullscreen();
+      break;
+    case BIND_TOGGLE_PSEUDO_TILED:
+      toggle_pseudo_tiled();
+      break;
+    case BIND_TOGGLE_MONOCLE:
+      toggle_monocle();
+      break;
+    case BIND_ROTATE_CW:
+      rotate_clockwise();
+      break;
+    case BIND_ROTATE_CCW:
+      rotate_counterclockwise();
+      break;
+    case BIND_FLIP_HORIZONTAL:
+      flip_horizontal();
+      break;
+    case BIND_FLIP_VERTICAL:
+      flip_vertical();
+      break;
+    case BIND_DESKTOP_NEXT:
+      focus_next_desktop();
+      break;
+    case BIND_DESKTOP_PREV:
+      focus_prev_desktop();
+      break;
+    case BIND_SEND_TO_DESKTOP_NEXT:
+      send_to_next_desktop();
+      break;
+    case BIND_SEND_TO_DESKTOP_PREV:
+      send_to_prev_desktop();
+      break;
+    case BIND_DESKTOP_1:
+    case BIND_DESKTOP_2:
+    case BIND_DESKTOP_3:
+    case BIND_DESKTOP_4:
+    case BIND_DESKTOP_5:
+    case BIND_DESKTOP_6:
+    case BIND_DESKTOP_7:
+    case BIND_DESKTOP_8:
+    case BIND_DESKTOP_9:
+    case BIND_DESKTOP_10:
+      workspace_switch_to_desktop_by_index(gb->action - BIND_DESKTOP_1);
+      break;
+    case BIND_SEND_TO_DESKTOP_1:
+    case BIND_SEND_TO_DESKTOP_2:
+    case BIND_SEND_TO_DESKTOP_3:
+    case BIND_SEND_TO_DESKTOP_4:
+    case BIND_SEND_TO_DESKTOP_5:
+    case BIND_SEND_TO_DESKTOP_6:
+    case BIND_SEND_TO_DESKTOP_7:
+    case BIND_SEND_TO_DESKTOP_8:
+    case BIND_SEND_TO_DESKTOP_9:
+    case BIND_SEND_TO_DESKTOP_10:
+      send_to_desktop(gb->action - BIND_SEND_TO_DESKTOP_1);
+      break;
+    case BIND_EXTERNAL:
+      if (gb->external_cmd[0] != '\0') {
+        if (fork() == 0) {
+          execl("/bin/sh", "/bin/sh", "-c", gb->external_cmd, NULL);
+          _exit(1);
+        }
+      }
+      break;
+    case BIND_NONE:
+    case BIND_ENTER_SUBMAP:
+    case BIND_EXIT_SUBMAP:
+      break;
+  }
+}
+
+void reload_gesturebinds(void) {
+  num_gesturebinds = 0;
 }

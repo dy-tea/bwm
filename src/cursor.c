@@ -6,6 +6,7 @@
 #include "tree.h"
 #include "types.h"
 #include "input.h"
+#include "config.h"
 #include <stdlib.h>
 #include <wayland-server-core.h>
 #include <wayland-util.h>
@@ -472,4 +473,216 @@ void handle_cursor_request_set_shape(struct wl_listener *listener, void *data) {
 
   if (event->seat_client == server.seat->pointer_state.focused_client)
     wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, wlr_cursor_shape_v1_name(event->shape));
+}
+
+static bool gesture_binding_check(enum gesture_type type, uint8_t fingers) {
+  for (size_t i = 0; i < num_gesturebinds; i++)
+    if (gesturebind_matches(&gesture_bindings[i], type, fingers))
+      return true;
+  return false;
+}
+
+static gesturebind_t *gesture_bind_match(enum gesture_type type, uint8_t fingers, uint32_t directions) {
+  gesturebind_t *best_match = NULL;
+  int8_t best_score = -1;
+
+  for (size_t i = 0; i < num_gesturebinds; i++) {
+    gesturebind_t *gb = &gesture_bindings[i];
+    if (!gesturebind_matches(gb, type, fingers))
+      continue;
+
+    if (gb->directions != GESTURE_DIRECTION_NONE)
+      if ((directions & gb->directions) == 0)
+        continue;
+
+    struct gesture gest = { .type = type, .fingers = fingers, .directions = directions };
+    struct gesture target = { .type = gb->type, .fingers = gb->fingers, .directions = gb->directions };
+    int8_t score = gesture_compare(&gest, &target);
+
+    if (score > best_score) {
+      best_score = score;
+      best_match = gb;
+    }
+  }
+
+  return best_match;
+}
+
+void handle_pointer_hold_begin(struct wl_listener *listener, void *data) {
+  (void)listener;
+  struct wlr_pointer_hold_begin_event *event = data;
+
+  if (gesture_binding_check(GESTURE_TYPE_HOLD, event->fingers)) {
+    gesture_tracker_begin(&server.gesture_tracker, GESTURE_TYPE_HOLD, event->fingers);
+  } else {
+    wlr_pointer_gestures_v1_send_hold_begin(
+      server.pointer_gestures, server.seat,
+      event->time_msec, event->fingers);
+  }
+}
+
+void handle_pointer_hold_end(struct wl_listener *listener, void *data) {
+  (void)listener;
+  struct wlr_pointer_hold_end_event *event = data;
+
+  if (!gesture_tracker_check(&server.gesture_tracker, GESTURE_TYPE_HOLD)) {
+    wlr_pointer_gestures_v1_send_hold_end(
+      server.pointer_gestures, server.seat,
+      event->time_msec, event->cancelled);
+    return;
+  }
+
+  if (event->cancelled) {
+    gesture_tracker_cancel(&server.gesture_tracker);
+    return;
+  }
+
+  gesturebind_t *binding = gesture_bind_match(GESTURE_TYPE_HOLD, server.gesture_tracker.fingers, 0);
+  if (binding)
+    execute_gesturebind(binding);
+  gesture_tracker_end(&server.gesture_tracker);
+}
+
+void handle_pointer_pinch_begin(struct wl_listener *listener, void *data) {
+  (void)listener;
+  struct wlr_pointer_pinch_begin_event *event = data;
+
+  if (gesture_binding_check(GESTURE_TYPE_PINCH, event->fingers)) {
+    gesture_tracker_begin(&server.gesture_tracker, GESTURE_TYPE_PINCH, event->fingers);
+  } else {
+    wlr_pointer_gestures_v1_send_pinch_begin(
+      server.pointer_gestures, server.seat,
+      event->time_msec, event->fingers);
+  }
+}
+
+void handle_pointer_pinch_update(struct wl_listener *listener, void *data) {
+  (void)listener;
+  struct wlr_pointer_pinch_update_event *event = data;
+
+  if (gesture_tracker_check(&server.gesture_tracker, GESTURE_TYPE_PINCH)) {
+    gesture_tracker_update(&server.gesture_tracker, event->dx, event->dy,
+      event->scale, event->rotation);
+  } else {
+    wlr_pointer_gestures_v1_send_pinch_update(
+      server.pointer_gestures, server.seat,
+      event->time_msec, event->dx, event->dy,
+      event->scale, event->rotation);
+  }
+}
+
+void handle_pointer_pinch_end(struct wl_listener *listener, void *data) {
+  (void)listener;
+  struct wlr_pointer_pinch_end_event *event = data;
+
+  if (!gesture_tracker_check(&server.gesture_tracker, GESTURE_TYPE_PINCH)) {
+    wlr_pointer_gestures_v1_send_pinch_end(
+      server.pointer_gestures, server.seat,
+      event->time_msec, event->cancelled);
+    return;
+  }
+
+  if (event->cancelled) {
+    gesture_tracker_cancel(&server.gesture_tracker);
+    return;
+  }
+
+  uint32_t directions = GESTURE_DIRECTION_NONE;
+  if (server.gesture_tracker.scale < 1.0)
+    directions |= GESTURE_DIRECTION_INWARD;
+  else if (server.gesture_tracker.scale > 1.0)
+    directions |= GESTURE_DIRECTION_OUTWARD;
+
+
+  gesturebind_t *binding = gesture_bind_match(GESTURE_TYPE_PINCH, server.gesture_tracker.fingers, directions);
+  if (binding)
+    execute_gesturebind(binding);
+  gesture_tracker_end(&server.gesture_tracker);
+}
+
+void handle_pointer_swipe_begin(struct wl_listener *listener, void *data) {
+  (void)listener;
+  struct wlr_pointer_swipe_begin_event *event = data;
+
+  if (gesture_binding_check(GESTURE_TYPE_SWIPE, event->fingers)) {
+    gesture_tracker_begin(&server.gesture_tracker, GESTURE_TYPE_SWIPE, event->fingers);
+  } else {
+    wlr_pointer_gestures_v1_send_swipe_begin(
+      server.pointer_gestures, server.seat,
+      event->time_msec, event->fingers);
+  }
+}
+
+void handle_pointer_swipe_update(struct wl_listener *listener, void *data) {
+  (void)listener;
+  struct wlr_pointer_swipe_update_event *event = data;
+
+  if (gesture_tracker_check(&server.gesture_tracker, GESTURE_TYPE_SWIPE)) {
+    gesture_tracker_update(&server.gesture_tracker, event->dx, event->dy, NAN, NAN);
+  } else {
+    wlr_pointer_gestures_v1_send_swipe_update(
+      server.pointer_gestures, server.seat,
+      event->time_msec, event->dx, event->dy);
+  }
+}
+
+void handle_pointer_swipe_end(struct wl_listener *listener, void *data) {
+  (void)listener;
+  struct wlr_pointer_swipe_end_event *event = data;
+
+  if (!gesture_tracker_check(&server.gesture_tracker, GESTURE_TYPE_SWIPE)) {
+    wlr_pointer_gestures_v1_send_swipe_end(
+      server.pointer_gestures, server.seat,
+      event->time_msec, event->cancelled);
+    return;
+  }
+
+  if (event->cancelled) {
+    gesture_tracker_cancel(&server.gesture_tracker);
+    return;
+  }
+
+  uint32_t directions = GESTURE_DIRECTION_NONE;
+  double threshold = 50.0;
+
+  if (server.gesture_tracker.dx < -threshold)
+    directions |= GESTURE_DIRECTION_LEFT;
+  else if (server.gesture_tracker.dx > threshold)
+    directions |= GESTURE_DIRECTION_RIGHT;
+
+  if (server.gesture_tracker.dy < -threshold)
+    directions |= GESTURE_DIRECTION_UP;
+  else if (server.gesture_tracker.dy > threshold)
+    directions |= GESTURE_DIRECTION_DOWN;
+
+  gesturebind_t *binding = gesture_bind_match(GESTURE_TYPE_SWIPE, server.gesture_tracker.fingers, directions);
+  if (binding)
+    execute_gesturebind(binding);
+  gesture_tracker_end(&server.gesture_tracker);
+}
+
+void cursor_init_gestures(void) {
+  server.hold_begin.notify = handle_pointer_hold_begin;
+  wl_signal_add(&server.cursor->events.hold_begin, &server.hold_begin);
+
+  server.hold_end.notify = handle_pointer_hold_end;
+  wl_signal_add(&server.cursor->events.hold_end, &server.hold_end);
+
+  server.pinch_begin.notify = handle_pointer_pinch_begin;
+  wl_signal_add(&server.cursor->events.pinch_begin, &server.pinch_begin);
+
+  server.pinch_update.notify = handle_pointer_pinch_update;
+  wl_signal_add(&server.cursor->events.pinch_update, &server.pinch_update);
+
+  server.pinch_end.notify = handle_pointer_pinch_end;
+  wl_signal_add(&server.cursor->events.pinch_end, &server.pinch_end);
+
+  server.swipe_begin.notify = handle_pointer_swipe_begin;
+  wl_signal_add(&server.cursor->events.swipe_begin, &server.swipe_begin);
+
+  server.swipe_update.notify = handle_pointer_swipe_update;
+  wl_signal_add(&server.cursor->events.swipe_update, &server.swipe_update);
+
+  server.swipe_end.notify = handle_pointer_swipe_end;
+  wl_signal_add(&server.cursor->events.swipe_end, &server.swipe_end);
 }

@@ -2,6 +2,7 @@
 
 #include "server.h"
 #include "toplevel.h"
+#include "gesture.h"
 #include <wlr/types/wlr_pointer.h>
 
 struct bwm_pointer {
@@ -13,6 +14,18 @@ struct bwm_cursor_constraint {
 	struct wlr_pointer_constraint_v1 *constraint;
 	struct wl_listener set_region;
 	struct wl_listener destroy;
+};
+
+struct bwm_cursor {
+	struct gesture_tracker gesture_tracker;
+	struct wl_listener hold_begin;
+	struct wl_listener hold_end;
+	struct wl_listener pinch_begin;
+	struct wl_listener pinch_update;
+	struct wl_listener pinch_end;
+	struct wl_listener swipe_begin;
+	struct wl_listener swipe_update;
+	struct wl_listener swipe_end;
 };
 
 void cursor_motion(struct wl_listener *listener, void *data);
@@ -29,3 +42,4 @@ void handle_pointer_constraint(struct wl_listener *listener, void *data);
 void handle_cursor_request_set_shape(struct wl_listener *listener, void *data);
 
 void begin_interactive(struct bwm_toplevel *toplevel, enum cursor_mode mode, uint32_t edges);
+void cursor_init_gestures(void);
