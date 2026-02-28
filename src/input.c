@@ -549,9 +549,15 @@ void input_apply_config(struct wlr_input_device *device) {
 }
 
 void input_apply_config_all_keyboards(void) {
-  struct bwm_keyboard *keyboard;
-  wl_list_for_each(keyboard, &server.keyboards, link)
+  struct bwm_keyboard *keyboard, *tmp;
+  wl_list_for_each_safe(keyboard, tmp, &server.physical_keyboards, all_link) {
     input_apply_config(&keyboard->wlr_keyboard->base);
+    keyboard->repeat_rate = keyboard->wlr_keyboard->repeat_info.rate;
+    keyboard->repeat_delay = keyboard->wlr_keyboard->repeat_info.delay;
+    keyboard_group_remove_invalid(keyboard);
+    if (!keyboard->group)
+      keyboard_group_add(keyboard);
+  }
 }
 
 void input_apply_config_all_pointers(void) {

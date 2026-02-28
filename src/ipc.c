@@ -9,6 +9,7 @@
 #include "input.h"
 #include "keyboard.h"
 #include "rule.h"
+#include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1321,6 +1322,30 @@ static void ipc_cmd_rule(char **args, int num, int client_fd) {
   }
 }
 
+static void ipc_cmd_keyboard_grouping(char **args, int num, int client_fd) {
+  if (num < 1) {
+    send_failure(client_fd, "keyboard_grouping: missing argument\n");
+    return;
+  }
+
+  char *mode = *args;
+  keyboard_grouping_t grouping;
+  if (streq("none", mode)) {
+    grouping = KEYBOARD_GROUP_NONE;
+  } else if (streq("smart", mode)) {
+    grouping = KEYBOARD_GROUP_SMART;
+  } else if (streq("default", mode)) {
+    grouping = KEYBOARD_GROUP_DEFAULT;
+  } else {
+    send_failure(client_fd, "keyboard_grouping: invalid mode (use none, smart, default)\n");
+    return;
+  }
+
+  set_keyboard_grouping(grouping);
+  keyboard_reapply_grouping();
+  send_success(client_fd, "keyboard_grouping set\n");
+}
+
 static void process_ipc_message(char *msg, int msg_len, int client_fd) {
   wlr_log(WLR_DEBUG, "IPC: processing message: %.*s", msg_len, msg);
   int cap = 16;
@@ -1387,11 +1412,13 @@ static void process_ipc_message(char *msg, int msg_len, int client_fd) {
     ipc_cmd_flip(++args, --num, client_fd);
   } else if (streq("send", *args)) {
     ipc_cmd_send(++args, --num, client_fd);
-  } else if (streq("rule", *args)) {
-    ipc_cmd_rule(++args, --num, client_fd);
-  } else {
-    send_failure(client_fd, "unknown command\n");
-  }
+   } else if (streq("rule", *args)) {
+     ipc_cmd_rule(++args, --num, client_fd);
+   } else if (streq("keyboard_grouping", *args)) {
+     ipc_cmd_keyboard_grouping(++args, --num, client_fd);
+   } else {
+     send_failure(client_fd, "unknown command\n");
+   }
 
   free(args_orig);
 }

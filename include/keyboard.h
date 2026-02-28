@@ -1,16 +1,34 @@
 #pragma once
 
-#include <wayland-server.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <wlr/types/wlr_input_device.h>
 #include <xkbcommon/xkbcommon.h>
 
 struct bwm_keyboard {
-  struct wl_list link;
+  struct wl_list all_link;
+  struct wl_list active_link;
   struct wlr_keyboard *wlr_keyboard;
 
   struct wl_listener modifiers;
   struct wl_listener key;
   struct wl_listener destroy;
+
+  struct bwm_keyboard_group *group;
+  bool is_representative;
+
+  int repeat_rate;
+  int repeat_delay;
+};
+
+struct bwm_keyboard_group {
+  struct wlr_keyboard_group *wlr_group;
+  struct bwm_keyboard *representative;
+  struct wl_list link;
+  struct wl_listener keyboard_key;
+  struct wl_listener keyboard_modifiers;
+  struct wl_listener enter;
+  struct wl_listener leave;
 };
 
 // keyboard lifecycle
@@ -18,6 +36,12 @@ void handle_new_keyboard(struct wlr_input_device *device);
 void keyboard_modifiers(struct wl_listener *listener, void *data);
 void keyboard_key(struct wl_listener *listener, void *data);
 void keyboard_destroy(struct wl_listener *listener, void *data);
+
+// keyboard grouping
+void keyboard_reapply_grouping(void);
+void keyboard_group_add(struct bwm_keyboard *keyboard);
+void keyboard_group_remove(struct bwm_keyboard *keyboard);
+void keyboard_group_remove_invalid(struct bwm_keyboard *keyboard);
 
 // window navigation
 void focus_west(void);

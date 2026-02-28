@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <wlr/backend/session.h>
 #include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_keyboard_group.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_shell.h>
@@ -59,19 +60,17 @@ void handle_new_keyboard(struct wlr_input_device *device) {
     wlr_keyboard_set_repeat_info(wlr_keyboard, 25, 600);
   }
 
-  // register listeners
-  keyboard->modifiers.notify = keyboard_modifiers;
-  wl_signal_add(&wlr_keyboard->events.modifiers, &keyboard->modifiers);
-
-  keyboard->key.notify = keyboard_key;
-  wl_signal_add(&wlr_keyboard->events.key, &keyboard->key);
+  keyboard->repeat_rate = wlr_keyboard->repeat_info.rate;
+  keyboard->repeat_delay = wlr_keyboard->repeat_info.delay;
 
   keyboard->destroy.notify = keyboard_destroy;
   wl_signal_add(&device->events.destroy, &keyboard->destroy);
 
-  wlr_seat_set_keyboard(server.seat, keyboard->wlr_keyboard);
+  wl_list_insert(&server.physical_keyboards, &keyboard->all_link);
+  keyboard_group_add(keyboard);
 
-  wl_list_insert(&server.keyboards, &keyboard->link);
+  if (!server.seat->keyboard_state.keyboard)
+    wlr_seat_set_keyboard(server.seat, keyboard->wlr_keyboard);
 
   wlr_log(WLR_INFO, "New keyboard configured: %s", device->name);
 }
@@ -122,14 +121,29 @@ void keyboard_key(struct wl_listener *listener, void *data) {
 }
 
 void keyboard_destroy(struct wl_listener *listener, void *data) {
-	(void)data;
   struct bwm_keyboard *keyboard = wl_container_of(listener, keyboard, destroy);
+  struct wlr_input_device *device = data;
+  (void)device;
 
-  wl_list_remove(&keyboard->modifiers.link);
-  wl_list_remove(&keyboard->key.link);
-  wl_list_remove(&keyboard->destroy.link);
-  wl_list_remove(&keyboard->link);
+  if (keyboard->group)
+    keyboard_group_remove(keyboard);
 
+  if (keyboard->all_link.next || keyboard->all_link.prev)
+    wl_list_remove(&keyboard->all_link);
+
+  if (keyboard->is_representative || keyboard->group == NULL)
+    if (keyboard->active_link.next || keyboard->active_link.prev)
+      wl_list_remove(&keyboard->active_link);
+
+  if (keyboard->modifiers.link.next)
+    wl_list_remove(&keyboard->modifiers.link);
+  if (keyboard->key.link.next)
+    wl_list_remove(&keyboard->key.link);
+  if (keyboard->destroy.link.next)
+    wl_list_remove(&keyboard->destroy.link);
+
+  if (keyboard->wlr_keyboard->keymap)
+    xkb_keymap_unref(keyboard->wlr_keyboard->keymap);
   free(keyboard);
 }
 
@@ -709,4 +723,168 @@ void cancel_presel(void) {
 
   presel_cancel(mon, mon->desk, mon->desk->focus);
   wlr_log(WLR_INFO, "Cancelled preselection");
+}
+
+static bool repeat_info_match(struct wlr_keyboard *a, struct wlr_keyboard *b) {
+  return a->repeat_info.rate == b->repeat_info.rate &&
+         a->repeat_info.delay == b->repeat_info.delay;
+}
+
+// Remove a keyboard from its group (if any)
+void keyboard_group_remove(struct bwm_keyboard *keyboard) {
+  if (!keyboard->group)
+    return;
+
+  struct bwm_keyboard_group *group = keyboard->group;
+  struct wlr_keyboard_group *wlr_group = group->wlr_group;
+
+  wlr_log(WLR_DEBUG, "Removing keyboard %p from group %p", (void*)keyboard, (void*)wlr_group);
+
+  wlr_keyboard_group_remove_keyboard(wlr_group, keyboard->wlr_keyboard);
+  keyboard->group = NULL;
+
+  if (wl_list_empty(&wlr_group->devices)) {
+    wlr_log(WLR_DEBUG, "Destroying empty keyboard group %p", (void*)wlr_group);
+
+    if (server.seat->keyboard_state.keyboard == group->representative->wlr_keyboard)
+      wlr_seat_set_keyboard(server.seat, NULL);
+
+    if (group->representative) {
+      wl_list_remove(&group->representative->active_link);
+      wl_list_remove(&group->representative->modifiers.link);
+      wl_list_remove(&group->representative->key.link);
+      free(group->representative);
+    }
+
+    wl_list_remove(&group->link);
+
+    wlr_keyboard_group_destroy(wlr_group);
+    free(group);
+  }
+}
+
+void keyboard_group_remove_invalid(struct bwm_keyboard *keyboard) {
+  if (!keyboard->group)
+    return;
+
+  struct bwm_keyboard_group *group = keyboard->group;
+  keyboard_grouping_t grouping = get_keyboard_grouping();
+
+  bool should_remove = false;
+  switch (grouping) {
+  case KEYBOARD_GROUP_NONE:
+    should_remove = true;
+    break;
+  case KEYBOARD_GROUP_DEFAULT:  // fallthrough
+  case KEYBOARD_GROUP_SMART: {
+    if (!wlr_keyboard_keymaps_match(keyboard->wlr_keyboard->keymap, group->wlr_group->keyboard.keymap) ||
+        !repeat_info_match(keyboard->wlr_keyboard, &group->wlr_group->keyboard)) {
+      should_remove = true;
+    }
+    break;
+  }
+  }
+
+  if (should_remove)
+    keyboard_group_remove(keyboard);
+}
+
+void keyboard_group_add(struct bwm_keyboard *keyboard) {
+  keyboard_grouping_t grouping = get_keyboard_grouping();
+
+  if (grouping == KEYBOARD_GROUP_NONE) {
+    keyboard->modifiers.notify = keyboard_modifiers;
+    wl_signal_add(&keyboard->wlr_keyboard->events.modifiers, &keyboard->modifiers);
+    keyboard->key.notify = keyboard_key;
+    wl_signal_add(&keyboard->wlr_keyboard->events.key, &keyboard->key);
+    wl_list_insert(&server.keyboards, &keyboard->active_link);
+    return;
+  }
+
+  struct bwm_keyboard_group *group;
+  wl_list_for_each(group, &server.keyboard_groups, link) {
+    if (wlr_keyboard_keymaps_match(keyboard->wlr_keyboard->keymap, group->wlr_group->keyboard.keymap) &&
+        repeat_info_match(keyboard->wlr_keyboard, &group->wlr_group->keyboard)) {
+      wlr_log(WLR_DEBUG, "Adding keyboard %p to existing group %p", (void*)keyboard, (void*)group->wlr_group);
+      wlr_keyboard_group_add_keyboard(group->wlr_group, keyboard->wlr_keyboard);
+      keyboard->group = group;
+      if (server.seat->keyboard_state.keyboard == keyboard->wlr_keyboard)
+        wlr_seat_set_keyboard(server.seat, group->representative->wlr_keyboard);
+      return;
+    }
+  }
+
+  struct bwm_keyboard_group *new_group = calloc(1, sizeof(struct bwm_keyboard_group));
+  if (!new_group) {
+    wlr_log(WLR_ERROR, "Failed to allocate keyboard group");
+    return;
+  }
+
+  new_group->wlr_group = wlr_keyboard_group_create();
+  if (!new_group->wlr_group) {
+    wlr_log(WLR_ERROR, "Failed to create wlr_keyboard_group");
+    free(new_group);
+    return;
+  }
+  new_group->wlr_group->data = new_group;
+
+  wlr_keyboard_set_keymap(&new_group->wlr_group->keyboard, keyboard->wlr_keyboard->keymap);
+  wlr_keyboard_set_repeat_info(&new_group->wlr_group->keyboard,
+                               keyboard->wlr_keyboard->repeat_info.rate,
+                               keyboard->wlr_keyboard->repeat_info.delay);
+
+  struct bwm_keyboard *rep = calloc(1, sizeof(struct bwm_keyboard));
+  if (!rep) {
+    wlr_log(WLR_ERROR, "Failed to allocate group representative keyboard");
+    wlr_keyboard_group_destroy(new_group->wlr_group);
+    free(new_group);
+    return;
+  }
+  rep->wlr_keyboard = &new_group->wlr_group->keyboard;
+  rep->group = NULL;
+  rep->is_representative = true;
+
+  // listeners
+  rep->modifiers.notify = keyboard_modifiers;
+  wl_signal_add(&rep->wlr_keyboard->events.modifiers, &rep->modifiers);
+  rep->key.notify = keyboard_key;
+  wl_signal_add(&rep->wlr_keyboard->events.key, &rep->key);
+
+  // add to list
+  wl_list_insert(&server.keyboards, &rep->active_link);
+
+  new_group->representative = rep;
+
+  wl_list_insert(&server.keyboard_groups, &new_group->link);
+
+  wlr_keyboard_group_add_keyboard(new_group->wlr_group, keyboard->wlr_keyboard);
+  keyboard->group = new_group;
+
+  if (server.seat->keyboard_state.keyboard == keyboard->wlr_keyboard)
+    wlr_seat_set_keyboard(server.seat, new_group->representative->wlr_keyboard);
+
+  wlr_log(WLR_DEBUG, "Created new keyboard group %p for keyboard %p", (void*)new_group, (void*)keyboard);
+}
+
+void keyboard_reapply_grouping(void) {
+  struct bwm_keyboard *keyboard, *tmp;
+  wl_list_for_each_safe(keyboard, tmp, &server.physical_keyboards, all_link) {
+    if (keyboard->group) {
+      keyboard_group_remove(keyboard);
+    } else if (!keyboard->is_representative) {
+      if (keyboard->active_link.next || keyboard->active_link.prev)
+        wl_list_remove(&keyboard->active_link);
+      if (keyboard->modifiers.link.next)
+        wl_list_remove(&keyboard->modifiers.link);
+      if (keyboard->key.link.next)
+        wl_list_remove(&keyboard->key.link);
+    }
+    keyboard_group_add(keyboard);
+  }
+
+  if (!server.seat->keyboard_state.keyboard && !wl_list_empty(&server.keyboards)) {
+    struct bwm_keyboard *first = wl_container_of(server.keyboards.next, first, active_link);
+    if (first)
+      wlr_seat_set_keyboard(server.seat, first->wlr_keyboard);
+  }
 }
