@@ -63,9 +63,9 @@ static enum gesture_direction gesture_parse_direction(const char *dir_str) {
 		return GESTURE_DIRECTION_LEFT;
 	} else if (strcasecmp(dir_str, "right") == 0) {
 		return GESTURE_DIRECTION_RIGHT;
-	} else if (strcasecmp(dir_str, "inward") == 0) {
+	} else if (strcasecmp(dir_str, "in") == 0 || strcasecmp(dir_str, "inward") == 0) {
 		return GESTURE_DIRECTION_INWARD;
-	} else if (strcasecmp(dir_str, "outward") == 0) {
+	} else if (strcasecmp(dir_str, "out") == 0 || strcasecmp(dir_str, "outward") == 0) {
 		return GESTURE_DIRECTION_OUTWARD;
 	} else if (strcasecmp(dir_str, "clockwise") == 0) {
 		return GESTURE_DIRECTION_CLOCKWISE;
@@ -106,10 +106,15 @@ char *gesture_parse(const char *input, struct gesture *output) {
 		} else {
 			int fingers = atoi(token);
 			if (fingers < 1 || fingers > 5) {
-				free(input_copy);
-				return "invalid finger count";
+				enum gesture_direction dir = gesture_parse_direction(token);
+				if (dir == GESTURE_DIRECTION_NONE) {
+					free(input_copy);
+					return "invalid finger count";
+				}
+				output->directions |= dir;
+			} else {
+				output->fingers = (uint8_t)fingers;
 			}
-			output->fingers = (uint8_t)fingers;
 		}
 
 		token = strtok_r(NULL, ":", &saveptr);
@@ -120,7 +125,6 @@ char *gesture_parse(const char *input, struct gesture *output) {
 				return "memory allocation failed";
 			}
 
-			output->directions = GESTURE_DIRECTION_NONE;
 			char *dir_saveptr = NULL;
 			char *dir_token = strtok_r(dirs, "+", &dir_saveptr);
 			while (dir_token) {
@@ -132,6 +136,9 @@ char *gesture_parse(const char *input, struct gesture *output) {
 			free(dirs);
 		}
 	}
+
+	if (output->fingers == 0 && output->type == GESTURE_TYPE_PINCH)
+		output->fingers = 2;
 
 	free(input_copy);
 	return NULL;

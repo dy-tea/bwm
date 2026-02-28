@@ -40,7 +40,7 @@ static void update_ext_foreign_toplevel(struct bwm_toplevel *toplevel) {
   wlr_ext_foreign_toplevel_handle_v1_update_state(toplevel->ext_foreign_toplevel, &state);
 }
 
-static void update_foreign_toplevel_state(struct bwm_toplevel *toplevel) {
+void update_foreign_toplevel_state(struct bwm_toplevel *toplevel) {
   if (!toplevel->foreign_toplevel || !toplevel->node || !toplevel->node->client)
     return;
 

@@ -57,6 +57,7 @@ void handle_new_xdg_toplevel(struct wl_listener *listener, void *data);
 void focus_toplevel(struct bwm_toplevel *toplevel);
 void toplevel_apply_geometry(struct bwm_toplevel *toplevel);
 bool toplevel_is_ready(struct bwm_toplevel *toplevel);
+void update_foreign_toplevel_state(struct bwm_toplevel *toplevel);
 
 // buffer saving for transactions
 void toplevel_save_buffer(struct bwm_toplevel *toplevel);

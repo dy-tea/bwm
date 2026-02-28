@@ -1,3 +1,4 @@
+#include "transaction.h"
 #include "types.h"
 #include "keyboard.h"
 #include "server.h"
@@ -374,7 +375,6 @@ void toggle_fullscreen(void) {
     return;
 
   if (n->client->state == STATE_FULLSCREEN) {
-    set_state(mon, mon->desk, n, n->client->last_state);
     if (n->client->last_state == STATE_FLOATING)
       wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
                               server.float_tree);
@@ -382,14 +382,17 @@ void toggle_fullscreen(void) {
       wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
                               server.tile_tree);
     wlr_xdg_toplevel_set_fullscreen(n->client->toplevel->xdg_toplevel, false);
+    set_state(mon, mon->desk, n, n->client->last_state);
     wlr_log(WLR_INFO, "Fullscreen disabled");
   } else {
-    wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
-                            server.full_tree);
-    set_state(mon, mon->desk, n, STATE_FULLSCREEN);
-    wlr_xdg_toplevel_set_fullscreen(n->client->toplevel->xdg_toplevel, true);
+  	wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
+                          server.full_tree);
+   	wlr_xdg_toplevel_set_fullscreen(n->client->toplevel->xdg_toplevel, true);
+ 		set_state(mon, mon->desk, n, STATE_FULLSCREEN);
     wlr_log(WLR_INFO, "Fullscreen enabled");
   }
+
+  update_foreign_toplevel_state(n->client->toplevel);
 }
 
 void toggle_pseudo_tiled(void) {
