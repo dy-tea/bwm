@@ -686,6 +686,149 @@ void flip_vertical(void) {
   wlr_log(WLR_INFO, "Flipped tree vertically");
 }
 
+#define RESIZE_AMOUNT 0.05
+
+void resize_left(void) {
+  if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL) {
+    wlr_log(WLR_ERROR, "resize_left: invalid state mon=%p desk=%p focus=%p",
+    	(void*)mon, mon ? (void*)mon->desk : NULL, mon && mon->desk ? (void*)mon->desk->focus : NULL);
+    return;
+  }
+
+  node_t *n = mon->desk->focus;
+  if (n->parent == NULL) {
+    wlr_log(WLR_ERROR, "resize_left: no parent node");
+    return;
+  }
+
+  node_t *p = n->parent;
+  wlr_log(WLR_INFO, "resize_left: node=%u parent=%u split_type=%d is_first=%d ratio_before=%f",
+          n->id, p->id, p->split_type, is_first_child(n), p->split_ratio);
+
+  if (p->split_type == TYPE_VERTICAL) {
+    if (is_first_child(n)) {
+      p->split_ratio -= RESIZE_AMOUNT;
+      if (p->split_ratio < 0.1) p->split_ratio = 0.1;
+    } else {
+      p->split_ratio += RESIZE_AMOUNT;
+      if (p->split_ratio > 0.9) p->split_ratio = 0.9;
+    }
+    // sync with pending and current state
+    p->pending.split_ratio = p->split_ratio;
+    p->current.split_ratio = p->split_ratio;
+    wlr_log(WLR_INFO, "resize_left: ratio_after=%f", p->split_ratio);
+    arrange(mon, mon->desk, true);
+    wlr_log(WLR_INFO, "Resized left");
+  } else {
+    wlr_log(WLR_ERROR, "resize_left: parent split_type is not VERTICAL (%d)", p->split_type);
+  }
+}
+
+void resize_right(void) {
+  if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL) {
+    wlr_log(WLR_ERROR, "resize_right: invalid state");
+    return;
+  }
+
+  node_t *n = mon->desk->focus;
+  if (n->parent == NULL) {
+    wlr_log(WLR_ERROR, "resize_right: no parent node");
+    return;
+  }
+
+  node_t *p = n->parent;
+  wlr_log(WLR_INFO, "resize_right: node=%u parent=%u split_type=%d is_first=%d ratio_before=%f",
+          n->id, p->id, p->split_type, is_first_child(n), p->split_ratio);
+
+  if (p->split_type == TYPE_VERTICAL) {
+    if (is_first_child(n)) {
+      p->split_ratio += RESIZE_AMOUNT;
+      if (p->split_ratio > 0.9) p->split_ratio = 0.9;
+    } else {
+      p->split_ratio -= RESIZE_AMOUNT;
+      if (p->split_ratio < 0.1) p->split_ratio = 0.1;
+    }
+    // sync with pending and current state
+    p->pending.split_ratio = p->split_ratio;
+    p->current.split_ratio = p->split_ratio;
+    wlr_log(WLR_INFO, "resize_right: ratio_after=%f", p->split_ratio);
+    arrange(mon, mon->desk, true);
+    wlr_log(WLR_INFO, "Resized right");
+  } else {
+    wlr_log(WLR_ERROR, "resize_right: parent split_type is not VERTICAL (%d)", p->split_type);
+  }
+}
+
+void resize_up(void) {
+  if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL) {
+    wlr_log(WLR_ERROR, "resize_up: invalid state");
+    return;
+  }
+
+  node_t *n = mon->desk->focus;
+  if (n->parent == NULL) {
+    wlr_log(WLR_ERROR, "resize_up: no parent node");
+    return;
+  }
+
+  node_t *p = n->parent;
+  wlr_log(WLR_INFO, "resize_up: node=%u parent=%u split_type=%d is_first=%d ratio_before=%f",
+          n->id, p->id, p->split_type, is_first_child(n), p->split_ratio);
+
+  if (p->split_type == TYPE_HORIZONTAL) {
+    if (is_first_child(n)) {
+      p->split_ratio -= RESIZE_AMOUNT;
+      if (p->split_ratio < 0.1) p->split_ratio = 0.1;
+    } else {
+      p->split_ratio += RESIZE_AMOUNT;
+      if (p->split_ratio > 0.9) p->split_ratio = 0.9;
+    }
+    // sync with pending and current state
+    p->pending.split_ratio = p->split_ratio;
+    p->current.split_ratio = p->split_ratio;
+    wlr_log(WLR_INFO, "resize_up: ratio_after=%f", p->split_ratio);
+    arrange(mon, mon->desk, true);
+    wlr_log(WLR_INFO, "Resized up");
+  } else {
+    wlr_log(WLR_ERROR, "resize_up: parent split_type is not HORIZONTAL (%d)", p->split_type);
+  }
+}
+
+void resize_down(void) {
+  if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL) {
+    wlr_log(WLR_ERROR, "resize_down: invalid state");
+    return;
+  }
+
+  node_t *n = mon->desk->focus;
+  if (n->parent == NULL) {
+    wlr_log(WLR_ERROR, "resize_down: no parent node");
+    return;
+  }
+
+  node_t *p = n->parent;
+  wlr_log(WLR_INFO, "resize_down: node=%u parent=%u split_type=%d is_first=%d ratio_before=%f",
+          n->id, p->id, p->split_type, is_first_child(n), p->split_ratio);
+
+  if (p->split_type == TYPE_HORIZONTAL) {
+    if (is_first_child(n)) {
+      p->split_ratio += RESIZE_AMOUNT;
+      if (p->split_ratio > 0.9) p->split_ratio = 0.9;
+    } else {
+      p->split_ratio -= RESIZE_AMOUNT;
+      if (p->split_ratio < 0.1) p->split_ratio = 0.1;
+    }
+    // sync with pending and current state
+    p->pending.split_ratio = p->split_ratio;
+    p->current.split_ratio = p->split_ratio;
+    wlr_log(WLR_INFO, "resize_down: ratio_after=%f", p->split_ratio);
+    arrange(mon, mon->desk, true);
+    wlr_log(WLR_INFO, "Resized down");
+  } else {
+    wlr_log(WLR_ERROR, "resize_down: parent split_type is not HORIZONTAL (%d)", p->split_type);
+  }
+}
+
 void presel_west(void) {
   if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
     return;

@@ -77,6 +77,12 @@ void rotate_counterclockwise(void);
 void flip_horizontal(void);
 void flip_vertical(void);
 
+// resizing
+void resize_left(void);
+void resize_right(void);
+void resize_up(void);
+void resize_down(void);
+
 // preselection
 void presel_west(void);
 void presel_east(void);

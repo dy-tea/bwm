@@ -46,16 +46,6 @@ alt + shift + k
 alt + shift + l
 	bmsg swap east
 
-# preselection
-alt + ctrl + h
-	bmsg presel west
-alt + ctrl + j
-	bmsg presel south
-alt + ctrl + k
-	bmsg presel north
-alt + ctrl + l
-	bmsg presel east
-
 # cancel preselection
 alt + ctrl + space
 	bmsg presel cancel
@@ -71,6 +61,16 @@ alt + comma
 	bmsg flip horizontal
 alt + period
 	bmsg flip vertical
+
+# resizing tiled windows
+alt + ctrl + h
+	bmsg resize left
+alt + ctrl + j
+	bmsg resize down
+alt + ctrl + k
+	bmsg resize up
+alt + ctrl + l
+	bmsg resize right
 
 # desktop switching (1-based index)
 alt + 1

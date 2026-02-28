@@ -334,13 +334,10 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
         uint16_t first_min = n->first_child ? n->first_child->constraints.min_width : 0;
         uint16_t second_min = n->second_child ? n->second_child->constraints.min_width : 0;
         if (first_min + second_min <= rect.width) {
-          if (fence < first_min) {
+          if (fence < first_min)
             fence = first_min;
-            n->split_ratio = (double)fence / rect.width;
-          } else if (fence > rect.width - second_min) {
+          else if (fence > rect.width - second_min)
             fence = rect.width - second_min;
-            n->split_ratio = (double)fence / rect.width;
-          }
         }
         first_rect.width = fence;
         second_rect.x += fence;
@@ -360,13 +357,10 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
         uint16_t first_min = n->first_child ? n->first_child->constraints.min_height : 0;
         uint16_t second_min = n->second_child ? n->second_child->constraints.min_height : 0;
         if (first_min + second_min <= rect.height) {
-          if (fence < first_min) {
+          if (fence < first_min)
             fence = first_min;
-            n->split_ratio = (double)fence / rect.height;
-          } else if (fence > rect.height - second_min) {
+          else if (fence > rect.height - second_min)
             fence = rect.height - second_min;
-            n->split_ratio = (double)fence / rect.height;
-          }
         }
         first_rect.height = fence;
         second_rect.y += fence;

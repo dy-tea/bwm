@@ -165,6 +165,13 @@ static bind_action_t parse_action(const char *cmd, int *desktop_index, char *sub
       if (strcmp(args[1], "cancel") == 0) return BIND_PRESEL_CANCEL;
     }
 
+    if (strcmp(args[0], "resize") == 0 && argc >= 2) {
+      if (strcmp(args[1], "left") == 0) return BIND_RESIZE_LEFT;
+      if (strcmp(args[1], "right") == 0) return BIND_RESIZE_RIGHT;
+      if (strcmp(args[1], "up") == 0) return BIND_RESIZE_UP;
+      if (strcmp(args[1], "down") == 0) return BIND_RESIZE_DOWN;
+    }
+
     if (strcmp(args[0], "node") == 0 && argc >= 2) {
       if (strcmp(args[1], "-c") == 0 || strcmp(args[1], "--close") == 0)
         return BIND_NODE_CLOSE;
@@ -774,6 +781,18 @@ void execute_keybind(keybind_t *kb) {
     case BIND_FLIP_VERTICAL:
       flip_vertical();
       break;
+    case BIND_RESIZE_LEFT:
+      resize_left();
+      break;
+    case BIND_RESIZE_RIGHT:
+      resize_right();
+      break;
+    case BIND_RESIZE_UP:
+      resize_up();
+      break;
+    case BIND_RESIZE_DOWN:
+      resize_down();
+      break;
     case BIND_DESKTOP_NEXT:
       focus_next_desktop();
       break;
@@ -980,6 +999,18 @@ void execute_gesturebind(gesturebind_t *gb) {
       break;
     case BIND_FLIP_VERTICAL:
       flip_vertical();
+      break;
+    case BIND_RESIZE_LEFT:
+      resize_left();
+      break;
+    case BIND_RESIZE_RIGHT:
+      resize_right();
+      break;
+    case BIND_RESIZE_UP:
+      resize_up();
+      break;
+    case BIND_RESIZE_DOWN:
+      resize_down();
       break;
     case BIND_DESKTOP_NEXT:
       focus_next_desktop();
