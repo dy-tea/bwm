@@ -117,6 +117,9 @@ struct bwm_server {
   struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1 *foreign_toplevel_image_capture_source_manager;
   struct wl_listener new_toplevel_capture_request;
 
+  struct wlr_drm_lease_manager *drm_lease_manager;
+  struct wl_listener new_drm_lease;
+
   // cursor state
   enum cursor_mode cursor_mode;
   struct bwm_toplevel *grabbed_toplevel;

@@ -66,6 +66,7 @@
 #include <wlr/types/wlr_color_representation_v1.h>
 #include <wlr/types/wlr_output_power_management_v1.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
+#include <wlr/types/wlr_drm_lease_v1.h>
 
 void handle_request_start_drag(struct wl_listener *listener, void *data);
 void handle_start_drag(struct wl_listener *listener, void *data);
@@ -76,6 +77,7 @@ void handle_output_power_set_mode(struct wl_listener *listener, void *data);
 void handle_output_manager_apply(struct wl_listener *listener, void *data);
 void handle_output_manager_test(struct wl_listener *listener, void *data);
 void handle_xdg_activation_request_activate(struct wl_listener *listener, void *data);
+void handle_drm_lease_request(struct wl_listener *listener, void *data);
 
 void server_init(void) {
   server = (struct bwm_server){0};
@@ -263,6 +265,17 @@ void server_init(void) {
   server.idle_inhibit_manager = wlr_idle_inhibit_v1_create(server.wl_display);
   server.new_idle_inhibitor.notify = handle_new_idle_inhibitor;
   wl_signal_add(&server.idle_inhibit_manager->events.new_inhibitor, &server.new_idle_inhibitor);
+
+  // drm lease
+#if WLR_HAS_DRM_BACKEND
+	server.drm_lease_manager = wlr_drm_lease_manager_create(server.wl_display, server.backend);
+	if (server.drm_lease_manager) {
+		server.new_drm_lease.notify = handle_new_drm_lease;
+		wl_signal_add(&server.drm_lease_manager->events.new_lease, &server.new_drm_lease);
+	} else {
+		wlr_log(WLR_ERROR, "failed to create drm lease manager");
+	}
+#endif
 
   // color manager
   if (server.renderer->features.input_color_transform) {
@@ -594,6 +607,10 @@ void server_fini(void) {
   wl_list_remove(&server.output_manager_apply.link);
   wl_list_remove(&server.output_manager_test.link);
   wl_list_remove(&server.new_toplevel_capture_request.link);
+#ifdef WLR_HAS_DRM_BACKEND
+	if (server.drm_lease_manager)
+		wl_list_remove(&server.drm_lease_request.link);
+#endif
 
   wlr_scene_node_destroy(&server.scene->tree.node);
   wlr_cursor_destroy(server.cursor);
@@ -647,3 +664,14 @@ void handle_xdg_activation_request_activate(struct wl_listener *listener, void *
   wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
   focus_toplevel(toplevel);
 }
+
+#if WLR_HAS_DRM_BACKEND
+static void handle_drm_lease_request(struct wl_listener *listener, void *data) {
+	struct wlr_drm_lease_request_v1 *req = data;
+	struct wlr_drm_lease_v1 *lease = wlr_drm_lease_request_v1_grant(req);
+	if (!lease) {
+		wlr_log(WLR_ERROR, "Failed to grant lease request");
+		wlr_drm_lease_request_v1_reject(req);
+	}
+}
+#endif
