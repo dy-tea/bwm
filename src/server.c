@@ -67,6 +67,7 @@
 #include <wlr/types/wlr_output_power_management_v1.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_drm_lease_v1.h>
+#include <wlr/types/wlr_linux_drm_syncobj_v1.h>
 
 void handle_request_start_drag(struct wl_listener *listener, void *data);
 void handle_start_drag(struct wl_listener *listener, void *data);
@@ -118,6 +119,13 @@ void server_init(void) {
     server.linux_dmabuf = wlr_linux_dmabuf_v1_create_with_renderer(server.wl_display, 4, server.renderer);
     wlr_export_dmabuf_manager_v1_create(server.wl_display);
   }
+
+  // drm syncobj
+  if (wlr_renderer_get_drm_fd(server.renderer) >= 0 && server.renderer->features.timeline &&
+		server.backend->features.timeline) {
+		wlr_linux_drm_syncobj_manager_v1_create(server.wl_display, 1,
+			wlr_renderer_get_drm_fd(server.renderer));
+	}
 
   wlr_data_device_manager_create(server.wl_display);
   wlr_primary_selection_v1_device_manager_create(server.wl_display);
