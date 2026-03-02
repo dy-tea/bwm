@@ -4,6 +4,7 @@
 #include "output.h"
 #include "tree.h"
 #include "transaction.h"
+#include <stdint.h>
 #include <string.h>
 #include <wlr/util/log.h>
 #include <wlr/types/wlr_scene.h>
@@ -171,45 +172,46 @@ void workspace_create_desktop(const char *name) {
   wlr_log(WLR_INFO, "Created workspace: %s", name);
 }
 
-static void hide_node(node_t *n) {
-  if (!n)
-    return;
-  if (n->client) {
-    n->client->shown = false;
-    wlr_scene_node_set_enabled(&n->client->toplevel->scene_tree->node, false);
+static void update_all_toplevels_visibility(monitor_t *m, desktop_t *current_desktop) {
+  struct bwm_toplevel *toplevel;
+  wl_list_for_each(toplevel, &server.toplevels, link) {
+    if (!toplevel->mapped || !toplevel->scene_tree || !toplevel->node || !toplevel->node->client)
+      continue;
+
+    monitor_t *toplevel_mon = toplevel->node->monitor;
+    if (!toplevel_mon || toplevel_mon != m)
+      continue;
+
+    bool should_show = false;
+    desktop_t *d = m->desk_head;
+    while (d != NULL) {
+      if (d->root != NULL) {
+        node_t *parent = toplevel->node;
+        while (parent != NULL) {
+          if (parent == d->root) {
+            should_show = (d == current_desktop);
+            wlr_log(WLR_DEBUG, "Toplevel belongs to desktop %s (current=%s, show=%d)",
+                    d->name, current_desktop->name, should_show);
+            goto found_desktop;
+          }
+          parent = parent->parent;
+        }
+      }
+      d = d->next;
+    }
+
+found_desktop:
+
+    if (should_show && !toplevel->node->client->shown) {
+      wlr_log(WLR_DEBUG, "Showing toplevel on desktop %s", current_desktop->name);
+      toplevel->node->client->shown = true;
+      wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
+    } else if (!should_show && toplevel->node->client->shown) {
+      wlr_log(WLR_DEBUG, "Hiding toplevel (not on desktop %s)", current_desktop->name);
+      toplevel->node->client->shown = false;
+      wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
+    }
   }
-  hide_node(n->first_child);
-  hide_node(n->second_child);
-}
-
-static void show_node(node_t *n) {
-  if (!n)
-    return;
-  if (n->client) {
-    n->client->shown = true;
-    wlr_scene_node_set_enabled(&n->client->toplevel->scene_tree->node, true);
-  }
-  show_node(n->first_child);
-  show_node(n->second_child);
-}
-
-static void hide_desktop(desktop_t *d) {
-  if (!d || !d->root)
-    return;
-  hide_node(d->root);
-  for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root))
-    if (n->client)
-      wlr_scene_node_set_enabled(&n->client->toplevel->scene_tree->node, n->client->shown);
-}
-
-static void show_desktop(desktop_t *d, monitor_t *m) {
-  if (!d || !d->root)
-    return;
-  show_node(d->root);
-  wlr_log(WLR_DEBUG, "show_desktop: showing %s", d->name);
-  for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root))
-    if (n->client)
-      wlr_scene_node_set_enabled(&n->client->toplevel->scene_tree->node, n->client->shown);
 }
 
 void workspace_switch_to_desktop(const char *name) {
@@ -230,12 +232,10 @@ void workspace_switch_to_desktop(const char *name) {
 
   desktop_t *old_desktop = server.focused_monitor->desk;
 
-  // hide old desktop
-  if (old_desktop)
-    hide_desktop(old_desktop);
+  server.focused_monitor->desk = d;
 
-  // show new desktop
-  show_desktop(d, server.focused_monitor);
+  wlr_log(WLR_DEBUG, "Switching from %s to %s",
+          old_desktop ? old_desktop->name : "NULL", d->name);
 
   struct wlr_ext_workspace_handle_v1 *old = workspace_get_active();
   if (old)
@@ -244,11 +244,18 @@ void workspace_switch_to_desktop(const char *name) {
   wlr_ext_workspace_handle_v1_set_active(workspace, true);
   wlr_ext_workspace_handle_v1_set_hidden(workspace, false);
 
-  server.focused_monitor->desk = d;
-  if (d->focus != NULL)
-    focus_node(server.focused_monitor, d, d->focus);
+  update_all_toplevels_visibility(server.focused_monitor, d);
+
+  if (d->root == NULL) {
+    wlr_log(WLR_DEBUG, "Desktop %s has no root, skipping arrange/focus", name);
+    wlr_log(WLR_INFO, "Switched to desktop: %s", name);
+    return;
+  }
 
   arrange(server.focused_monitor, d, true);
+
+  if (d->focus != NULL)
+    focus_node(server.focused_monitor, d, d->focus);
 
   wlr_log(WLR_INFO, "Switched to desktop: %s", name);
 }

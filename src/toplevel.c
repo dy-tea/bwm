@@ -183,7 +183,6 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   if (rule && rule->has_manage && !rule->manage) {
     wlr_log(WLR_INFO, "Window %s ignored by rule (manage=off)", app_id ? app_id : "?");
     free_node(n);
-    free(n->client);
     return;
   }
 
@@ -191,12 +190,9 @@ void toplevel_map(struct wl_listener *listener, void *data) {
     n->client->state = rule->state;
 
   bool should_focus = true;
-  bool should_follow = true;
   if (rule) {
     if (rule->has_focus && !rule->focus)
       should_focus = false;
-    if (rule->has_follow && !rule->follow)
-      should_follow = false;
   }
 
   desktop_t *target_desktop = d;
@@ -294,17 +290,23 @@ void toplevel_map(struct wl_listener *listener, void *data) {
     wlr_surface_set_preferred_buffer_scale(toplevel->xdg_toplevel->base->surface, ceil(scale));
   }
 
-  if (should_focus) {
-    if (desktop_changed && !should_follow)
-      focus_node(m, d, d->focus);
-    else
-      focus_node(target_monitor, target_desktop, n);
+  // hide window if target desktop is not the focused desktop
+  bool target_desktop_is_focused = (target_desktop == target_monitor->desk);
+  if (desktop_changed && !target_desktop_is_focused) {
+    n->client->shown = false;
+    wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
   }
+
+  if (should_focus && target_desktop_is_focused)
+   	focus_node(target_monitor, target_desktop, n);
+  else if (should_focus && !target_desktop_is_focused)
+    target_desktop->focus = n;
 
   if (rule && rule->state == STATE_FULLSCREEN)
   	toggle_fullscreen();
 
-  arrange(target_monitor, target_desktop, true);
+  // only use transaction for focused desktop
+  arrange(target_monitor, target_desktop, target_desktop_is_focused);
 
   toplevel->image_capture_surface = wlr_scene_surface_create(
   	&toplevel->image_capture->tree, toplevel->xdg_toplevel->base->surface);
@@ -345,7 +347,7 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
     return;
 
   node_t *n = toplevel->node;
-  
+
   // notify transaction system that this view is unmapped
   // so it can mark any waiting instruction as ready
   transaction_notify_view_unmapped(n);

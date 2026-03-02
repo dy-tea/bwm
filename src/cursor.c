@@ -259,8 +259,13 @@ void cursor_button(struct wl_listener *listener, void *data) {
       	focus_layer_surface(layer);
     } else {
     	struct bwm_toplevel *toplevel = type;
-	    if (toplevel)
-	      focus_toplevel(toplevel);
+	    if (toplevel && toplevel->node) {
+        monitor_t *m = toplevel->node->monitor;
+        desktop_t *d = m ? m->desk : NULL;
+        if (d)
+          d->focus = toplevel->node;
+        focus_toplevel(toplevel);
+      }
     }
   }
 }

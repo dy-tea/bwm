@@ -170,6 +170,66 @@ bmsg quit                           # Quit the compositor
 <shell command>                     # Execute any shell command (no bmsg prefix)
 ```
 
+#### Window Rules
+
+Window rules allow you to control how specific applications are managed when they open.
+
+```
+bmsg rule -a <app_id> [options...]  # Add a new rule
+bmsg rule -r <index>                # Remove rule by index
+bmsg rule -l                        # List all rules
+```
+
+**Adding Rules (`-a` / `--add`):**
+
+Specify an app_id (or title) followed by consequence options:
+
+```
+bmsg rule -a dev.zed.Zed desktop=I
+bmsg rule -a zen desktop=II
+bmsg rule -a vesktop desktop=III
+```
+
+**Consequence Options:**
+
+- `desktop=<name>` - Send window to specified desktop (e.g., `desktop=I`, `desktop=^1` for first desktop on monitor 1)
+- `state=<state>` - Set window state: `tiled`, `floating`, `fullscreen`, `pseudo_tiled`
+- `follow=on|off` - Whether focus follows the window to its desktop (default: on)
+- `focus=on|off` - Whether the window receives focus (default: on)
+- `manage=on|off` - Whether the window is managed by the compositor
+- `locked=on|off` - Lock window to its desktop
+- `hidden=on|off` - Start window hidden
+- `sticky=on|off` - Make window sticky (visible on all desktops)
+- `one_shot` - Remove rule after first match
+
+**Matching by Title:**
+
+```
+bmsg rule -a title="Exact Window Title" desktop=I
+```
+
+**Examples:**
+
+```
+# Send Zed to desktop I, don't switch focus away from current desktop
+bmsg rule -a dev.zed.Zed desktop=I follow=off
+
+# Send Firefox to desktop II as floating window
+bmsg rule -a firefox desktop=II state=floating
+
+# Ignore a window (don't manage it)
+bmsg rule -a some-app manage=off
+
+# Start a window in fullscreen
+bmsg rule -a mpv state=fullscreen
+
+# List all configured rules
+bmsg rule -l
+
+# Remove rule at index 0
+bmsg rule -r 0
+```
+
 ### Gesture Bindings
 
 Touchpad gesture bindings are defined with the `gesture` keyword, followed by the gesture specification and command.

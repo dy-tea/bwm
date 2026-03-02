@@ -3,6 +3,7 @@
 #include "types.h"
 #include "transaction.h"
 #include "output.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <wlr/util/log.h>
@@ -101,12 +102,12 @@ void free_node(node_t *n) {
 
   if (n->client != NULL) {
     free(n->client);
-    n->client = (void*)sentinel;
+    n->client = NULL;
   }
 
   if (n->presel != NULL) {
     free(n->presel);
-    n->presel = (void*)sentinel;
+    n->presel = NULL;
   }
 
   free(n);
@@ -312,10 +313,63 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
     struct wlr_box first_rect;
     struct wlr_box second_rect;
 
-    bool first_fullscreen = n->first_child && n->first_child->client && n->first_child->client->state == STATE_FULLSCREEN;
-    bool second_fullscreen = n->second_child && n->second_child->client && n->second_child->client->state == STATE_FULLSCREEN;
-    bool first_hidden = n->first_child && n->first_child->hidden;
-    bool second_hidden = n->second_child && n->second_child->hidden;
+    // please help why am I doing this
+    static uintptr_t sentinel = 0xDEADBEEF;
+    bool first_valid = n->first_child != NULL &&
+      (uintptr_t)n->first_child > 0x400000 &&
+      (uintptr_t)n->first_child < 0x7fffffffffff &&
+      (uintptr_t)n->first_child->client != sentinel &&
+      !n->first_child->destroying;
+    bool second_valid = n->second_child != NULL &&
+      (uintptr_t)n->second_child > 0x400000 &&
+      (uintptr_t)n->second_child < 0x7fffffffffff &&
+      (uintptr_t)n->second_child->client != sentinel &&
+      !n->second_child->destroying;
+
+    if (n->first_child != NULL && !first_valid) {
+      wlr_log(WLR_ERROR, "Node %u has invalid/destroying/freed first_child pointer %p (destroying=%d), nulling",
+              n->id, (void*)n->first_child,
+              n->first_child && (uintptr_t)n->first_child->client != sentinel ? n->first_child->destroying : -1);
+      n->first_child = NULL;
+      first_valid = false;
+    }
+    if (n->second_child != NULL && !second_valid) {
+      wlr_log(WLR_ERROR, "Node %u has invalid/destroying/freed second_child pointer %p (destroying=%d), nulling",
+              n->id, (void*)n->second_child,
+              n->second_child && (uintptr_t)n->second_child->client != sentinel ? n->second_child->destroying : -1);
+      n->second_child = NULL;
+      second_valid = false;
+    }
+
+    // fix tree structure
+    if ((first_valid && !second_valid) || (!first_valid && second_valid)) {
+      node_t *valid_child = first_valid ? n->first_child : n->second_child;
+      wlr_log(WLR_DEBUG, "Node %u has only one valid child (first=%d, second=%d), promoting child %u",
+              n->id, first_valid, second_valid, valid_child->id);
+
+      if (n->parent != NULL) {
+        if (is_first_child(n))
+          n->parent->first_child = valid_child;
+        else
+          n->parent->second_child = valid_child;
+        valid_child->parent = n->parent;
+      } else {
+        d->root = valid_child;
+        valid_child->parent = NULL;
+      }
+
+      n->first_child = NULL;
+      n->second_child = NULL;
+      n->parent = NULL;
+
+      apply_layout(m, d, valid_child, rect, root_rect);
+      return;
+    }
+
+    bool first_fullscreen = first_valid && n->first_child->client && n->first_child->client->state == STATE_FULLSCREEN;
+    bool second_fullscreen = second_valid && n->second_child->client && n->second_child->client->state == STATE_FULLSCREEN;
+    bool first_hidden = first_valid && n->first_child->hidden;
+    bool second_hidden = second_valid && n->second_child->hidden;
 
     if (d->layout == LAYOUT_MONOCLE) {
       first_rect = rect;
@@ -606,6 +660,11 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
         g->first_child = b;
       else
         g->second_child = b;
+      if (n_is_first)
+        p->first_child = NULL;
+      else
+        p->second_child = NULL;
+      p->parent = NULL;
     } else d->root = b;
 
     // clear detached pointers
