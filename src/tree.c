@@ -635,21 +635,41 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
   if (n == NULL || d == NULL)
     return;
 
+  wlr_log(WLR_DEBUG, "remove_node: Removing node %u from desktop %s (root=%p)",
+          n->id, d->name, (void*)d->root);
+
   node_t *p = n->parent;
   bool n_is_first = is_first_child(n);
 
   if (p == NULL) {
-    d->root = NULL;
-    d->focus = NULL;
+  	// check if root has brother
+    node_t *b = brother_tree(n);
+    if (b != NULL) {
+    	// promote brother to root
+      wlr_log(WLR_DEBUG, "remove_node: Node %u is root with brother %u, promoting brother to root",
+              n->id, b->id);
+      d->root = b;
+      b->parent = NULL;
+      if (n->parent != NULL)
+        n->parent = NULL;
+      if (d->focus == n)
+        d->focus = b;
+    } else {
+      wlr_log(WLR_DEBUG, "remove_node: Node %u has no parent or brother, clearing desktop %s root",
+              n->id, d->name);
+      d->root = NULL;
+      d->focus = NULL;
+    }
   } else {
     node_t *b = brother_tree(n);
     node_t *g = p->parent;
 
     if (b == NULL) {
     	// remove your existence if you don't have a brother
+      wlr_log(WLR_ERROR, "remove_node: Node %u brother is NULL, clearing desktop %s root (tree corrupted)",
+              n->id, d->name);
       d->root = NULL;
       d->focus = NULL;
-      wlr_log(WLR_ERROR, "remove_node: brother is NULL, tree may be corrupted");
       return;
     }
 

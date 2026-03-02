@@ -196,13 +196,22 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   }
 
   desktop_t *target_desktop = d;
+  wlr_log(WLR_DEBUG, "Window %s: current desktop=%s, has_rule=%d",
+          app_id ? app_id : "?", d->name, rule != NULL);
   if (rule && rule->has_desktop) {
+    wlr_log(WLR_DEBUG, "  Rule specifies desktop: %s", rule->desktop);
     desktop_t *new_desk = find_desktop_by_name(rule->desktop);
-    if (new_desk)
+    if (new_desk) {
       target_desktop = new_desk;
+      wlr_log(WLR_DEBUG, "  Target desktop changed to: %s", target_desktop->name);
+    } else {
+      wlr_log(WLR_ERROR, "  Desktop %s not found", rule->desktop);
+    }
   }
 
   bool desktop_changed = (target_desktop != d);
+  wlr_log(WLR_DEBUG, "  Final target desktop: %s (changed=%d)",
+          target_desktop->name, desktop_changed);
 
   if (rule && rule->has_hidden)
     n->hidden = rule->hidden;
@@ -353,7 +362,31 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
   transaction_notify_view_unmapped(n);
 
   monitor_t *m = mon;
-  desktop_t *d = m ? m->desk : NULL;
+  desktop_t *d = NULL;
+
+  // find the actual desktop this node belongs to by walking up to root
+  if (m && n) {
+    node_t *root = n;
+    while (root->parent != NULL)
+      root = root->parent;
+
+    // find which desktop has this root
+    desktop_t *desk = m->desk_head;
+    while (desk != NULL) {
+      if (desk->root == root) {
+        d = desk;
+        wlr_log(WLR_DEBUG, "Found node %u belongs to desktop %s", n->id, d->name);
+        break;
+      }
+      desk = desk->next;
+    }
+
+    if (d == NULL) {
+      wlr_log(WLR_ERROR, "Could not find desktop for node %u root %p, using current desktop %s",
+              n->id, (void*)root, m->desk->name);
+      d = m->desk;
+    }
+  }
 
   if (m && d) {
     if (n)
