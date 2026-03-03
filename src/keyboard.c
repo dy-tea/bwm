@@ -9,6 +9,7 @@
 #include "input.h"
 #include <stdlib.h>
 #include <unistd.h>
+#include <wayland-server-core.h>
 #include <wlr/backend/session.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_keyboard_group.h>
@@ -23,6 +24,13 @@ extern struct bwm_server server;
 extern keybind_t keybinds[MAX_KEYBINDS];
 extern size_t num_keybinds;
 extern submap_t *active_submap;
+
+static void destroy_empty_wlr_keyboard_group(void *data) {
+  struct bwm_keyboard_group *group = data;
+  struct wlr_keyboard_group *wlr_group = group->wlr_group;
+  wlr_keyboard_group_destroy(wlr_group);
+  free(group);
+}
 
 bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed);
 
@@ -49,6 +57,7 @@ void handle_new_keyboard(struct wlr_input_device *device) {
   input_config_t *config = input_config_get_for_device(device->name, INPUT_CONFIG_TYPE_KEYBOARD);
   if (config) {
     input_config_apply(config, device);
+    input_config_destroy(config);
   } else {
     struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     struct xkb_keymap *keymap =
@@ -902,8 +911,8 @@ void keyboard_group_remove(struct bwm_keyboard *keyboard) {
 
     wl_list_remove(&group->link);
 
-    wlr_keyboard_group_destroy(wlr_group);
-    free(group);
+    struct wl_event_loop *event_loop = wl_display_get_event_loop(server.wl_display);
+    wl_event_loop_add_idle(event_loop, destroy_empty_wlr_keyboard_group, group);
   }
 }
 
