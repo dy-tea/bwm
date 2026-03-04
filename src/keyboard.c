@@ -135,13 +135,15 @@ void keyboard_destroy(struct wl_listener *listener, void *data) {
   struct wlr_input_device *device = data;
   (void)device;
 
+  bool is_standalone = (keyboard->group == NULL);
+
   if (keyboard->group)
     keyboard_group_remove(keyboard);
 
   if (keyboard->all_link.next || keyboard->all_link.prev)
     wl_list_remove(&keyboard->all_link);
 
-  if (keyboard->is_representative || keyboard->group == NULL)
+  if (is_standalone)
     if (keyboard->active_link.next || keyboard->active_link.prev)
       wl_list_remove(&keyboard->active_link);
 
@@ -152,8 +154,6 @@ void keyboard_destroy(struct wl_listener *listener, void *data) {
   if (keyboard->destroy.link.next)
     wl_list_remove(&keyboard->destroy.link);
 
-  if (keyboard->wlr_keyboard->keymap)
-    xkb_keymap_unref(keyboard->wlr_keyboard->keymap);
   free(keyboard);
 }
 
@@ -907,6 +907,7 @@ void keyboard_group_remove(struct bwm_keyboard *keyboard) {
       wl_list_remove(&group->representative->modifiers.link);
       wl_list_remove(&group->representative->key.link);
       free(group->representative);
+      group->representative = NULL;
     }
 
     wl_list_remove(&group->link);
