@@ -32,7 +32,7 @@ typedef enum {
 
 typedef enum { LAYER_BELOW, LAYER_NORMAL, LAYER_ABOVE } stack_layer_t;
 
-typedef enum { LAYOUT_TILED, LAYOUT_MONOCLE } layout_t;
+typedef enum { LAYOUT_TILED, LAYOUT_MONOCLE, LAYOUT_SCROLLER } layout_t;
 
 typedef enum { DIR_NORTH, DIR_WEST, DIR_SOUTH, DIR_EAST } direction_t;
 
@@ -71,6 +71,19 @@ typedef struct client_t {
   struct wlr_box floating_rectangle;
   struct wlr_box tiled_rectangle;
   struct bwm_toplevel *toplevel;
+
+  // Scroller layout properties
+  float scroller_proportion;
+  float scroller_proportion_single;
+  float stack_proportion;
+  struct client_t *next_in_stack;
+  struct client_t *prev_in_stack;
+
+  // Resize state for scroller
+  float old_scroller_proportion;
+  float old_stack_proportion;
+  bool cursor_in_left_half;
+  bool cursor_in_upper_half;
 } client_t;
 
 typedef struct node_t {

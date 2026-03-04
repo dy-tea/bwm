@@ -29,6 +29,10 @@ typedef struct {
   bool has_hidden;
   bool sticky;
   bool has_sticky;
+  float scroller_proportion;
+  bool has_scroller_proportion;
+  float scroller_proportion_single;
+  bool has_scroller_proportion_single;
 } rule_consequence_t;
 
 typedef struct rule_t {

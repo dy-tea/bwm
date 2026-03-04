@@ -7,6 +7,7 @@
 #include "workspace.h"
 #include "config.h"
 #include "input.h"
+#include "scroller.h"
 #include <stdlib.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
@@ -233,6 +234,14 @@ void focus_west(void) {
   if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
     return;
 
+  if (mon->desk->layout == LAYOUT_SCROLLER) {
+    if (scroller_focus_prev(mon->desk)) {
+      focus_node(mon, mon->desk, mon->desk->focus);
+      wlr_log(WLR_DEBUG, "Focused west (scroller)");
+    }
+    return;
+  }
+
   node_t *n = find_fence(mon->desk->focus, DIR_WEST);
   if (n != NULL) {
     n = second_extrema(n);
@@ -247,6 +256,14 @@ void focus_east(void) {
   if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
     return;
 
+  if (mon->desk->layout == LAYOUT_SCROLLER) {
+    if (scroller_focus_next(mon->desk)) {
+      focus_node(mon, mon->desk, mon->desk->focus);
+      wlr_log(WLR_DEBUG, "Focused east (scroller)");
+    }
+    return;
+  }
+
   node_t *n = find_fence(mon->desk->focus, DIR_EAST);
   if (n != NULL) {
     n = first_extrema(n);
@@ -257,30 +274,46 @@ void focus_east(void) {
   }
 }
 
-void focus_north(void) {
-  if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
-    return;
-
-  node_t *n = find_fence(mon->desk->focus, DIR_NORTH);
-  if (n != NULL) {
-    n = second_extrema(n);
-    if (n != NULL) {
-      focus_node(mon, mon->desk, n);
-      wlr_log(WLR_DEBUG, "Focused north");
-    }
-  }
-}
-
 void focus_south(void) {
   if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
     return;
 
+  if (mon->desk->layout == LAYOUT_SCROLLER) {
+    if (scroller_focus_down(mon->desk)) {
+      focus_node(mon, mon->desk, mon->desk->focus);
+      wlr_log(WLR_DEBUG, "Focused south (scroller stack)");
+    }
+    return;
+  }
+
   node_t *n = find_fence(mon->desk->focus, DIR_SOUTH);
+  if (n != NULL) {
+    n = second_extrema(n);
+    if (n != NULL) {
+      focus_node(mon, mon->desk, n);
+      wlr_log(WLR_DEBUG, "Focused south");
+    }
+  }
+}
+
+void focus_north(void) {
+  if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
+    return;
+
+  if (mon->desk->layout == LAYOUT_SCROLLER) {
+    if (scroller_focus_up(mon->desk)) {
+      focus_node(mon, mon->desk, mon->desk->focus);
+      wlr_log(WLR_DEBUG, "Focused north (scroller stack)");
+    }
+    return;
+  }
+
+  node_t *n = find_fence(mon->desk->focus, DIR_NORTH);
   if (n != NULL) {
     n = first_extrema(n);
     if (n != NULL) {
       focus_node(mon, mon->desk, n);
-      wlr_log(WLR_DEBUG, "Focused south");
+      wlr_log(WLR_DEBUG, "Focused north");
     }
   }
 }

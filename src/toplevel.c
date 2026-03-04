@@ -8,6 +8,7 @@
 #include "types.h"
 #include "workspace.h"
 #include "rule.h"
+#include "scroller.h"
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -221,6 +222,13 @@ void toplevel_map(struct wl_listener *listener, void *data) {
 
   if (rule && rule->has_locked)
     n->locked = rule->locked;
+
+  // Apply scroller-specific rule properties
+  if (rule && (rule->has_scroller_proportion || rule->has_scroller_proportion_single)) {
+    scroller_apply_client_rules(n->client,
+      rule->has_scroller_proportion ? rule->scroller_proportion : 0.0f,
+      rule->has_scroller_proportion_single ? rule->scroller_proportion_single : 0.0f);
+  }
 
   // create foreign toplevel handles
   struct wlr_ext_foreign_toplevel_handle_v1_state ext_state = {

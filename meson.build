@@ -78,6 +78,7 @@ executable(
 		'src' / 'idle.c',
 		'src' / 'rule.c',
 		'src' / 'gesture.c',
+		'src' / 'scroller.c',
 		wl_protos_src,
 	],
 	include_directories: inc,

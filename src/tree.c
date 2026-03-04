@@ -3,6 +3,7 @@
 #include "types.h"
 #include "transaction.h"
 #include "output.h"
+#include "scroller.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,6 +86,9 @@ client_t *make_client(void) {
   c->urgent = false;
   c->shown = false;
   c->border_width = border_width;
+
+  // Initialize scroller properties
+  scroller_init_client(c);
 
   return c;
 }
@@ -217,6 +221,14 @@ void arrange(monitor_t *m, desktop_t *d, bool use_transaction) {
       m->padding.left + d->padding.left + d->padding.right + m->padding.right;
   rect.height -=
       m->padding.top + d->padding.top + d->padding.bottom + m->padding.bottom;
+
+  // Handle scroller layout separately
+  if (d->layout == LAYOUT_SCROLLER) {
+    scroller_arrange(m, d, rect);
+    if (use_transaction)
+      transaction_commit_dirty();
+    return;
+  }
 
   if (d->layout == LAYOUT_MONOCLE) {
     rect.x += monocle_padding.left;
@@ -771,6 +783,17 @@ bool focus_node(monitor_t *m, desktop_t *d, node_t *n) {
     // mark focused window as shown
     if (n != NULL && n->client != NULL)
       n->client->shown = true;
+  } else if (is_current_desktop && d->layout == LAYOUT_SCROLLER && d->root != NULL) {
+    for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
+      if (node->client != NULL)
+        node->client->shown = true;
+
+    if (n != NULL && n->client != NULL && n->client->toplevel && n->client->toplevel->configured) {
+      wlr_log(WLR_DEBUG, "focus_node: scroller layout, triggering arrange for scrolling effect");
+      arrange(m, d, true);
+    } else {
+      wlr_log(WLR_DEBUG, "focus_node: scroller layout, skipping arrange (initial map)");
+    }
   } else if (is_current_desktop) {
     // mark all windows as shown in tiled mode, but only for current desktop
     if (d->root != NULL)

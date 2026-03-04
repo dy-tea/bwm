@@ -10,6 +10,7 @@
 #include "keyboard.h"
 #include "rule.h"
 #include "config.h"
+#include "scroller.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -649,6 +650,8 @@ static void ipc_cmd_desktop(char **args, int num, int client_fd) {
       desk->layout = LAYOUT_TILED;
     } else if (streq("monocle", *args)) {
       desk->layout = LAYOUT_MONOCLE;
+    } else if (streq("scroller", *args)) {
+      desk->layout = LAYOUT_SCROLLER;
     } else {
       send_failure(client_fd, "desktop -l: unknown layout\n");
       return;
@@ -1039,6 +1042,117 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
     } else {
       send_success(client_fd, gapless_monocle ? "true\n" : "false\n");
     }
+  } else if (streq("edge_scroller_pointer_focus", *args)) {
+    if (num >= 2) {
+      edge_scroller_pointer_focus = (strcmp(args[1], "true") == 0);
+      send_success(client_fd, "edge_scroller_pointer_focus set\n");
+    } else {
+      send_success(client_fd, edge_scroller_pointer_focus ? "true\n" : "false\n");
+    }
+  } else if (streq("scroller_default_proportion", *args)) {
+    if (num >= 2) {
+      scroller_default_proportion = atof(args[1]);
+      if (scroller_default_proportion < 0.1f) scroller_default_proportion = 0.1f;
+      if (scroller_default_proportion > 1.0f) scroller_default_proportion = 1.0f;
+      send_success(client_fd, "scroller_default_proportion set\n");
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.2f\n", scroller_default_proportion);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("scroller_proportion_preset", *args)) {
+    if (num >= 2) {
+      // Parse comma-separated list of proportions
+      char *value = args[1];
+      int count = 1;
+      for (char *p = value; *p; p++) {
+        if (*p == ',') count++;
+      }
+      
+      // Free old presets
+      if (scroller_proportion_preset) {
+        free(scroller_proportion_preset);
+      }
+      
+      // Allocate new array
+      scroller_proportion_preset = malloc(count * sizeof(float));
+      if (!scroller_proportion_preset) {
+        send_failure(client_fd, "memory allocation failed\n");
+        return;
+      }
+      
+      // Parse values
+      char *token = strtok(value, ",");
+      int i = 0;
+      while (token && i < count) {
+        float val = atof(token);
+        if (val < 0.1f) val = 0.1f;
+        if (val > 1.0f) val = 1.0f;
+        scroller_proportion_preset[i++] = val;
+        token = strtok(NULL, ",");
+      }
+      scroller_proportion_preset_count = i;
+      
+      send_success(client_fd, "scroller_proportion_preset set\n");
+    } else {
+      char buf[512];
+      int offset = 0;
+      for (int i = 0; i < scroller_proportion_preset_count && offset < 500; i++) {
+        offset += snprintf(buf + offset, sizeof(buf) - offset, "%.2f%s",
+                          scroller_proportion_preset[i],
+                          i < scroller_proportion_preset_count - 1 ? "," : "\n");
+      }
+      send_success(client_fd, buf);
+    }
+  } else if (streq("scroller_default_proportion_single", *args)) {
+    if (num >= 2) {
+      scroller_default_proportion_single = atof(args[1]);
+      if (scroller_default_proportion_single < 0.1f) scroller_default_proportion_single = 0.1f;
+      if (scroller_default_proportion_single > 1.0f) scroller_default_proportion_single = 1.0f;
+      send_success(client_fd, "scroller_default_proportion_single set\n");
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.2f\n", scroller_default_proportion_single);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("scroller_focus_center", *args)) {
+    if (num >= 2) {
+      scroller_focus_center = (strcmp(args[1], "true") == 0);
+      send_success(client_fd, "scroller_focus_center set\n");
+    } else {
+      send_success(client_fd, scroller_focus_center ? "true\n" : "false\n");
+    }
+  } else if (streq("scroller_prefer_center", *args)) {
+    if (num >= 2) {
+      scroller_prefer_center = (strcmp(args[1], "true") == 0);
+      send_success(client_fd, "scroller_prefer_center set\n");
+    } else {
+      send_success(client_fd, scroller_prefer_center ? "true\n" : "false\n");
+    }
+  } else if (streq("scroller_prefer_overspread", *args)) {
+    if (num >= 2) {
+      scroller_prefer_overspread = (strcmp(args[1], "true") == 0);
+      send_success(client_fd, "scroller_prefer_overspread set\n");
+    } else {
+      send_success(client_fd, scroller_prefer_overspread ? "true\n" : "false\n");
+    }
+  } else if (streq("scroller_ignore_proportion_single", *args)) {
+    if (num >= 2) {
+      scroller_ignore_proportion_single = (strcmp(args[1], "true") == 0);
+      send_success(client_fd, "scroller_ignore_proportion_single set\n");
+    } else {
+      send_success(client_fd, scroller_ignore_proportion_single ? "true\n" : "false\n");
+    }
+  } else if (streq("scroller_structs", *args)) {
+    if (num >= 2) {
+      scroller_structs = atoi(args[1]);
+      if (scroller_structs < 0) scroller_structs = 0;
+      send_success(client_fd, "scroller_structs set\n");
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d\n", scroller_structs);
+      send_success(client_fd, buf);
+    }
   } else {
     send_failure(client_fd, "config: unknown setting\n");
   }
@@ -1288,6 +1402,18 @@ static void ipc_cmd_rule(char **args, int num, int client_fd) {
         r->consequence.has_sticky = true;
       } else if (streq("one_shot", arg)) {
         r->match.one_shot = true;
+      } else if (strncmp(arg, "scroller_proportion=", 20) == 0) {
+        float val = atof(arg + 20);
+        if (val >= 0.1f && val <= 1.0f) {
+          r->consequence.scroller_proportion = val;
+          r->consequence.has_scroller_proportion = true;
+        }
+      } else if (strncmp(arg, "scroller_proportion_single=", 27) == 0) {
+        float val = atof(arg + 27);
+        if (val >= 0.1f && val <= 1.0f) {
+          r->consequence.scroller_proportion_single = val;
+          r->consequence.has_scroller_proportion_single = true;
+        }
       }
 
       args++;
@@ -1346,6 +1472,131 @@ static void ipc_cmd_keyboard_grouping(char **args, int num, int client_fd) {
   set_keyboard_grouping(grouping);
   keyboard_reapply_grouping();
   send_success(client_fd, "keyboard_grouping set\n");
+}
+
+static void ipc_cmd_scroller(char **args, int num, int client_fd) {
+  if (num < 1) {
+    send_failure(client_fd, "scroller: missing arguments\n");
+    return;
+  }
+
+  monitor_t *mon = server.focused_monitor;
+  if (!mon || !mon->desk) {
+    send_failure(client_fd, "no desktop\n");
+    return;
+  }
+
+  desktop_t *desk = mon->desk;
+
+  if (streq("proportion", *args)) {
+    if (num < 2) {
+      send_failure(client_fd, "scroller proportion: missing value\n");
+      return;
+    }
+    
+    if (!desk->focus || !desk->focus->client) {
+      send_failure(client_fd, "scroller proportion: no focused client\n");
+      return;
+    }
+    
+    float value = atof(args[1]);
+    if (value < 0.1f || value > 1.0f) {
+      send_failure(client_fd, "scroller proportion: value must be between 0.1 and 1.0\n");
+      return;
+    }
+    
+    client_t *head = scroller_get_stack_head(desk->focus->client);
+    head->scroller_proportion = value;
+    arrange(mon, desk, true);
+    send_success(client_fd, "proportion set\n");
+    
+  } else if (streq("stack", *args)) {
+    if (!desk->focus || !desk->focus->client) {
+      send_failure(client_fd, "scroller stack: no focused client\n");
+      return;
+    }
+    
+    // Find another client to stack with (for now, just stack with previous leaf)
+    node_t *target = prev_leaf(desk->focus, desk->root);
+    if (!target || !target->client) {
+      send_failure(client_fd, "scroller stack: no target to stack with\n");
+      return;
+    }
+    
+    client_t *head = scroller_get_stack_head(target->client);
+    scroller_stack_push(head, desk->focus->client);
+    arrange(mon, desk, true);
+    send_success(client_fd, "stacked\n");
+    
+  } else if (streq("unstack", *args)) {
+    if (!desk->focus || !desk->focus->client) {
+      send_failure(client_fd, "scroller unstack: no focused client\n");
+      return;
+    }
+    
+    scroller_stack_remove(desk->focus->client);
+    arrange(mon, desk, true);
+    send_success(client_fd, "unstacked\n");
+    
+  } else if (streq("resize", *args)) {
+    if (num < 2) {
+      send_failure(client_fd, "scroller resize: missing delta\n");
+      return;
+    }
+    
+    if (!desk->focus || !desk->focus->client) {
+      send_failure(client_fd, "scroller resize: no focused client\n");
+      return;
+    }
+    
+    float delta = atof(args[1]);
+    scroller_resize_width(desk->focus->client, delta);
+    arrange(mon, desk, true);
+    send_success(client_fd, "resized\n");
+    
+  } else if (streq("set_proportion", *args)) {
+    if (num < 2) {
+      send_failure(client_fd, "scroller set_proportion: missing value\n");
+      return;
+    }
+    
+    if (!desk->focus || !desk->focus->client) {
+      send_failure(client_fd, "scroller set_proportion: no focused client\n");
+      return;
+    }
+    
+    float value = atof(args[1]);
+    scroller_set_proportion(desk->focus->client, value);
+    arrange(mon, desk, true);
+    send_success(client_fd, "proportion set\n");
+    
+  } else if (streq("cycle_preset", *args)) {
+    if (!desk->focus || !desk->focus->client) {
+      send_failure(client_fd, "scroller cycle_preset: no focused client\n");
+      return;
+    }
+    
+    if (scroller_proportion_preset_count == 0) {
+      send_failure(client_fd, "scroller cycle_preset: no presets configured\n");
+      return;
+    }
+    
+    scroller_cycle_proportion_preset(desk->focus->client);
+    arrange(mon, desk, true);
+    send_success(client_fd, "cycled to next preset\n");
+    
+  } else if (streq("center", *args)) {
+    if (!desk->focus || !desk->focus->client) {
+      send_failure(client_fd, "scroller center: no focused client\n");
+      return;
+    }
+    
+    scroller_center_window(desk, desk->focus->client);
+    send_success(client_fd, "window centered\n");
+    
+  } else {
+    send_failure(client_fd, "scroller: unknown subcommand\n");
+  }
 }
 
 static void process_ipc_message(char *msg, int msg_len, int client_fd) {
@@ -1418,6 +1669,8 @@ static void process_ipc_message(char *msg, int msg_len, int client_fd) {
      ipc_cmd_rule(++args, --num, client_fd);
    } else if (streq("keyboard_grouping", *args)) {
      ipc_cmd_keyboard_grouping(++args, --num, client_fd);
+   } else if (streq("scroller", *args)) {
+     ipc_cmd_scroller(++args, --num, client_fd);
    } else {
      send_failure(client_fd, "unknown command\n");
    }

@@ -126,6 +126,10 @@ void list_rules(char *buf, size_t buf_size) {
       offset += snprintf(buf + offset, buf_size - offset, "hidden=%s ", r->consequence.hidden ? "on" : "off");
     if (r->consequence.has_sticky)
       offset += snprintf(buf + offset, buf_size - offset, "sticky=%s ", r->consequence.sticky ? "on" : "off");
+    if (r->consequence.has_scroller_proportion)
+      offset += snprintf(buf + offset, buf_size - offset, "scroller_proportion=%.2f ", r->consequence.scroller_proportion);
+    if (r->consequence.has_scroller_proportion_single)
+      offset += snprintf(buf + offset, buf_size - offset, "scroller_proportion_single=%.2f ", r->consequence.scroller_proportion_single);
 
     offset += snprintf(buf + offset, buf_size - offset, "\n");
 
