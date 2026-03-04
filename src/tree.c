@@ -4,6 +4,7 @@
 #include "transaction.h"
 #include "output.h"
 #include "scroller.h"
+#include "xwayland.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -753,10 +754,13 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
 }
 
 void close_node(node_t *n) {
-  if (n == NULL || n->client == NULL || n->client->toplevel == NULL)
+  if (n == NULL || n->client == NULL)
     return;
 
-  wlr_xdg_toplevel_send_close(n->client->toplevel->xdg_toplevel);
+  if (n->client->toplevel != NULL)
+  	wlr_xdg_toplevel_send_close(n->client->toplevel->xdg_toplevel);
+  else
+  	xwayland_view_close(n->client->xwayland_view);
 }
 
 void kill_node(monitor_t *m, desktop_t *d, node_t *n) {
@@ -1051,6 +1055,19 @@ void node_set_pending_hidden(node_t *n, bool hidden) {
 
   n->pending.hidden = hidden;
   node_set_dirty(n);
+}
+
+struct wlr_scene_tree *client_get_scene_tree(client_t *client) {
+  if (!client)
+    return NULL;
+
+  if (client->toplevel)
+    return client->toplevel->scene_tree;
+
+  if (client->xwayland_view)
+    return client->xwayland_view->scene_tree;
+
+  return NULL;
 }
 
 void print_tree(node_t *n, int depth) {

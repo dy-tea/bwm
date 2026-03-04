@@ -522,7 +522,9 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     n->ntxnrefs = 0;
 
     n->client->shown = false;
-    wlr_scene_node_set_enabled(&n->client->toplevel->scene_tree->node, false);
+    struct wlr_scene_tree *scene_tree = client_get_scene_tree(n->client);
+    if (scene_tree)
+      wlr_scene_node_set_enabled(&scene_tree->node, false);
 
     remove_node(m, src_desk, n);
 
@@ -552,7 +554,9 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
       for (node_t *n_iter = first_extrema(target->root); n_iter != NULL; n_iter = next_leaf(n_iter, target->root)) {
         if (n_iter->client) {
           n_iter->client->shown = true;
-          wlr_scene_node_set_enabled(&n_iter->client->toplevel->scene_tree->node, true);
+          struct wlr_scene_tree *scene_tree = client_get_scene_tree(n_iter->client);
+          if (scene_tree)
+            wlr_scene_node_set_enabled(&scene_tree->node, true);
         }
       }
       arrange(m, target, true);
@@ -560,7 +564,9 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
       for (node_t *n_iter = first_extrema(target->root); n_iter != NULL; n_iter = next_leaf(n_iter, target->root)) {
         if (n_iter->client) {
           n_iter->client->shown = false;
-          wlr_scene_node_set_enabled(&n_iter->client->toplevel->scene_tree->node, false);
+          struct wlr_scene_tree *scene_tree = client_get_scene_tree(n_iter->client);
+          if (scene_tree)
+            wlr_scene_node_set_enabled(&scene_tree->node, false);
         }
       }
       arrange(m, target, false);
@@ -570,7 +576,9 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
       for (node_t *n_iter = first_extrema(src_desk->root); n_iter != NULL; n_iter = next_leaf(n_iter, src_desk->root)) {
         if (n_iter->client) {
           n_iter->client->shown = true;
-          wlr_scene_node_set_enabled(&n_iter->client->toplevel->scene_tree->node, true);
+          struct wlr_scene_tree *scene_tree = client_get_scene_tree(n_iter->client);
+          if (scene_tree)
+            wlr_scene_node_set_enabled(&scene_tree->node, true);
         }
       }
       arrange(m, src_desk, true);
@@ -578,7 +586,9 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
       for (node_t *n_iter = first_extrema(src_desk->root); n_iter != NULL; n_iter = next_leaf(n_iter, src_desk->root)) {
         if (n_iter->client) {
           n_iter->client->shown = false;
-          wlr_scene_node_set_enabled(&n_iter->client->toplevel->scene_tree->node, false);
+          struct wlr_scene_tree *scene_tree = client_get_scene_tree(n_iter->client);
+          if (scene_tree)
+            wlr_scene_node_set_enabled(&scene_tree->node, false);
         }
       }
     }

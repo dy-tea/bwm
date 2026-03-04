@@ -7,7 +7,9 @@
 #include "types.h"
 #include "input.h"
 #include "config.h"
+#include "xwayland.h"
 #include <stdlib.h>
+#include <wlr/xwayland.h>
 #include <wayland-server-core.h>
 #include <wayland-util.h>
 #include <wlr/backend.h>
@@ -32,6 +34,7 @@ static void cursor_constrain(struct wlr_pointer_constraint_v1 *constraint);
 static void reset_cursor_mode(void) {
   server.cursor_mode = CURSOR_PASSTHROUGH;
   server.grabbed_toplevel = NULL;
+  server.grabbed_xwayland_view = NULL;
 }
 
 static void *desktop_type_at(
@@ -61,6 +64,25 @@ static void *desktop_type_at(
 
 static void process_cursor_move(void) {
   struct bwm_toplevel *toplevel = server.grabbed_toplevel;
+  struct bwm_xwayland_view *xwayland_view = server.grabbed_xwayland_view;
+
+  if (xwayland_view && xwayland_view->node && xwayland_view->node->client &&
+      xwayland_view->node->client->state == STATE_FLOATING) {
+    double x = server.cursor->x - server.grab_x;
+    double y = server.cursor->y - server.grab_y;
+
+    xwayland_view->node->client->floating_rectangle.x = (int)x;
+    xwayland_view->node->client->floating_rectangle.y = (int)y;
+
+    if (xwayland_view->scene_tree)
+      wlr_scene_node_set_position(&xwayland_view->scene_tree->node, x, y);
+
+    wlr_xwayland_surface_configure(xwayland_view->xwayland_surface, (int)x, (int)y,
+      xwayland_view->xwayland_surface->width,
+      xwayland_view->xwayland_surface->height);
+    return;
+  }
+
   if (!toplevel || !toplevel->node || !toplevel->node->client || toplevel->node->client->state != STATE_FLOATING)
     return;
 
@@ -75,8 +97,7 @@ static void process_cursor_move(void) {
 
 static void process_cursor_resize(void) {
   struct bwm_toplevel *toplevel = server.grabbed_toplevel;
-  if (!toplevel || !toplevel->node || !toplevel->node->client)
-    return;
+  struct bwm_xwayland_view *xwayland_view = server.grabbed_xwayland_view;
 
   double border_x = server.cursor->x - server.grab_x;
   double border_y = server.cursor->y - server.grab_y;
@@ -112,6 +133,23 @@ static void process_cursor_resize(void) {
     new_width = MIN_WIDTH;
   if (new_height < MIN_HEIGHT)
     new_height = MIN_HEIGHT;
+
+  if (xwayland_view && xwayland_view->node && xwayland_view->node->client) {
+    xwayland_view->node->client->floating_rectangle.x = new_left;
+    xwayland_view->node->client->floating_rectangle.y = new_top;
+    xwayland_view->node->client->floating_rectangle.width = new_width;
+    xwayland_view->node->client->floating_rectangle.height = new_height;
+
+    if (xwayland_view->scene_tree)
+      wlr_scene_node_set_position(&xwayland_view->scene_tree->node, new_left, new_top);
+
+    wlr_xwayland_surface_configure(xwayland_view->xwayland_surface,
+      new_left, new_top, new_width, new_height);
+    return;
+  }
+
+  if (!toplevel || !toplevel->node || !toplevel->node->client)
+    return;
 
   toplevel->node->client->floating_rectangle.x = new_left;
   toplevel->node->client->floating_rectangle.y = new_top;
@@ -258,14 +296,27 @@ void cursor_button(struct wl_listener *listener, void *data) {
       if (layer)
       	focus_layer_surface(layer);
     } else {
-    	struct bwm_toplevel *toplevel = type;
-	    if (toplevel && toplevel->node) {
-        monitor_t *m = toplevel->node->monitor;
-        desktop_t *d = m ? m->desk : NULL;
-        if (d)
-          d->focus = toplevel->node;
-        focus_toplevel(toplevel);
-      }
+    	struct wlr_xwayland_surface *xwayland_surface = wlr_xwayland_surface_try_from_wlr_surface(surface);
+
+    	if (xwayland_surface != NULL) {
+    		struct bwm_xwayland_view *xwayland_view = type;
+    		if (xwayland_view && xwayland_view->node) {
+	        monitor_t *m = xwayland_view->node->monitor;
+	        desktop_t *d = m ? m->desk : NULL;
+	        if (d)
+	          d->focus = xwayland_view->node;
+	        focus_node(m, d, xwayland_view->node);
+	      }
+    	} else {
+    		struct bwm_toplevel *toplevel = type;
+		    if (toplevel && toplevel->node) {
+	        monitor_t *m = toplevel->node->monitor;
+	        desktop_t *d = m ? m->desk : NULL;
+	        if (d)
+	          d->focus = toplevel->node;
+	        focus_toplevel(toplevel);
+	      }
+    	}
     }
   }
 }
@@ -357,9 +408,9 @@ void cursor_check_constraint_region(void) {
 
   // empty region if locked
   if (constraint->type == WLR_POINTER_CONSTRAINT_V1_CONFINED)
-      pixman_region32_copy(&server.pointer_confine, region);
+    pixman_region32_copy(&server.pointer_confine, region);
   else
-      pixman_region32_clear(&server.pointer_confine);
+    pixman_region32_clear(&server.pointer_confine);
 }
 
 static void cursor_warp_to_constraint_hint(void) {

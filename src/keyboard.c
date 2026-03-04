@@ -392,17 +392,21 @@ void toggle_floating(void) {
   if (n->client == NULL)
     return;
 
+  struct wlr_scene_tree *scene_tree = client_get_scene_tree(n->client);
+  if (!scene_tree) {
+    wlr_log(WLR_ERROR, "Cannot toggle floating: no scene tree");
+    return;
+  }
+
   if (n->client->state == STATE_FLOATING) {
     n->hidden = false;
-    wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
-                            server.tile_tree);
+    wlr_scene_node_reparent(&scene_tree->node, server.tile_tree);
     set_state(mon, mon->desk, n, STATE_TILED);
     wlr_log(WLR_INFO, "Window tiled");
   } else if (n->client->state == STATE_TILED) {
     n->client->floating_rectangle = n->rectangle;
     n->hidden = true;
-    wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
-                            server.float_tree);
+    wlr_scene_node_reparent(&scene_tree->node, server.float_tree);
     set_state(mon, mon->desk, n, STATE_FLOATING);
     wlr_log(WLR_INFO, "Window floating");
   }
@@ -416,20 +420,29 @@ void toggle_fullscreen(void) {
   if (n->client == NULL || n->client->toplevel == NULL)
     return;
 
+  struct wlr_scene_tree *scene_tree = client_get_scene_tree(n->client);
+  if (!scene_tree) {
+    wlr_log(WLR_ERROR, "Cannot toggle fullscreen: no scene tree");
+    return;
+  }
+
   if (n->client->state == STATE_FULLSCREEN) {
     if (n->client->last_state == STATE_FLOATING)
-      wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
-                              server.float_tree);
+      wlr_scene_node_reparent(&scene_tree->node, server.float_tree);
     else if (n->client->last_state == STATE_TILED)
-      wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
-                              server.tile_tree);
-    wlr_xdg_toplevel_set_fullscreen(n->client->toplevel->xdg_toplevel, false);
+      wlr_scene_node_reparent(&scene_tree->node, server.tile_tree);
+
+    if (n->client->toplevel && n->client->toplevel->xdg_toplevel)
+      wlr_xdg_toplevel_set_fullscreen(n->client->toplevel->xdg_toplevel, false);
+
     set_state(mon, mon->desk, n, n->client->last_state);
     wlr_log(WLR_INFO, "Fullscreen disabled");
   } else {
-  	wlr_scene_node_reparent(&n->client->toplevel->scene_tree->node,
-                          server.full_tree);
-   	wlr_xdg_toplevel_set_fullscreen(n->client->toplevel->xdg_toplevel, true);
+  	wlr_scene_node_reparent(&scene_tree->node, server.full_tree);
+
+    if (n->client->toplevel && n->client->toplevel->xdg_toplevel)
+      wlr_xdg_toplevel_set_fullscreen(n->client->toplevel->xdg_toplevel, true);
+
  		set_state(mon, mon->desk, n, STATE_FULLSCREEN);
     wlr_log(WLR_INFO, "Fullscreen enabled");
   }
@@ -449,7 +462,15 @@ void toggle_pseudo_tiled(void) {
     set_state(mon, mon->desk, n, STATE_TILED);
     wlr_log(WLR_INFO, "Window tiled");
   } else {
-    struct wlr_box base_rect = n->client->toplevel->xdg_toplevel->base->geometry;
+    struct wlr_box base_rect = {0};
+
+    if (n->client->toplevel && n->client->toplevel->xdg_toplevel)
+      base_rect = n->client->toplevel->xdg_toplevel->base->geometry;
+    else if (n->client->xwayland_view)
+      base_rect = n->client->xwayland_view->geometry;
+    else
+      base_rect = n->rectangle;
+
     n->client->floating_rectangle = (struct wlr_box){
       .x = 0,
       .y = 0,
@@ -512,7 +533,9 @@ void send_to_desktop(int desktop_index) {
   n->ntxnrefs = 0;
 
   n->client->shown = false;
-  wlr_scene_node_set_enabled(&n->client->toplevel->scene_tree->node, false);
+  struct wlr_scene_tree *scene_tree = client_get_scene_tree(n->client);
+  if (scene_tree)
+    wlr_scene_node_set_enabled(&scene_tree->node, false);
 
   // remove from source desktop
   remove_node(mon, src_desk, n);
@@ -579,7 +602,9 @@ void send_to_desktop_by_name(const char *name) {
   n->ntxnrefs = 0;
 
   n->client->shown = false;
-  wlr_scene_node_set_enabled(&n->client->toplevel->scene_tree->node, false);
+  struct wlr_scene_tree *scene_tree = client_get_scene_tree(n->client);
+  if (scene_tree)
+    wlr_scene_node_set_enabled(&scene_tree->node, false);
 
   remove_node(mon, src_desk, n);
 

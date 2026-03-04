@@ -172,79 +172,74 @@ void workspace_create_desktop(const char *name) {
   wlr_log(WLR_INFO, "Created workspace: %s", name);
 }
 
+static void update_window_visibility(node_t *node, monitor_t *m, desktop_t *current_desktop, int *count) {
+  if (!node || !node->client)
+    return;
+
+  struct wlr_scene_tree *scene_tree = client_get_scene_tree(node->client);
+  if (!scene_tree)
+    return;
+
+  (*count)++;
+
+  monitor_t *node_mon = node->monitor;
+  if (!node_mon || node_mon != m)
+    return;
+
+  bool should_show = false;
+  bool found = false;
+  desktop_t *d = m->desk_head;
+  while (d != NULL) {
+    if (d->root != NULL) {
+      node_t *parent = node;
+      while (parent != NULL) {
+        if (parent == d->root) {
+          // this node belongs to desktop d
+          should_show = (d == current_desktop);
+          found = true;
+          goto found_desktop;
+        }
+        parent = parent->parent;
+      }
+    }
+    d = d->next;
+  }
+
+  if (!found)
+    should_show = false;
+
+found_desktop:
+  if (should_show && !node->client->shown) {
+    node->client->shown = true;
+    wlr_scene_node_set_enabled(&scene_tree->node, true);
+  } else if (!should_show && node->client->shown) {
+    node->client->shown = false;
+    wlr_scene_node_set_enabled(&scene_tree->node, false);
+  }
+}
+
 static void update_all_toplevels_visibility(monitor_t *m, desktop_t *current_desktop) {
-  int toplevel_count = 0;
+  int window_count = 0;
 
   struct bwm_toplevel *toplevel;
   wl_list_for_each(toplevel, &server.toplevels, link) {
-    if (!toplevel->mapped || !toplevel->scene_tree || !toplevel->node || !toplevel->node->client)
+    if (!toplevel->mapped || !toplevel->scene_tree || !toplevel->node)
       continue;
-
-    toplevel_count++;
-    wlr_log(WLR_DEBUG, "  Checking toplevel #%d (node=%u, monitor=%p)",
-            toplevel_count, toplevel->node->id, (void*)toplevel->node->monitor);
-
-    monitor_t *toplevel_mon = toplevel->node->monitor;
-    if (!toplevel_mon || toplevel_mon != m) {
-      wlr_log(WLR_DEBUG, "    Skipping: wrong monitor");
-      continue;
-    }
-
-    // show parent chain
-    wlr_log(WLR_DEBUG, "    Parent chain: node=%u", toplevel->node->id);
-    node_t *dbg_parent = toplevel->node->parent;
-    int depth = 0;
-    while (dbg_parent != NULL && depth < 10) {
-      wlr_log(WLR_DEBUG, "      -> parent=%u", dbg_parent->id);
-      dbg_parent = dbg_parent->parent;
-      depth++;
-    }
-
-    bool should_show = false;
-    bool found = false;
-    desktop_t *d = m->desk_head;
-    while (d != NULL) {
-      wlr_log(WLR_DEBUG, "    Checking against desktop %s (root=%p)", d->name, (void*)d->root);
-      if (d->root != NULL) {
-        node_t *parent = toplevel->node;
-        while (parent != NULL) {
-          if (parent == d->root) {
-            // this node belongs to desktop d
-            should_show = (d == current_desktop);
-            found = true;
-            wlr_log(WLR_DEBUG, "      MATCH: Node's root matches desktop %s (current=%s, show=%d)",
-                    d->name, current_desktop->name, should_show);
-            goto found_desktop;
-          }
-          parent = parent->parent;
-        }
-      }
-      d = d->next;
-    }
-
-    if (!found) {
-      wlr_log(WLR_DEBUG, "    WARNING: Node %u not found in any desktop root! (orphaned node)", toplevel->node->id);
-      should_show = false;
-    }
-
-found_desktop:
-    wlr_log(WLR_DEBUG, "  Before update: shown=%d, should_show=%d",
-            toplevel->node->client->shown, should_show);
-    if (should_show && !toplevel->node->client->shown) {
-      wlr_log(WLR_DEBUG, "  ACTION: Showing toplevel on desktop %s", current_desktop->name);
-      toplevel->node->client->shown = true;
-      wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
-    } else if (!should_show && toplevel->node->client->shown) {
-      wlr_log(WLR_DEBUG, "  ACTION: Hiding toplevel (orphaned or not on desktop %s)", current_desktop->name);
-      toplevel->node->client->shown = false;
-      wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
-    } else {
-      wlr_log(WLR_DEBUG, "  No change needed (shown=%d, should=%d)",
-              toplevel->node->client->shown, should_show);
-    }
+    update_window_visibility(toplevel->node, m, current_desktop, &window_count);
   }
-  wlr_log(WLR_DEBUG, "update_all_toplevels_visibility: Processed %d toplevels for desktop %s",
-          toplevel_count, current_desktop->name);
+
+  desktop_t *d = m->desk_head;
+  while (d != NULL) {
+    if (d->root != NULL) {
+      node_t *n = first_extrema(d->root);
+      while (n != NULL) {
+        if (n->client && n->client->xwayland_view)
+          update_window_visibility(n, m, current_desktop, &window_count);
+        n = next_leaf(n, d->root);
+      }
+    }
+    d = d->next;
+  }
 }
 
 void workspace_switch_to_desktop(const char *name) {

@@ -14,6 +14,8 @@ libs = [
 	dependency('xkbcommon'),
 	dependency('libinput'),
 	dependency('pixman-1'),
+	dependency('xcb'),
+	dependency('xcb-icccm'),
 	wayland_protos,
 ]
 
@@ -79,6 +81,7 @@ executable(
 		'src' / 'rule.c',
 		'src' / 'gesture.c',
 		'src' / 'scroller.c',
+		'src' / 'xwayland.c',
 		wl_protos_src,
 	],
 	include_directories: inc,

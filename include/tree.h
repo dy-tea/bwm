@@ -71,6 +71,8 @@ void node_set_pending_hidden(node_t *n, bool hidden);
 // Debug helpers
 void print_tree(node_t *n, int depth);
 
+struct wlr_scene_tree *client_get_scene_tree(client_t *client);
+
 // macros for state checking
 #define IS_TILED(c) (is_tiled(c))
 #define IS_FLOATING(c) (is_floating(c))

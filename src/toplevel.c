@@ -9,6 +9,7 @@
 #include "workspace.h"
 #include "rule.h"
 #include "scroller.h"
+#include "xwayland.h"
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -884,18 +885,38 @@ void toplevel_send_frame_done(struct bwm_toplevel *toplevel) {
 void handle_new_toplevel_capture_request(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request *request = data;
-	struct bwm_toplevel *toplevel = request->toplevel_handle->data;
+	void *handle_data = request->toplevel_handle->data;
 
-	if (toplevel->image_capture_source == NULL) {
-		// no image capture source, create one
-    toplevel->image_capture_source = wlr_ext_image_capture_source_v1_create_with_scene_node(
-      &toplevel->image_capture->tree.node, wl_display_get_event_loop(server.wl_display),
-      server.allocator, server.renderer);
+	struct bwm_toplevel *toplevel = handle_data;
+	struct bwm_xwayland_view *xwayland_view = handle_data;
 
-    if (toplevel->image_capture_source == NULL)
-    	return;
+	struct wlr_ext_image_capture_source_v1 **image_capture_source_ptr = NULL;
+	struct wlr_scene *image_capture = NULL;
+
+	if (toplevel->node && toplevel->node->client) {
+		if (toplevel->node->client->toplevel != NULL) {
+			image_capture_source_ptr = &toplevel->image_capture_source;
+			image_capture = toplevel->image_capture;
+		} else if (toplevel->node->client->xwayland_view != NULL) {
+			image_capture_source_ptr = &xwayland_view->image_capture_source;
+			image_capture = xwayland_view->image_capture;
+		}
 	}
 
- 	wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request_accept(
-  	request, toplevel->image_capture_source);
+	if (image_capture_source_ptr == NULL || image_capture == NULL) {
+		wlr_log(WLR_ERROR, "Failed to determine toplevel type for image capture");
+		return;
+	}
+
+	if (*image_capture_source_ptr == NULL) {
+		*image_capture_source_ptr = wlr_ext_image_capture_source_v1_create_with_scene_node(
+			&image_capture->tree.node, wl_display_get_event_loop(server.wl_display),
+			server.allocator, server.renderer);
+
+		if (*image_capture_source_ptr == NULL)
+			return;
+	}
+
+	wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request_accept(
+		request, *image_capture_source_ptr);
 }

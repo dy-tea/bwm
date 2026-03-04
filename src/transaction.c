@@ -147,9 +147,9 @@ static void apply_node_state(node_t *node,
     return;
   }
 
-  // check if toplevel was destroyed
-  if (!node->client->toplevel) {
-    wlr_log(WLR_DEBUG, "Skipping apply for node %u - toplevel already destroyed", node->id);
+  // check if toplevel or xwayland_view exists
+  if (!node->client->toplevel && !node->client->xwayland_view) {
+    wlr_log(WLR_DEBUG, "Skipping apply for node %u - no toplevel or xwayland_view", node->id);
     return;
   }
 
@@ -166,7 +166,7 @@ static void apply_node_state(node_t *node,
   }
 
   // apply geometry
-  bool ready = toplevel_is_ready(node->client->toplevel);
+  bool ready = node->client->toplevel ? toplevel_is_ready(node->client->toplevel) : true;
   if (ready) {
     wlr_log(WLR_DEBUG, "Transaction apply: node %u tiled_rect=(%d,%d %dx%d)",
             node->id,
@@ -194,22 +194,39 @@ static void apply_node_state(node_t *node,
     wlr_log(WLR_DEBUG, "Applying geometry to node %u: pos=(%d,%d) size=(%dx%d) serial=%u",
             node->id, rect->x, rect->y, rect->width, rect->height, instruction->serial);
 
-    wlr_scene_node_set_position(&node->client->toplevel->scene_tree->node, rect->x, rect->y);
+    struct wlr_scene_tree *scene_tree = NULL;
+    bool configured = false;
+    bool geometry_matches = false;
 
-    struct bwm_toplevel *toplevel = node->client->toplevel;
-    bool geometry_matches = toplevel->geometry.width == rect->width &&
-        toplevel->geometry.height == rect->height;
+    if (node->client->toplevel) {
+      scene_tree = node->client->toplevel->scene_tree;
+      configured = node->client->toplevel->configured;
+      geometry_matches = node->client->toplevel->geometry.width == rect->width &&
+                        node->client->toplevel->geometry.height == rect->height;
+    } else if (node->client->xwayland_view) {
+      scene_tree = node->client->xwayland_view->scene_tree;
+      configured = true;
+      geometry_matches = node->client->xwayland_view->geometry.width == rect->width &&
+                        node->client->xwayland_view->geometry.height == rect->height;
+    }
+
+    if (!scene_tree) {
+      wlr_log(WLR_ERROR, "Node %u has no scene tree (toplevel or xwayland_view)", node->id);
+      return;
+    }
+
+    wlr_scene_node_set_position(&scene_tree->node, rect->x, rect->y);
 
     if (node->client->shown) {
-    	wlr_scene_node_set_enabled(&node->client->toplevel->scene_tree->node, true);
-      wlr_log(WLR_DEBUG, "Applied layout to node %u [already shown]", node->id);
-    } else if (node->client->toplevel->configured) {
-      wlr_scene_node_set_enabled(&node->client->toplevel->scene_tree->node, true);
+    	wlr_scene_node_set_enabled(&scene_tree->node, true);
+      wlr_log(WLR_INFO, "Applied layout to node %u [already shown]", node->id);
+    } else if (configured) {
+      wlr_scene_node_set_enabled(&scene_tree->node, true);
       node->client->shown = true;
       wlr_log(WLR_DEBUG, "Applied layout to node %u [FIRST SHOW]", node->id);
     } else {
       wlr_log(WLR_DEBUG, "Applied layout to node %u [waiting for configure] configured=%d matches=%d",
-          node->id, toplevel->configured, geometry_matches);
+          node->id, configured, geometry_matches);
     }
   }
 }

@@ -4,6 +4,7 @@
 #include "toplevel.h"
 #include "types.h"
 #include "gesture.h"
+#include "xwayland.h"
 #include <wayland-server.h>
 #include <xkbcommon/xkbcommon.h>
 #include <wlr/types/wlr_ext_workspace_v1.h>
@@ -25,6 +26,7 @@ struct bwm_server {
   struct wlr_session *session;
   struct wlr_renderer *renderer;
   struct wlr_allocator *allocator;
+  struct wlr_compositor *compositor;
   struct wlr_scene *scene;
   struct wlr_scene_output_layout *scene_layout;
 
@@ -123,6 +125,8 @@ struct bwm_server {
   // cursor state
   enum cursor_mode cursor_mode;
   struct bwm_toplevel *grabbed_toplevel;
+  struct bwm_xwayland_view *grabbed_xwayland_view;
+  struct bwm_xwayland_view *last_focused_xwayland_view;
   double grab_x, grab_y;
   struct wlr_box grab_geobox;
   uint32_t resize_edges;
@@ -134,6 +138,11 @@ struct bwm_server {
   // workspace tracking
   struct wlr_ext_workspace_manager_v1 *workspace_manager;
   struct wl_listener workspace_commit;
+
+  // xwayland
+  struct bwm_xwayland xwayland;
+  struct wl_listener xwayland_surface;
+  struct wl_listener xwayland_ready;
 };
 
 extern struct bwm_server server;

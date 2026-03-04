@@ -13,6 +13,7 @@
 #include "input.h"
 #include "idle.h"
 #include "rule.h"
+#include "xwayland.h"
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -110,7 +111,7 @@ void server_init(void) {
     exit(EXIT_FAILURE);
   }
 
-  wlr_compositor_create(server.wl_display, 6, server.renderer);
+  server.compositor = wlr_compositor_create(server.wl_display, 6, server.renderer);
   wlr_subcompositor_create(server.wl_display);
 
   // dmabuf support
@@ -188,6 +189,7 @@ void server_init(void) {
   wlr_xcursor_manager_load(server.cursor_mgr, 1);
 
   server.cursor_mode = CURSOR_PASSTHROUGH;
+  server.last_focused_xwayland_view = NULL;
 
   server.cursor_motion.notify = cursor_motion;
   wl_signal_add(&server.cursor->events.motion, &server.cursor_motion);
@@ -226,6 +228,20 @@ void server_init(void) {
 
   // pointer gestures
   server.pointer_gestures = wlr_pointer_gestures_v1_create(server.wl_display);
+
+  // xwayland support
+  server.xwayland.wlr_xwayland = wlr_xwayland_create(server.wl_display, server.compositor, true);
+  if (server.xwayland.wlr_xwayland) {
+    server.xwayland.xcursor_manager = server.cursor_mgr;
+    
+    server.xwayland_surface.notify = handle_xwayland_surface;
+    wl_signal_add(&server.xwayland.wlr_xwayland->events.new_surface, &server.xwayland_surface);
+    
+    server.xwayland_ready.notify = handle_xwayland_ready;
+    wl_signal_add(&server.xwayland.wlr_xwayland->events.ready, &server.xwayland_ready);
+    
+    setenv("DISPLAY", server.xwayland.wlr_xwayland->display_name, true);
+  }
 
   // idle notifier
   server.idle_notifier = wlr_idle_notifier_v1_create(server.wl_display);
@@ -584,6 +600,10 @@ int server_run(void) {
 }
 
 void server_fini(void) {
+  if (server.xwayland.wlr_xwayland) {
+    wlr_xwayland_destroy(server.xwayland.wlr_xwayland);
+    server.xwayland.wlr_xwayland = NULL;
+  }
   transaction_fini();
   workspace_fini();
   ipc_cleanup();

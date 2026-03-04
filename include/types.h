@@ -13,6 +13,7 @@ struct desktop_t;
 struct monitor_t;
 struct client_t;
 struct bwm_toplevel;
+struct bwm_xwayland_view;
 
 // enums
 typedef enum { TYPE_HORIZONTAL, TYPE_VERTICAL } split_type_t;
@@ -71,6 +72,7 @@ typedef struct client_t {
   struct wlr_box floating_rectangle;
   struct wlr_box tiled_rectangle;
   struct bwm_toplevel *toplevel;
+  struct bwm_xwayland_view *xwayland_view;
 
   // Scroller layout properties
   float scroller_proportion;
