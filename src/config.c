@@ -221,35 +221,149 @@ static bind_action_t parse_action(const char *cmd, int *desktop_index, char *sub
   return BIND_EXTERNAL;
 }
 
-static char *expand_sequence(const char *input, char *output, size_t out_size) {
-  size_t in_len = strlen(input);
-  size_t out_idx = 0;
+// expansions
+#define MAX_EXPANSIONS 64
+typedef struct {
+  char strings[MAX_EXPANSIONS][MAXLEN];
+  size_t count;
+} expansion_result_t;
 
-  for (size_t i = 0; i < in_len && out_idx < out_size - 1; i++) {
-    if (input[i] == '{') {
-      size_t end = i + 1;
-      while (end < in_len && input[end] != '}') end++;
-      if (end > i + 1) {
-        char choices[256];
-        size_t choice_len = end - i - 1;
-        if (choice_len < sizeof(choices)) {
-          memcpy(choices, input + i + 1, choice_len);
-          choices[choice_len] = '\0';
+static void expand_braces_recursive(const char *input, char *prefix, size_t prefix_len, expansion_result_t *result);
 
-          char *choice_save;
-          char *choice = strtok_r(choices, ",", &choice_save);
-          while (choice && out_idx < out_size - 1) {
-            output[out_idx++] = *choice;
-            choice = strtok_r(NULL, ",", &choice_save);
-          }
-        }
+static void expand_braces(const char *input, expansion_result_t *result) {
+  result->count = 0;
+  char prefix[MAXLEN] = {0};
+  expand_braces_recursive(input, prefix, 0, result);
+}
+
+static void expand_braces_recursive(const char *input, char *prefix, size_t prefix_len, expansion_result_t *result) {
+  const char *brace_start = strchr(input, '{');
+  if (!brace_start) {
+    if (result->count < MAX_EXPANSIONS) {
+      snprintf(result->strings[result->count], MAXLEN, "%s%s", prefix, input);
+      result->count++;
+    }
+    return;
+  }
+
+  // copy prefix
+  size_t pre_brace_len = brace_start - input;
+  char new_prefix[MAXLEN];
+  memcpy(new_prefix, prefix, prefix_len);
+  memcpy(new_prefix + prefix_len, input, pre_brace_len);
+  new_prefix[prefix_len + pre_brace_len] = '\0';
+
+  // find closing brace
+  const char *brace_end = brace_start + 1;
+  int depth = 1;
+  while (*brace_end && depth > 0) {
+    if (*brace_end == '{') depth++;
+    else if (*brace_end == '}') depth--;
+    brace_end++;
+  }
+
+  if (depth != 0) {
+    if (result->count < MAX_EXPANSIONS) {
+      snprintf(new_prefix + strlen(new_prefix), MAXLEN - strlen(new_prefix), "%s", brace_start);
+      snprintf(result->strings[result->count], MAXLEN, "%s", new_prefix);
+      result->count++;
+    }
+    return;
+  }
+
+  // get content
+  size_t content_len = (brace_end - 1) - (brace_start + 1);
+  char content[MAXLEN];
+  memcpy(content, brace_start + 1, content_len);
+  content[content_len] = '\0';
+
+  const char *rest = brace_end;
+
+  int choice_depth = 0;
+  size_t choice_start = 0;
+
+  bool is_range = false;
+  size_t range_len = content_len;
+  if (range_len >= 3) {
+    char first = content[0];
+    char last = content[range_len - 1];
+    bool is_dash = false;
+    for (size_t di = 1; di < range_len - 1; di++) {
+      if (content[di] == '-') {
+        is_dash = true;
+        break;
       }
-      i = end;
-    } else {
-      output[out_idx++] = input[i];
+    }
+    if (is_dash && ((first >= '0' && first <= '9' && last >= '0' && last <= '9') ||
+                    (first >= 'a' && first <= 'z' && last >= 'a' && last <= 'z') ||
+                    (first >= 'A' && first <= 'Z' && last >= 'A' && last <= 'Z')))
+      is_range = true;
+  }
+
+  if (is_range) {
+    char first = content[0];
+    char last = content[content_len - 1];
+    for (char c = first; c <= last; c++) {
+      char choice[2] = {c, '\0'};
+      char full_input[MAXLEN * 2];
+      snprintf(full_input, sizeof(full_input), "%s%s", choice, rest);
+      expand_braces_recursive(full_input, new_prefix, strlen(new_prefix), result);
+    }
+  } else {
+  	// comma-separated
+    for (size_t i = 0; i <= content_len; i++) {
+      if (content[i] == '{') {
+        choice_depth++;
+      } else if (content[i] == '}') {
+        choice_depth--;
+      } else if (content[i] == ',' && choice_depth == 0) {
+        char choice[MAXLEN];
+        size_t choice_len = i - choice_start;
+        if (choice_len < MAXLEN) {
+          memcpy(choice, content + choice_start, choice_len);
+          choice[choice_len] = '\0';
+        } else {
+          memcpy(choice, content + choice_start, MAXLEN - 1);
+          choice[MAXLEN - 1] = '\0';
+        }
+
+        char full_input[MAXLEN * 2];
+        snprintf(full_input, sizeof(full_input), "%s%s", choice, rest);
+
+        expand_braces_recursive(full_input, new_prefix, strlen(new_prefix), result);
+
+        choice_start = i + 1;
+      }
+    }
+
+    // last choice
+    if (choice_start <= content_len) {
+      char choice[MAXLEN];
+      size_t choice_len = content_len - choice_start;
+      if (choice_len < MAXLEN) {
+        memcpy(choice, content + choice_start, choice_len);
+        choice[choice_len] = '\0';
+      } else {
+        memcpy(choice, content + choice_start, MAXLEN - 1);
+        choice[MAXLEN - 1] = '\0';
+      }
+
+      char full_input[MAXLEN * 2];
+      snprintf(full_input, sizeof(full_input), "%s%s", choice, rest);
+
+      expand_braces_recursive(full_input, new_prefix, strlen(new_prefix), result);
     }
   }
-  output[out_idx] = '\0';
+}
+
+static char *expand_sequence(const char *input, char *output, size_t out_size) {
+  expansion_result_t result;
+  expand_braces(input, &result);
+  if (result.count > 0) {
+    snprintf(output, out_size, "%s", result.strings[0]);
+  } else {
+    snprintf(output, out_size, "%s", input);
+  }
   return output;
 }
 
@@ -358,67 +472,75 @@ static void parse_hotkey_line(const char *hotkey_str, const char *command_str) {
   snprintf(hotkey_buf, sizeof(hotkey_buf), "%s", hotkey_str);
   snprintf(command_buf, sizeof(command_buf), "%s", command_str);
 
-  char expanded_hotkey[MAXLEN];
-  char expanded_cmd[MAXLEN];
+  // expand braces
+  expansion_result_t hk_expansions;
+  expansion_result_t cmd_expansions;
+  expand_braces(hotkey_buf, &hk_expansions);
+  expand_braces(command_buf, &cmd_expansions);
 
-  expand_sequence(hotkey_buf, expanded_hotkey, sizeof(expanded_hotkey));
-  expand_sequence(command_buf, expanded_cmd, sizeof(expanded_cmd));
+  wlr_log(WLR_DEBUG, "parse_hotkey_line: hotkey=[%s] cmd=[%s] hk_expans=%zu cmd_expans=%zu",
+          hotkey_buf, command_buf, hk_expansions.count, cmd_expansions.count);
 
-  wlr_log(WLR_DEBUG, "parse_hotkey_line: hotkey=[%s] cmd=[%s]", expanded_hotkey, expanded_cmd);
+  size_t num_pairs = 0;
 
-  char single_hotkey[MAXLEN];
-  char single_cmd[MAXLEN];
+  if (hk_expansions.count == 0 && cmd_expansions.count == 0) {
+    num_pairs = 1;
+  } else if (hk_expansions.count > 0 && cmd_expansions.count > 0) {
+    num_pairs = (hk_expansions.count > cmd_expansions.count) ? hk_expansions.count : cmd_expansions.count;
+  } else if (hk_expansions.count > 0) {
+    num_pairs = hk_expansions.count;
+  } else {
+    num_pairs = cmd_expansions.count;
+  }
 
-  char *saveptr;
-  char *hotkey_token = strtok_r(expanded_hotkey, "\t", &saveptr);
-  while (hotkey_token) {
-    snprintf(single_hotkey, sizeof(single_hotkey), "%s", hotkey_token);
+  for (size_t i = 0; i < num_pairs; i++) {
+    const char *single_hotkey = (hk_expansions.count > 0)
+      ? hk_expansions.strings[i % hk_expansions.count]
+      : hotkey_buf;
+    const char *single_cmd = (cmd_expansions.count > 0)
+      ? cmd_expansions.strings[i % cmd_expansions.count]
+      : command_buf;
 
-    char *cmd_token = strtok_r(expanded_cmd, "\t", &saveptr);
+    wlr_log(WLR_DEBUG, "  pair %zu: hotkey=[%s] cmd=[%s]", i, single_hotkey, single_cmd);
 
-    while (cmd_token) {
-      snprintf(single_cmd, sizeof(single_cmd), "%s", cmd_token);
+    uint32_t modifiers = 0;
+    xkb_keysym_t keysym = XKB_KEY_NoSymbol;
+    uint32_t keycode = 0;
+    bool use_keycode = false;
 
-      uint32_t modifiers = 0;
-      xkb_keysym_t keysym = XKB_KEY_NoSymbol;
-      uint32_t keycode = 0;
-      bool use_keycode = false;
+    char hotkey_copy[MAXLEN];
+    snprintf(hotkey_copy, sizeof(hotkey_copy), "%s", single_hotkey);
 
-      char *plus = strrchr(single_hotkey, '+');
-      if (plus) {
-        *plus = '\0';
-        modifiers = parse_modifiers(single_hotkey);
-        char *key_part = plus + 1;
-        while (*key_part == ' ') key_part++;
-        keysym = parse_keysym(key_part);
-        keycode = parse_keycode(key_part);
-        if (keycode > 0)
-          use_keycode = true;
-      } else {
-        keysym = parse_keysym(single_hotkey);
-        keycode = parse_keycode(single_hotkey);
-        if (keycode > 0)
-          use_keycode = true;
-      }
-
-      if (keysym == XKB_KEY_NoSymbol && keycode == 0) {
-        wlr_log(WLR_ERROR, "Unknown keysym: %s", single_hotkey);
-      } else {
-        int desktop_index = 0;
-        char submap_name[MAXLEN];
-        submap_name[0] = '\0';
-        bind_action_t action = parse_action(single_cmd, &desktop_index, submap_name);
-        wlr_log(WLR_DEBUG, "Parsed action: %d for cmd: '%s' submap: '%s'", action, single_cmd, submap_name);
-        if (action != BIND_EXTERNAL)
-          add_keybind(modifiers, keysym, keycode, use_keycode, action, desktop_index, NULL, submap_name[0] ? submap_name : NULL);
-        else
-          add_keybind(modifiers, keysym, keycode, use_keycode, action, desktop_index, single_cmd, submap_name[0] ? submap_name : NULL);
-      }
-
-      cmd_token = strtok_r(NULL, "\t", &saveptr);
+    char *plus = strrchr(hotkey_copy, '+');
+    if (plus) {
+      *plus = '\0';
+      modifiers = parse_modifiers(hotkey_copy);
+      char *key_part = plus + 1;
+      while (*key_part == ' ') key_part++;
+      keysym = parse_keysym(key_part);
+      keycode = parse_keycode(key_part);
+      if (keycode > 0)
+        use_keycode = true;
+    } else {
+      keysym = parse_keysym(single_hotkey);
+      keycode = parse_keycode(single_hotkey);
+      if (keycode > 0)
+        use_keycode = true;
     }
 
-    hotkey_token = strtok_r(NULL, "\t", &saveptr);
+    if (keysym == XKB_KEY_NoSymbol && keycode == 0) {
+      wlr_log(WLR_ERROR, "Unknown keysym: %s", single_hotkey);
+    } else {
+      int desktop_index = 0;
+      char submap_name[MAXLEN];
+      submap_name[0] = '\0';
+      bind_action_t action = parse_action(single_cmd, &desktop_index, submap_name);
+      wlr_log(WLR_DEBUG, "Parsed action: %d for cmd: '%s' submap: '%s'", action, single_cmd, submap_name);
+      if (action != BIND_EXTERNAL)
+        add_keybind(modifiers, keysym, keycode, use_keycode, action, desktop_index, NULL, submap_name[0] ? submap_name : NULL);
+      else
+        add_keybind(modifiers, keysym, keycode, use_keycode, action, desktop_index, single_cmd, submap_name[0] ? submap_name : NULL);
+    }
   }
 }
 

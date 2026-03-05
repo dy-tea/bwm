@@ -26,25 +26,13 @@ alt + shift + space
 alt + m
 	bmsg desktop --layout monocle
 
-# window navigation
-alt + h
-	bmsg focus west
-alt + j
-	bmsg focus south
-alt + k
-	bmsg focus north
-alt + l
-	bmsg focus east
+# window navigation (using brace expansion)
+alt + {h,j,k,l}
+	bmsg focus {west,south,north,east}
 
-# window swapping
-alt + shift + h
-	bmsg swap west
-alt + shift + j
-	bmsg swap south
-alt + shift + k
-	bmsg swap north
-alt + shift + l
-	bmsg swap east
+# window swapping (using brace expansion)
+alt + shift + {h,j,k,l}
+	bmsg swap {west,south,north,east}
 
 # cancel preselection
 alt + ctrl + space
@@ -57,73 +45,32 @@ alt + shift + r
 	bmsg rotate counterclockwise
 
 # flip
-alt + comma
-	bmsg flip horizontal
-alt + period
-	bmsg flip vertical
+alt + {comma,period}
+	bmsg flip {horizontal,vertical}
 
-# resizing tiled windows
-alt + ctrl + h
-	bmsg resize left
-alt + ctrl + j
-	bmsg resize down
-alt + ctrl + k
-	bmsg resize up
-alt + ctrl + l
-	bmsg resize right
+# resizing tiled windows (using brace expansion)
+alt + ctrl + {h,j,k,l}
+	bmsg resize {left,down,up,right}
 
 # desktop switching (1-based index)
-alt + 1
-	bmsg desktop 1
-alt + 2
-	bmsg desktop 2
-alt + 3
-	bmsg desktop 3
-alt + 4
-	bmsg desktop 4
-alt + 5
-	bmsg desktop 5
-alt + 6
-	bmsg desktop 6
-alt + 7
-	bmsg desktop 7
-alt + 8
-	bmsg desktop 8
-alt + 9
-	bmsg desktop 9
+# Using brace expansion with range syntax
+alt + {1-9}
+	bmsg desktop {1-9}
 alt + 0
 	bmsg desktop 10
 
 # send to desktop (1-based index)
-alt + shift + 1
-	bmsg node --to-desktop 1
-alt + shift + 2
-	bmsg node --to-desktop 2
-alt + shift + 3
-	bmsg node --to-desktop 3
-alt + shift + 4
-	bmsg node --to-desktop 4
-alt + shift + 5
-	bmsg node --to-desktop 5
-alt + shift + 6
-	bmsg node --to-desktop 6
-alt + shift + 7
-	bmsg node --to-desktop 7
-alt + shift + 8
-	bmsg node --to-desktop 8
-alt + shift + 9
-	bmsg node --to-desktop 9
+alt + shift + {1-9}
+	bmsg node --to-desktop {1-9}
 alt + shift + 0
 	bmsg node --to-desktop 10
 
 # send to next/prev desktop
-alt + shift + Right
-	bmsg send next
-alt + shift + Left
-	bmsg send prev
+alt + shift + {Right,Left}
+	bmsg send {next,prev}
 
 # quit
-alt + alt + q
+alt + shift + Escape
 	bmsg quit
 
 # Gesture bindings (touchpad)
@@ -144,11 +91,5 @@ alt + shift + f -> @focus
 @focus
   escape
     @exit
-  h
-    bmsg focus west
-  j
-    bmsg focus south
-  k
-    bmsg focus north
-  l
-    bmsg focus east
+  {h,j,k,l}
+    bmsg focus {west,south,north,east}
