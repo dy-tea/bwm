@@ -233,13 +233,13 @@ void server_init(void) {
   server.xwayland.wlr_xwayland = wlr_xwayland_create(server.wl_display, server.compositor, true);
   if (server.xwayland.wlr_xwayland) {
     server.xwayland.xcursor_manager = server.cursor_mgr;
-    
+
     server.xwayland_surface.notify = handle_xwayland_surface;
     wl_signal_add(&server.xwayland.wlr_xwayland->events.new_surface, &server.xwayland_surface);
-    
+
     server.xwayland_ready.notify = handle_xwayland_ready;
     wl_signal_add(&server.xwayland.wlr_xwayland->events.ready, &server.xwayland_ready);
-    
+
     setenv("DISPLAY", server.xwayland.wlr_xwayland->display_name, true);
   }
 
@@ -553,16 +553,6 @@ void handle_output_manager_test(struct wl_listener *listener, void *data) {
   wlr_output_configuration_v1_send_succeeded(config);
 }
 
-static int hotkey_reload_handler(int fd, uint32_t mask, void *data) {
-  (void)data;
-  if (mask & WL_EVENT_READABLE) {
-    char buf[64];
-    read(fd, buf, sizeof(buf));
-    reload_hotkeys();
-  }
-  return 0;
-}
-
 int server_run(void) {
   const char *socket = wl_display_add_socket_auto(server.wl_display);
   if (!socket) {
@@ -585,14 +575,12 @@ int server_run(void) {
   if (ipc_fd >= 0)
     wl_event_loop_add_fd(event_loop, ipc_fd, WL_EVENT_READABLE, ipc_socket_handler, NULL);
 
-  // add inotify for hotkey config file watching
-  int hotkey_fd = get_hotkey_watch_fd();
-  if (hotkey_fd >= 0)
-    wl_event_loop_add_fd(event_loop, hotkey_fd, WL_EVENT_READABLE, hotkey_reload_handler, NULL);
+  // setup hotkey event listener
+  setup_hotkey_event_listener(event_loop);
 
-  // run config after server is fully initialized
+  // setup config watcher
   wl_event_loop_add_idle(event_loop, run_config_idle, NULL);
-  wl_event_loop_add_idle(event_loop, load_hotkeys_idle, NULL);
+  wl_event_loop_add_idle(event_loop, load_hotkeys_idle, event_loop);
 
   wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s", socket);
   wl_display_run(server.wl_display);

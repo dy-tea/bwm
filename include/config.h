@@ -128,6 +128,7 @@ void reload_hotkeys(void);
 bool keybind_matches(keybind_t *kb, uint32_t modifiers, xkb_keysym_t keysym, uint32_t keycode);
 void execute_keybind(keybind_t *kb);
 int get_hotkey_watch_fd(void);
+void setup_hotkey_event_listener(struct wl_event_loop *event_loop);
 void enter_submap(const char *name);
 void exit_submap(void);
 

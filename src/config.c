@@ -14,6 +14,7 @@
 #include <limits.h>
 #include <ctype.h>
 #include <sys/inotify.h>
+#include <wayland-server-core.h>
 
 #define BWM_CONFIG_DIR "/.config/bwm"
 #define BWMRC_NAME "bwmrc"
@@ -36,7 +37,9 @@ static keyboard_grouping_t keyboard_grouping = KEYBOARD_GROUP_DEFAULT;
 
 static int hotkey_watch_fd = -1;
 static char hotkey_config_path[PATH_MAX];
+static struct wl_event_loop *hotkey_event_loop = NULL;
 static void setup_inotify_watch(const char *config_path);
+static void add_hotkey_listener_to_event_loop(void);
 
 static const char *get_config_home(void) {
   if (custom_config_dir)
@@ -290,7 +293,7 @@ static void add_keybind(uint32_t modifiers, xkb_keysym_t keysym, uint32_t keycod
           modifiers, keysym, keycode, action, desktop_index, submap_name ? submap_name : "global");
 }
 
-static void add_gesturebind(enum gesture_type type, uint8_t fingers, uint32_t directions, 
+static void add_gesturebind(enum gesture_type type, uint8_t fingers, uint32_t directions,
     const char *input, bind_action_t action, int desktop_index, const char *external_cmd) {
   if (num_gesturebinds >= MAX_GESTUREBINDS) {
     wlr_log(WLR_ERROR, "Maximum number of gesture binds reached");
@@ -452,6 +455,7 @@ void load_hotkeys_idle(void *data) {
 
   load_hotkeys(hotkey_init_path);
   setup_inotify_watch(hotkey_init_path);
+  add_hotkey_listener_to_event_loop();
 }
 
 static submap_t *find_or_create_submap(const char *name) {
@@ -664,6 +668,16 @@ void reload_hotkeys(void) {
   }
 }
 
+static int hotkey_reload_handler(int fd, uint32_t mask, void *data) {
+  (void)data;
+  if (mask & WL_EVENT_READABLE) {
+    char buf[64];
+    read(fd, buf, sizeof(buf));
+    reload_hotkeys();
+  }
+  return 0;
+}
+
 bool keybind_matches(keybind_t *kb, uint32_t modifiers, xkb_keysym_t keysym, uint32_t keycode) {
   if (!kb) return false;
 
@@ -849,6 +863,16 @@ void execute_keybind(keybind_t *kb) {
 
 int get_hotkey_watch_fd(void) {
   return hotkey_watch_fd;
+}
+
+void setup_hotkey_event_listener(struct wl_event_loop *event_loop) {
+  hotkey_event_loop = event_loop;
+  add_hotkey_listener_to_event_loop();
+}
+
+static void add_hotkey_listener_to_event_loop(void) {
+  if (hotkey_event_loop && hotkey_watch_fd >= 0)
+    wl_event_loop_add_fd(hotkey_event_loop, hotkey_watch_fd, WL_EVENT_READABLE, hotkey_reload_handler, NULL);
 }
 
 static submap_t *find_submap(const char *name) {
