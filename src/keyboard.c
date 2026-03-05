@@ -8,6 +8,7 @@
 #include "config.h"
 #include "input.h"
 #include "scroller.h"
+#include "input_method.h"
 #include <stdlib.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
@@ -91,8 +92,10 @@ void keyboard_modifiers(struct wl_listener *listener, void *data) {
   struct bwm_keyboard *keyboard =
       wl_container_of(listener, keyboard, modifiers);
   wlr_seat_set_keyboard(server.seat, keyboard->wlr_keyboard);
-  wlr_seat_keyboard_notify_modifiers(server.seat,
-                                     &keyboard->wlr_keyboard->modifiers);
+
+  if (!input_method_keyboard_grab_forward_modifiers(keyboard->wlr_keyboard))
+    wlr_seat_keyboard_notify_modifiers(server.seat,
+                                       &keyboard->wlr_keyboard->modifiers);
 }
 
 void keyboard_key(struct wl_listener *listener, void *data) {
@@ -124,10 +127,13 @@ void keyboard_key(struct wl_listener *listener, void *data) {
   }
 
   if (!handled) {
-    // pass key to focused client
-    wlr_seat_set_keyboard(seat, keyboard->wlr_keyboard);
-    wlr_seat_keyboard_notify_key(seat, event->time_msec, event->keycode,
-                                 event->state);
+    // Forward key to input method if grabbed
+    if (!input_method_keyboard_grab_forward_key(keyboard->wlr_keyboard, event)) {
+      // pass key to focused client
+      wlr_seat_set_keyboard(seat, keyboard->wlr_keyboard);
+      wlr_seat_keyboard_notify_key(seat, event->time_msec, event->keycode,
+                                   event->state);
+    }
   }
 }
 

@@ -406,6 +406,11 @@ void server_init(void) {
   // fixes
   wlr_fixes_create(server.wl_display, 1);
 
+  // input method support
+  server.input_method_manager = wlr_input_method_manager_v2_create(server.wl_display);
+  server.text_input_manager = wlr_text_input_manager_v3_create(server.wl_display);
+  server.input_method_relay = input_method_relay_create();
+
   // init desktop structure
   monitor_t *m = (monitor_t *)calloc(1, sizeof(monitor_t));
   m->id = next_monitor_id++;
@@ -597,6 +602,7 @@ void server_fini(void) {
   ipc_cleanup();
   rule_fini();
   input_fini();
+  input_method_relay_finish(server.input_method_relay);
   config_fini();
   wl_display_destroy_clients(server.wl_display);
 

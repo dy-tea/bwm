@@ -5,6 +5,7 @@
 #include "types.h"
 #include "gesture.h"
 #include "xwayland.h"
+#include "input_method.h"
 #include <wayland-server.h>
 #include <xkbcommon/xkbcommon.h>
 #include <wlr/types/wlr_ext_workspace_v1.h>
@@ -121,6 +122,11 @@ struct bwm_server {
 
   struct wlr_drm_lease_manager *drm_lease_manager;
   struct wl_listener new_drm_lease;
+
+  // input method support
+  struct wlr_input_method_manager_v2 *input_method_manager;
+  struct wlr_text_input_manager_v3 *text_input_manager;
+  struct bwm_ime_relay *input_method_relay;
 
   // cursor state
   enum cursor_mode cursor_mode;

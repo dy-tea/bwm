@@ -10,6 +10,7 @@
 #include "rule.h"
 #include "scroller.h"
 #include "xwayland.h"
+#include "input_method.h"
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -645,6 +646,9 @@ void focus_toplevel(struct bwm_toplevel *toplevel) {
                                    seat->keyboard_state.keyboard->keycodes,
                                    seat->keyboard_state.keyboard->num_keycodes,
                                    &seat->keyboard_state.keyboard->modifiers);
+  
+  // Update input method focus
+  input_method_relay_set_focus(server.input_method_relay, surface);
 }
 
 void toplevel_apply_geometry(struct bwm_toplevel *toplevel) {

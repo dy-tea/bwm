@@ -3,6 +3,7 @@
 #include "server.h"
 #include "output.h"
 #include "tree.h"
+#include "input_method.h"
 #include <stdlib.h>
 #include <wayland-server-core.h>
 #include <wlr/util/log.h>
@@ -218,6 +219,8 @@ void focus_layer_surface(struct bwm_layer_surface *layer_surface) {
 	  wlr_seat_keyboard_notify_enter(server.seat, surface, keyboard->keycodes,
 	                                  keyboard->num_keycodes,
 	                                  &keyboard->modifiers);
+
+	input_method_relay_set_focus(server.input_method_relay, surface);
 }
 
 struct wlr_scene_tree *output_shell_layer(struct bwm_output *output, enum zwlr_layer_shell_v1_layer layer) {

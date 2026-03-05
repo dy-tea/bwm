@@ -3,6 +3,7 @@
 #include "toplevel.h"
 #include "types.h"
 #include "tree.h"
+#include "input_method.h"
 #include <float.h>
 #include <stdlib.h>
 #include <string.h>
@@ -234,8 +235,8 @@ add_abs:
 	if (wlr_xwayland_surface_override_redirect_wants_focus(xsurface)) {
 		struct wlr_xwayland *xwayland = server.xwayland.wlr_xwayland;
 		wlr_xwayland_set_seat(xwayland, server.seat);
-		wlr_seat_keyboard_notify_enter(server.seat, xsurface->surface,
-			NULL, 0, NULL);
+		wlr_seat_keyboard_notify_enter(server.seat, xsurface->surface, NULL, 0, NULL);
+		input_method_relay_set_focus(server.input_method_relay, xsurface->surface);
 	}
 }
 
@@ -261,8 +262,8 @@ static void unmanaged_handle_request_activate(struct wl_listener *listener, void
 		return;
 
 	if (wlr_xwayland_surface_override_redirect_wants_focus(xsurface)) {
-		wlr_seat_keyboard_notify_enter(server.seat, xsurface->surface,
-			NULL, 0, NULL);
+		wlr_seat_keyboard_notify_enter(server.seat, xsurface->surface, NULL, 0, NULL);
+		input_method_relay_set_focus(server.input_method_relay, xsurface->surface);
 	}
 }
 

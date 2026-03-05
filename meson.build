@@ -29,6 +29,7 @@ wayland_scanner = find_program(
 
 protocols = [
 	wl_protocol_dir / 'stable' / 'xdg-shell' / 'xdg-shell.xml',
+	wl_protocol_dir / 'unstable' / 'text-input' / 'text-input-unstable-v3.xml',
 	'protocols' / 'wlr-layer-shell-unstable-v1.xml',
 	'protocols' / 'wlr-output-power-management-unstable-v1.xml',
 ]
@@ -82,6 +83,7 @@ executable(
 		'src' / 'gesture.c',
 		'src' / 'scroller.c',
 		'src' / 'xwayland.c',
+		'src' / 'input_method.c',
 		wl_protos_src,
 	],
 	include_directories: inc,
