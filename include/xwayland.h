@@ -86,3 +86,4 @@ void handle_xwayland_ready(struct wl_listener *listener, void *data);
 void handle_xwayland_surface(struct wl_listener *listener, void *data);
 
 void xwayland_view_close(struct bwm_xwayland_view *xwayland_view);
+void xwayland_view_set_activated(struct bwm_xwayland_view *xwayland_view, bool activated);

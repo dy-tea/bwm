@@ -271,8 +271,11 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
           n->id, rect.x, rect.y, rect.width, rect.height);
 
   if (is_leaf(n)) {
-    if (n->client == NULL)
+    wlr_log(WLR_DEBUG, "apply_layout: node %u is_leaf, n->client=%p", n->id, (void*)n->client);
+    if (n->client == NULL) {
+      wlr_log(WLR_ERROR, "apply_layout: node %u has NULL client, returning early", n->id);
       return;
+    }
 
     bool the_only_window = (mon_head == mon_tail) && d->root && d->root->client;
     unsigned int bw = (
@@ -806,8 +809,12 @@ bool focus_node(monitor_t *m, desktop_t *d, node_t *n) {
           node->client->shown = true;
   }
 
-  if (n != NULL && n->client != NULL)
-    focus_toplevel(n->client->toplevel);
+  if (n != NULL && n->client != NULL) {
+    if (n->client->toplevel)
+      focus_toplevel(n->client->toplevel);
+    else if (n->client->xwayland_view)
+      xwayland_view_set_activated(n->client->xwayland_view, true);
+  }
 
   return true;
 }

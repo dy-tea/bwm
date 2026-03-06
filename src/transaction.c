@@ -217,6 +217,18 @@ static void apply_node_state(node_t *node,
 
     wlr_scene_node_set_position(&scene_tree->node, rect->x, rect->y);
 
+    // configure size for xwayland
+    if (node->client->xwayland_view && node->client->xwayland_view->xwayland_surface) {
+      struct wlr_xwayland_surface *xsurface = node->client->xwayland_view->xwayland_surface;
+      if ((int)rect->width != xsurface->width || (int)rect->height != xsurface->height) {
+        wlr_xwayland_surface_configure(xsurface, rect->x, rect->y, rect->width, rect->height);
+        node->client->xwayland_view->geometry.width = rect->width;
+        node->client->xwayland_view->geometry.height = rect->height;
+        wlr_log(WLR_DEBUG, "Transaction configured Xwayland: (%d,%d %dx%d)",
+          rect->x, rect->y, rect->width, rect->height);
+      }
+    }
+
     if (node->client->shown) {
     	wlr_scene_node_set_enabled(&scene_tree->node, true);
       wlr_log(WLR_INFO, "Applied layout to node %u [already shown]", node->id);

@@ -407,18 +407,45 @@ static void xwayland_view_configure(struct bwm_xwayland_view *xwayland_view,
 	}
 }
 
-static void xwayland_view_set_activated(struct bwm_xwayland_view *xwayland_view, bool activated) {
+static void xwayland_view_set_fullscreen(struct bwm_xwayland_view *xwayland_view, bool fullscreen) {
 	struct wlr_xwayland_surface *surface = xwayland_view->xwayland_surface;
+	wlr_xwayland_surface_set_fullscreen(surface, fullscreen);
+}
+
+void xwayland_view_set_activated(struct bwm_xwayland_view *xwayland_view, bool activated) {
+	struct wlr_xwayland_surface *surface = xwayland_view->xwayland_surface;
+
+	if (!surface || !surface->surface)
+		return;
 
 	if (activated && surface->minimized)
 		wlr_xwayland_surface_set_minimized(surface, false);
 
 	wlr_xwayland_surface_activate(surface, activated);
-}
 
-static void xwayland_view_set_fullscreen(struct bwm_xwayland_view *xwayland_view, bool fullscreen) {
-	struct wlr_xwayland_surface *surface = xwayland_view->xwayland_surface;
-	wlr_xwayland_surface_set_fullscreen(surface, fullscreen);
+	if (activated) {
+		wlr_xwayland_surface_set_fullscreen(surface, surface->fullscreen);
+
+		// raise scene tree to top
+		if (xwayland_view->scene_tree)
+			wlr_scene_node_raise_to_top(&xwayland_view->scene_tree->node);
+
+		// notify keyboard seat
+		struct wlr_seat *seat = server.seat;
+		if (seat->keyboard_state.keyboard != NULL) {
+			wlr_seat_keyboard_notify_enter(seat, surface->surface,
+				seat->keyboard_state.keyboard->keycodes,
+				seat->keyboard_state.keyboard->num_keycodes,
+				&seat->keyboard_state.keyboard->modifiers);
+		}
+
+		// update ime focus
+		input_method_relay_set_focus(server.input_method_relay, surface->surface);
+
+		// update foreign toplevel
+		if (xwayland_view->foreign_toplevel)
+			wlr_foreign_toplevel_handle_v1_set_activated(xwayland_view->foreign_toplevel, true);
+	}
 }
 
 void xwayland_view_close(struct bwm_xwayland_view *xwayland_view) {
@@ -444,6 +471,8 @@ static void handle_commit(struct wl_listener *listener, void *data) {
 				xwayland_view->node->client->state == STATE_FLOATING) {
 			xwayland_view->node->client->floating_rectangle.width = new_geo.width;
 			xwayland_view->node->client->floating_rectangle.height = new_geo.height;
+		} else if (xwayland_view->node && xwayland_view->node->client &&
+			xwayland_view->node->client->state == STATE_TILED) {
 		}
 	}
 }
@@ -570,6 +599,15 @@ static void handle_map(struct wl_listener *listener, void *data) {
 	focus_node(mon, d, node);
 	arrange(mon, d, true);
 
+	if (!wants_float && xwayland_view->node && xwayland_view->node->client) {
+		client_t *client = xwayland_view->node->client;
+		struct wlr_box *rect = &client->tiled_rectangle;
+		wlr_xwayland_surface_configure(xsurface, rect->x, rect->y, rect->width, rect->height);
+		xwayland_view->geometry.width = rect->width;
+		xwayland_view->geometry.height = rect->height;
+		wlr_scene_node_set_position(&xwayland_view->scene_tree->node, rect->x, rect->y);
+	}
+
 	xwayland_view_set_activated(xwayland_view, true);
 	server.last_focused_xwayland_view = xwayland_view;
 
@@ -601,8 +639,10 @@ static void handle_unmap(struct wl_listener *listener, void *data) {
 		xwayland_view->foreign_toplevel = NULL;
 	}
 
-	if (xwayland_view->scene_tree)
+	if (xwayland_view->scene_tree) {
 		wlr_scene_node_set_enabled(&xwayland_view->scene_tree->node, false);
+		wlr_scene_node_set_enabled(&xwayland_view->content_tree->node, false);
+	}
 
 	if (xwayland_view->node) {
 		monitor_t *mon = xwayland_view->node->monitor;
@@ -692,9 +732,10 @@ static void handle_request_configure(struct wl_listener *listener, void *data) {
 			xwayland_view->node->client->floating_rectangle.height = ev->height;
 		}
 	} else {
-		// configure for tiled
-		xwayland_view_configure(xwayland_view, xsurface->x, xsurface->y,
-			xsurface->width, xsurface->height);
+		if (xwayland_view->node && xwayland_view->node->client) {
+			struct wlr_box *rect = &xwayland_view->node->client->tiled_rectangle;
+			wlr_xwayland_surface_configure(xsurface, rect->x, rect->y, rect->width, rect->height);
+		}
 	}
 }
 
