@@ -18,6 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
+#include <pthread.h>
 #include <wayland-server-core.h>
 #include <wayland-util.h>
 #include <wlr/backend.h>
@@ -69,6 +71,7 @@
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_drm_lease_v1.h>
 #include <wlr/types/wlr_linux_drm_syncobj_v1.h>
+#include <wlr/types/wlr_xdg_system_bell_v1.h>
 
 void handle_request_start_drag(struct wl_listener *listener, void *data);
 void handle_start_drag(struct wl_listener *listener, void *data);
@@ -80,6 +83,12 @@ void handle_output_manager_apply(struct wl_listener *listener, void *data);
 void handle_output_manager_test(struct wl_listener *listener, void *data);
 void handle_xdg_activation_request_activate(struct wl_listener *listener, void *data);
 void handle_drm_lease_request(struct wl_listener *listener, void *data);
+static void handle_ring_system_bell(struct wl_listener *listener, void *data);
+
+// bell stuff
+static pthread_mutex_t bell_mutex = PTHREAD_MUTEX_INITIALIZER;
+static struct timespec last_bell_time = {0, 0};
+static const long bell_rate_limit_ms = 500;
 
 void server_init(void) {
   server = (struct bwm_server){0};
@@ -284,6 +293,11 @@ void server_init(void) {
   wlr_output_layout_get_box(server.output_layout, NULL, &full_geo);
   server.lock_background = wlr_scene_rect_create(server.lock_tree, full_geo.width, full_geo.height, lockcolor);
   wlr_scene_node_set_enabled(&server.lock_background->node, false);
+
+  // xdg system bell
+  server.xdg_system_bell = wlr_xdg_system_bell_v1_create(server.wl_display, 1);
+  server.ring_system_bell.notify = handle_ring_system_bell;
+  wl_signal_add(&server.xdg_system_bell->events.ring, &server.ring_system_bell);
 
   // idle inhibitor
   server.idle_inhibit_manager = wlr_idle_inhibit_v1_create(server.wl_display);
@@ -705,6 +719,26 @@ void handle_xdg_activation_request_activate(struct wl_listener *listener, void *
 
   wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
   focus_toplevel(toplevel);
+}
+
+static void handle_ring_system_bell(struct wl_listener *listener, void *data) {
+  (void)listener;
+  (void)data;
+
+  pthread_mutex_lock(&bell_mutex);
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+
+  long elapsed_ms = (now.tv_sec - last_bell_time.tv_sec) * 1000 +
+                    (now.tv_nsec - last_bell_time.tv_nsec) / 1000000;
+
+  if (elapsed_ms >= bell_rate_limit_ms) {
+    last_bell_time = now;
+    pthread_mutex_unlock(&bell_mutex);
+    execute_bell_bind();
+  } else {
+    pthread_mutex_unlock(&bell_mutex);
+  }
 }
 
 #if WLR_HAS_DRM_BACKEND

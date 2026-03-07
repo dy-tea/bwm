@@ -112,6 +112,9 @@ struct bwm_server {
   struct wlr_session_lock_v1 *current_session_lock;
   bool locked;
 
+  struct wlr_xdg_system_bell_v1 *xdg_system_bell;
+  struct wl_listener ring_system_bell;
+
   struct wlr_idle_inhibit_manager_v1 *idle_inhibit_manager;
   struct wl_listener new_idle_inhibitor;
 

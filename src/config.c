@@ -24,6 +24,7 @@ static const char *custom_config_dir = NULL;
 
 keybind_t keybinds[MAX_KEYBINDS];
 size_t num_keybinds = 0;
+keybind_t bell_bind = {0};
 gesturebind_t gesture_bindings[MAX_GESTUREBINDS];
 size_t num_gesturebinds = 0;
 submap_t *active_submap = NULL;
@@ -477,6 +478,24 @@ static void parse_gesture_hotkey_line(const char *gesture_str, const char *comma
 static void parse_hotkey_line(const char *hotkey_str, const char *command_str) {
   if (strncmp(hotkey_str, "gesture ", 8) == 0) {
     parse_gesture_hotkey_line(hotkey_str + 8, command_str);
+    return;
+  }
+
+  if (strcmp(hotkey_str, "bell") == 0) {
+    int desktop_index = 0;
+    char submap_name[MAXLEN];
+    submap_name[0] = '\0';
+    bind_action_t action = parse_action(command_str, &desktop_index, submap_name);
+    if (action != BIND_EXTERNAL) {
+      bell_bind = (keybind_t){
+        .action = action,
+        .desktop_index = desktop_index,
+      };
+    } else {
+      snprintf(bell_bind.external_cmd, sizeof(bell_bind.external_cmd), "%s", command_str);
+      bell_bind.action = action;
+    }
+    wlr_log(WLR_DEBUG, "Parsed bell bind: action=%d cmd='%s'", action, command_str);
     return;
   }
 
@@ -997,6 +1016,12 @@ void execute_keybind(keybind_t *kb) {
     case BIND_INTERACTIVE_MOVE:
     case BIND_INTERACTIVE_RESIZE:
       break;
+  }
+}
+
+void execute_bell_bind(void) {
+  if (bell_bind.action != BIND_NONE || bell_bind.external_cmd[0] != '\0') {
+    execute_keybind(&bell_bind);
   }
 }
 

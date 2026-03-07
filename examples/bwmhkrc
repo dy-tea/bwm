@@ -79,6 +79,10 @@ alt + shift + {Right,Left}
 alt + shift + Escape
 	bmsg quit
 
+# executed when the system bell is rung
+bell
+	ffplay -nodisp -autoexit /usr/share/sounds/freedesktop/stereo/bell.oga
+
 # Gesture bindings (touchpad)
 gesture swipe:3:left
 	bmsg desktop --focus prev

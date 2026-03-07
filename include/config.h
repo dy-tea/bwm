@@ -115,6 +115,7 @@ struct submap {
 
 extern keybind_t keybinds[MAX_KEYBINDS];
 extern size_t num_keybinds;
+extern keybind_t bell_bind;
 extern gesturebind_t gesture_bindings[MAX_GESTUREBINDS];
 extern size_t num_gesturebinds;
 extern submap_t *active_submap;
@@ -129,6 +130,7 @@ void load_hotkeys(const char *config_path);
 void reload_hotkeys(void);
 bool keybind_matches(keybind_t *kb, uint32_t modifiers, xkb_keysym_t keysym, uint32_t keycode);
 void execute_keybind(keybind_t *kb);
+void execute_bell_bind(void);
 int get_hotkey_watch_fd(void);
 void setup_hotkey_event_listener(struct wl_event_loop *event_loop);
 void enter_submap(const char *name);
