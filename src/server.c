@@ -594,6 +594,8 @@ int server_run(void) {
 
 void server_fini(void) {
   if (server.xwayland.wlr_xwayland) {
+  	wl_list_remove(&server.xwayland_ready.link);
+   	wl_list_remove(&server.xwayland_surface.link);
     wlr_xwayland_destroy(server.xwayland.wlr_xwayland);
     server.xwayland.wlr_xwayland = NULL;
   }
@@ -608,26 +610,44 @@ void server_fini(void) {
 
   wl_list_remove(&server.new_input.link);
   wl_list_remove(&server.new_output.link);
+
   wl_list_remove(&server.new_xdg_toplevel.link);
+
   wl_list_remove(&server.new_layer_surface.link);
+
   wl_list_remove(&server.cursor_motion.link);
   wl_list_remove(&server.cursor_motion_absolute.link);
   wl_list_remove(&server.cursor_button.link);
   wl_list_remove(&server.cursor_axis.link);
   wl_list_remove(&server.cursor_frame.link);
   wl_list_remove(&server.request_cursor.link);
+
   wl_list_remove(&server.pointer_focus_change.link);
   wl_list_remove(&server.new_pointer_constraint.link);
   wl_list_remove(&server.request_set_selection.link);
   wl_list_remove(&server.request_start_drag.link);
   wl_list_remove(&server.start_drag.link);
   wl_list_remove(&server.cursor_request_set_shape.link);
+  wl_list_remove(&server.swipe_begin.link);
+  wl_list_remove(&server.swipe_update.link);
+  wl_list_remove(&server.swipe_end.link);
+  wl_list_remove(&server.pinch_begin.link);
+  wl_list_remove(&server.pinch_update.link);
+  wl_list_remove(&server.pinch_end.link);
+  wl_list_remove(&server.hold_begin.link);
+  wl_list_remove(&server.hold_end.link);
+
   wl_list_remove(&server.new_session_lock.link);
+
   wl_list_remove(&server.xdg_activation_request_activate.link);
+
   wl_list_remove(&server.output_power_set_mode.link);
+
   wl_list_remove(&server.new_idle_inhibitor.link);
+
   wl_list_remove(&server.output_manager_apply.link);
   wl_list_remove(&server.output_manager_test.link);
+
   wl_list_remove(&server.new_toplevel_capture_request.link);
 #ifdef WLR_HAS_DRM_BACKEND
 	if (server.drm_lease_manager)
