@@ -102,6 +102,14 @@ static uint32_t parse_keycode(const char *name) {
   if (!name || name[0] == '\0')
     return 0;
 
+  static const char *mouse_buttons[] = {
+    "mouse_left", "mouse_right", "mouse_middle", "mouse_back", "mouse_forward"
+  };
+
+  for (size_t i = 0; i < sizeof(mouse_buttons) / sizeof(mouse_buttons[0]); i++)
+    if (strcmp(name, mouse_buttons[i]) == 0)
+      return 0x20000000 + i + 272;
+
   if (name[0] >= '1' && name[0] <= '9' && name[1] == '\0')
     return name[0] - '0' + 1;
 
@@ -199,6 +207,12 @@ static bind_action_t parse_action(const char *cmd, int *desktop_index, char *sub
         }
         return BIND_NODE_TO_DESKTOP;
       }
+
+      if (strcmp(args[1], "interactive_move") == 0)
+        return BIND_INTERACTIVE_MOVE;
+
+      if (strcmp(args[1], "interactive_resize") == 0)
+        return BIND_INTERACTIVE_RESIZE;
     }
 
     if (strcmp(args[0], "desktop") == 0 && argc >= 2) {
@@ -980,6 +994,9 @@ void execute_keybind(keybind_t *kb) {
     case BIND_EXIT_SUBMAP:
       exit_submap();
       break;
+    case BIND_INTERACTIVE_MOVE:
+    case BIND_INTERACTIVE_RESIZE:
+      break;
   }
 }
 
@@ -1205,6 +1222,8 @@ void execute_gesturebind(gesturebind_t *gb) {
     case BIND_NONE:
     case BIND_ENTER_SUBMAP:
     case BIND_EXIT_SUBMAP:
+    case BIND_INTERACTIVE_MOVE:
+    case BIND_INTERACTIVE_RESIZE:
       break;
   }
 }

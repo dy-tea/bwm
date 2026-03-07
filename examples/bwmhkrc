@@ -52,6 +52,12 @@ alt + {comma,period}
 alt + ctrl + {h,j,k,l}
 	bmsg resize {left,down,up,right}
 
+# floating window interactions (alt + mouse on floating windows)
+alt + mouse_left
+	bmsg node interactive_move
+alt + mouse_right
+	bmsg node interactive_resize
+
 # desktop switching (1-based index)
 # Using brace expansion with range syntax
 alt + {1-9}

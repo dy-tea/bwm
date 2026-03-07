@@ -164,31 +164,43 @@ void keyboard_destroy(struct wl_listener *listener, void *data) {
   free(keyboard);
 }
 
+extern void begin_interactive(struct bwm_toplevel *toplevel, enum cursor_mode mode, uint32_t edges);
+
 // keybind handling using raw keycode (for number keys 1-0)
 bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed) {
   if (!pressed)
     return false;
 
+  keybind_t *matched_kb = NULL;
+
   if (active_submap) {
     for (size_t i = 0; i < active_submap->num_keybinds; i++) {
       keybind_t *kb = &active_submap->keybinds[i];
       if (kb->use_keycode && keybind_matches(kb, modifiers, 0, keycode)) {
-        execute_keybind(kb);
-        return true;
+        matched_kb = kb;
+        break;
       }
     }
-    return false;
   }
 
-  for (size_t i = 0; i < num_keybinds; i++) {
-    keybind_t *kb = &keybinds[i];
-    if (kb->use_keycode && keybind_matches(kb, modifiers, 0, keycode)) {
-      execute_keybind(kb);
-      return true;
+  if (!matched_kb) {
+    for (size_t i = 0; i < num_keybinds; i++) {
+      keybind_t *kb = &keybinds[i];
+      if (kb->use_keycode && keybind_matches(kb, modifiers, 0, keycode)) {
+        matched_kb = kb;
+        break;
+      }
     }
   }
 
-  return false;
+  if (!matched_kb)
+    return false;
+
+  if (matched_kb->action == BIND_INTERACTIVE_MOVE || matched_kb->action == BIND_INTERACTIVE_RESIZE)
+    return false;
+
+  execute_keybind(matched_kb);
+  return true;
 }
 
 // keybind handling

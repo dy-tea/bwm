@@ -80,6 +80,38 @@ Format:
 
 Combine modifiers with `+`, e.g., `alt + shift + q`
 
+### Mouse Button Bindings
+
+Mouse buttons can be used in hotkey bindings for both custom commands and built-in interactions on floating windows.
+
+#### Mouse Button Names
+
+- `mouse_left` - Left mouse button
+- `mouse_right` - Right mouse button
+- `mouse_middle` - Middle mouse button (scroll wheel click)
+- `mouse_back` - Back button
+- `mouse_forward` - Forward button
+
+#### Floating Window Interactions
+
+When holding Alt with a mouse button on a floating window, bwm provides built-in interactive operations:
+
+```
+alt + mouse_left   # Interactive move (drag to reposition)
+alt + mouse_right # Interactive resize (drag to resize, edges detected from cursor position)
+```
+
+The resize operation detects which edge(s) to resize based on cursor position (10px border threshold), defaulting to bottom-right if clicking in the center.
+
+#### Custom Mouse Button Binds
+
+Mouse buttons can also be used with modifiers for custom keybinds:
+
+```
+alt + ctrl + mouse_right
+	foot
+```
+
 ### Commands
 
 All commands use the `bmsg` prefix. Commands not starting with `bmsg` are executed as shell commands.
@@ -94,6 +126,8 @@ bmsg node --state floating         # Set focused window to floating
 bmsg node --state fullscreen       # Set focused window to fullscreen
 bmsg node --to-desktop <n>         # Send window to desktop n (1-10)
 bmsg node --to-desktop <name>      # Send window to named desktop
+bmsg node interactive_move         # Interactive move (for mouse button binds on floating windows)
+bmsg node interactive_resize        # Interactive resize (for mouse button binds on floating windows)
 ```
 
 #### Desktop Commands

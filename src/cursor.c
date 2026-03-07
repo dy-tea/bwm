@@ -1,4 +1,5 @@
 #include "cursor.h"
+#include "input_method.h"
 #include "keyboard.h"
 #include "layer.h"
 #include "server.h"
@@ -28,6 +29,13 @@
 #include <wlr/util/region.h>
 #include <wlr/util/log.h>
 #include <wlr/util/box.h>
+
+extern keybind_t keybinds[];
+extern size_t num_keybinds;
+extern submap_t *active_submap;
+extern bool keybind_matches(keybind_t *kb, uint32_t modifiers, xkb_keysym_t keysym, uint32_t keycode);
+extern void execute_keybind(keybind_t *kb);
+extern bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed);
 
 static void cursor_constrain(struct wlr_pointer_constraint_v1 *constraint);
 
@@ -284,6 +292,7 @@ void cursor_button(struct wl_listener *listener, void *data) {
 
   if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
     reset_cursor_mode();
+    server.cursor_buttons &= ~(1 << (event->button - 272));
   } else {
     double sx, sy;
     struct wlr_surface *surface = NULL;
@@ -291,6 +300,7 @@ void cursor_button(struct wl_listener *listener, void *data) {
             server.cursor->x, server.cursor->y, &surface, &sx, &sy);
     if (type == NULL)
     	return;
+
     if (wlr_layer_surface_v1_try_from_wlr_surface(surface)) {
     	struct bwm_layer_surface* layer = type;
       if (layer)
@@ -317,6 +327,99 @@ void cursor_button(struct wl_listener *listener, void *data) {
 	        focus_toplevel(toplevel);
 	      }
     	}
+    }
+
+    // add to cursor buttons
+    server.cursor_buttons |= 1 << (event->button - 272);
+
+    // perform binds
+    struct wlr_keyboard *wlr_keyboard = wlr_seat_get_keyboard(server.seat);
+    uint32_t modifiers = wlr_keyboard_get_modifiers(wlr_keyboard);
+    for (uint32_t i = 0; i != 5; ++i) {
+      if (server.cursor_buttons & (1 << i)) {
+        uint32_t keycode = 0x20000000 + i + 272;
+        handle_keybind_raw(modifiers, keycode, true);
+
+        keybind_t *matched_kb = NULL;
+        if (active_submap) {
+          for (size_t j = 0; j < active_submap->num_keybinds; j++) {
+            keybind_t *kb = &active_submap->keybinds[j];
+            if (kb->use_keycode && keybind_matches(kb, modifiers, 0, keycode)) {
+              matched_kb = kb;
+              break;
+            }
+          }
+        }
+        if (!matched_kb) {
+          for (size_t j = 0; j < num_keybinds; j++) {
+            keybind_t *kb = &keybinds[j];
+            if (kb->use_keycode && keybind_matches(kb, modifiers, 0, keycode)) {
+              matched_kb = kb;
+              break;
+            }
+          }
+        }
+
+        if (matched_kb && (matched_kb->action == BIND_INTERACTIVE_MOVE || matched_kb->action == BIND_INTERACTIVE_RESIZE)) {
+          struct bwm_toplevel *toplevel = NULL;
+          if (type && ((struct bwm_toplevel *)type)->node)
+            toplevel = type;
+
+          if (toplevel && toplevel->node && toplevel->node->client &&
+              toplevel->node->client->state == STATE_FLOATING) {
+            if (matched_kb->action == BIND_INTERACTIVE_MOVE) {
+              begin_interactive(toplevel, CURSOR_MOVE, 0);
+            } else {
+              client_t *c = toplevel->node->client;
+              double wx = c->floating_rectangle.x;
+              double wy = c->floating_rectangle.y;
+              double ww = c->floating_rectangle.width;
+              double wh = c->floating_rectangle.height;
+              double cx = server.cursor->x;
+              double cy = server.cursor->y;
+
+              double third_w = ww / 3.0;
+              double third_h = wh / 3.0;
+
+              bool in_left = cx < wx + third_w;
+              bool in_right = cx > wx + ww - third_w;
+              bool in_top = cy < wy + third_h;
+              bool in_bottom = cy > wy + wh - third_h;
+
+              uint32_t edges = 0;
+
+              if (in_left || in_right)
+              	edges |= in_left ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT;
+
+              if (in_top || in_bottom)
+              	edges |= in_top ? WLR_EDGE_TOP : WLR_EDGE_BOTTOM;
+
+              if (edges == 0) {
+                double dist_left = cx - wx;
+                double dist_right = (wx + ww) - cx;
+                double dist_top = cy - wy;
+                double dist_bottom = (wy + wh) - cy;
+
+                double min_dist = dist_top;
+                edges = WLR_EDGE_TOP;
+
+                if (dist_bottom < min_dist) {
+                  min_dist = dist_bottom;
+                  edges = WLR_EDGE_BOTTOM;
+                }
+                if (dist_left < min_dist) {
+                  min_dist = dist_left;
+                  edges = WLR_EDGE_LEFT;
+                }
+                if (dist_right < min_dist)
+                  edges = WLR_EDGE_RIGHT;
+              }
+
+              begin_interactive(toplevel, CURSOR_RESIZE, edges);
+            }
+          }
+        }
+      }
     }
   }
 }

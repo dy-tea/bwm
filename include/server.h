@@ -136,6 +136,7 @@ struct bwm_server {
   double grab_x, grab_y;
   struct wlr_box grab_geobox;
   uint32_t resize_edges;
+  uint32_t cursor_buttons;
 
   // bspwm integration
   monitor_t *monitors;
