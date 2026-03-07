@@ -449,6 +449,8 @@ void xwayland_view_set_activated(struct bwm_xwayland_view *xwayland_view, bool a
 }
 
 void xwayland_view_close(struct bwm_xwayland_view *xwayland_view) {
+	if (!xwayland_view || !xwayland_view->xwayland_surface)
+		return;
 	struct wlr_xwayland_surface *surface = xwayland_view->xwayland_surface;
 	wlr_xwayland_surface_close(surface);
 }
@@ -589,6 +591,9 @@ static void handle_map(struct wl_listener *listener, void *data) {
 		client->state = STATE_TILED;
 		node->rectangle.width = xsurface->width;
 		node->rectangle.height = xsurface->height;
+		client->shown = true;
+		wlr_scene_node_set_enabled(&xwayland_view->scene_tree->node, true);
+		wlr_scene_node_set_enabled(&xwayland_view->content_tree->node, true);
 		wlr_log(WLR_DEBUG, "XWayland window will be tiled, scene_tree=%p enabled=%d",
 			(void*)xwayland_view->scene_tree,
 			xwayland_view->scene_tree->node.enabled);
@@ -658,11 +663,16 @@ static void handle_unmap(struct wl_listener *listener, void *data) {
 			}
 		}
 
+		if (xwayland_view->node->client)
+			xwayland_view->node->client->xwayland_view = NULL;
+
 		if (desk) {
 			remove_node(mon, desk, xwayland_view->node);
 			if (mon && desk)
 				arrange(mon, desk, true);
 		}
+
+		xwayland_view->node->destroying = true;
 		xwayland_view->node = NULL;
 	}
 }
@@ -676,10 +686,16 @@ static void handle_destroy(struct wl_listener *listener, void *data) {
 		handle_unmap(&xwayland_view->unmap, NULL);
 
 	if (server.last_focused_xwayland_view == xwayland_view) {
+		uint32_t window_id = xwayland_view->xwayland_surface ?
+			xwayland_view->xwayland_surface->window_id : 0;
 		wlr_log(WLR_INFO, "Clearing last_focused_xwayland_view (window %u being destroyed)",
-			xwayland_view->xwayland_surface->window_id);
+			window_id);
 		server.last_focused_xwayland_view = NULL;
 	}
+
+	if (xwayland_view->node && xwayland_view->node->client)
+		xwayland_view->node->client->xwayland_view = NULL;
+	xwayland_view->xwayland_surface = NULL;
 
 	wl_list_remove(&xwayland_view->destroy.link);
 	wl_list_remove(&xwayland_view->request_configure.link);

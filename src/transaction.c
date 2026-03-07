@@ -196,18 +196,13 @@ static void apply_node_state(node_t *node,
 
     struct wlr_scene_tree *scene_tree = NULL;
     bool configured = false;
-    bool geometry_matches = false;
 
     if (node->client->toplevel) {
       scene_tree = node->client->toplevel->scene_tree;
       configured = node->client->toplevel->configured;
-      geometry_matches = node->client->toplevel->geometry.width == rect->width &&
-                        node->client->toplevel->geometry.height == rect->height;
     } else if (node->client->xwayland_view) {
       scene_tree = node->client->xwayland_view->scene_tree;
       configured = true;
-      geometry_matches = node->client->xwayland_view->geometry.width == rect->width &&
-                        node->client->xwayland_view->geometry.height == rect->height;
     }
 
     if (!scene_tree) {
@@ -232,13 +227,9 @@ static void apply_node_state(node_t *node,
     if (node->client->shown) {
     	wlr_scene_node_set_enabled(&scene_tree->node, true);
       wlr_log(WLR_INFO, "Applied layout to node %u [already shown]", node->id);
-    } else if (configured) {
-      wlr_scene_node_set_enabled(&scene_tree->node, true);
-      node->client->shown = true;
-      wlr_log(WLR_DEBUG, "Applied layout to node %u [FIRST SHOW]", node->id);
     } else {
-      wlr_log(WLR_DEBUG, "Applied layout to node %u [waiting for configure] configured=%d matches=%d",
-          node->id, configured, geometry_matches);
+      wlr_log(WLR_DEBUG, "Applied layout to node %u [waiting to be shown] configured=%d shown=%d",
+          node->id, configured, node->client->shown);
     }
   }
 }
