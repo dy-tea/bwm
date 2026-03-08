@@ -85,11 +85,6 @@ void handle_xdg_activation_request_activate(struct wl_listener *listener, void *
 void handle_drm_lease_request(struct wl_listener *listener, void *data);
 static void handle_ring_system_bell(struct wl_listener *listener, void *data);
 
-// bell stuff
-static pthread_mutex_t bell_mutex = PTHREAD_MUTEX_INITIALIZER;
-static struct timespec last_bell_time = {0, 0};
-static const long bell_rate_limit_ms = 500;
-
 void server_init(void) {
   server = (struct bwm_server){0};
 
@@ -721,24 +716,24 @@ void handle_xdg_activation_request_activate(struct wl_listener *listener, void *
   focus_toplevel(toplevel);
 }
 
+static int handle_system_bell_timer(void *data) {
+	(void)data;
+	server.system_bell_timer = NULL;
+	return 0;
+}
+
 static void handle_ring_system_bell(struct wl_listener *listener, void *data) {
   (void)listener;
   (void)data;
 
-  pthread_mutex_lock(&bell_mutex);
-  struct timespec now;
-  clock_gettime(CLOCK_MONOTONIC, &now);
+  if (server.system_bell_timer != NULL)
+  	return;
 
-  long elapsed_ms = (now.tv_sec - last_bell_time.tv_sec) * 1000 +
-                    (now.tv_nsec - last_bell_time.tv_nsec) / 1000000;
+  server.system_bell_timer = wl_event_loop_add_timer(wl_display_get_event_loop(server.wl_display),
+  	handle_system_bell_timer, NULL);
+  wl_event_source_timer_update(server.system_bell_timer, 100);
 
-  if (elapsed_ms >= bell_rate_limit_ms) {
-    last_bell_time = now;
-    pthread_mutex_unlock(&bell_mutex);
-    execute_bell_bind();
-  } else {
-    pthread_mutex_unlock(&bell_mutex);
-  }
+  execute_bell_bind();
 }
 
 #if WLR_HAS_DRM_BACKEND

@@ -114,6 +114,7 @@ struct bwm_server {
 
   struct wlr_xdg_system_bell_v1 *xdg_system_bell;
   struct wl_listener ring_system_bell;
+  struct wl_event_source *system_bell_timer;
 
   struct wlr_idle_inhibit_manager_v1 *idle_inhibit_manager;
   struct wl_listener new_idle_inhibitor;
