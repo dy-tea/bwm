@@ -464,9 +464,14 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
     uint32_t serial = toplevel->xdg_toplevel->base->current.configure_serial;
     bool successful = transaction_notify_view_ready_by_serial(toplevel, serial);
 
-    if (successful) {
-      toplevel->configured = true;
+    if (successful)
       wlr_log(WLR_DEBUG, "Transaction completed for serial=%u", serial);
+
+    // ack as configured is serial is non-zero
+    if (!toplevel->configured && serial != 0) {
+      toplevel->configured = true;
+      wlr_log(WLR_DEBUG, "Toplevel marked configured via serial=%u (transaction match=%d)",
+              serial, successful);
     }
 
     if (toplevel->saved_surface_tree && !successful)

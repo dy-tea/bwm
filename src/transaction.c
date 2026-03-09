@@ -110,7 +110,7 @@ static void transaction_add_node(struct bwm_transaction *txn, node_t *node,
     }
   }
 
-  // freate new instruction
+  // create new instruction
   struct bwm_transaction_inst *instruction = calloc(1, sizeof(*instruction));
   if (!instruction) {
     wlr_log(WLR_ERROR, "Failed to allocate transaction instruction");
@@ -125,8 +125,7 @@ static void transaction_add_node(struct bwm_transaction *txn, node_t *node,
 
   copy_node_state(node, instruction);
 
-  // update node refs
-  node->instruction = instruction;
+  // instruction is updated at commit
   node->ntxnrefs++;
 
   wlr_log(WLR_DEBUG, "transaction_add_node: node %u ntxnrefs=%zu destroying=%d",
@@ -244,6 +243,16 @@ static void apply_node_state(node_t *node,
   }
 }
 
+static bool node_in_transaction(struct bwm_transaction *txn, node_t *node) {
+  if (!txn || !node)
+    return false;
+  struct bwm_transaction_inst *inst;
+  wl_list_for_each(inst, &txn->instructions, link)
+    if (inst->node == node)
+      return true;
+  return false;
+}
+
 static void transaction_apply(struct bwm_transaction *txn) {
   if (!txn) {
     wlr_log(WLR_ERROR, "transaction_apply called with NULL txn");
@@ -265,6 +274,21 @@ static void transaction_apply(struct bwm_transaction *txn) {
       wlr_log(WLR_ERROR, "Skipping instruction with NULL node");
       continue;
     }
+
+    // skip timed out apply
+    if (txn_state.pending_transaction &&
+        node_in_transaction(txn_state.pending_transaction, instruction->node)) {
+      wlr_log(WLR_DEBUG, "Skipping stale apply for node %u — superseded by pending transaction",
+              instruction->node->id);
+      if (instruction->node->client &&
+          instruction->node->client->toplevel &&
+          instruction->node->client->toplevel->saved_surface_tree) {
+        toplevel_remove_saved_buffer(instruction->node->client->toplevel);
+        wlr_log(WLR_DEBUG, "Released saved buffer for superseded node %u", instruction->node->id);
+      }
+      continue;
+    }
+
     wlr_log(WLR_DEBUG, "Applying instruction for node %u (ntxnrefs=%zu destroying=%d)",
             instruction->node->id, (size_t)instruction->node->ntxnrefs, instruction->node->destroying);
     apply_node_state(instruction->node, instruction);

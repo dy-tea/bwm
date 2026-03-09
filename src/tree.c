@@ -712,7 +712,7 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
     n->second_child = NULL;
 
     // adjust tree structure
-    if (!n->vacant && removal_adjustment) {
+    if (!n->vacant && removal_adjustment && (n->client == NULL || IS_TILED(n->client))) {
       if (automatic_scheme == SCHEME_SPIRAL) {
         if (n_is_first)
           rotate_tree(b, 270);
