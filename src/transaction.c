@@ -22,6 +22,8 @@ static struct {
   size_t dirty_capacity;
 } txn_state = {0};
 
+static void transaction_commit(struct bwm_transaction *txn);
+
 static struct bwm_transaction *transaction_create(void) {
   struct bwm_transaction *txn = calloc(1, sizeof(*txn));
   if (!txn) {
@@ -84,6 +86,13 @@ static void copy_node_state(node_t *node,
     instruction->tiled_rectangle = node->client->tiled_rectangle;
     instruction->floating_rectangle = node->client->floating_rectangle;
     instruction->content_rect = node->pending.rectangle;
+
+    if (node->client->toplevel)
+      instruction->scene_tree = node->client->toplevel->scene_tree;
+    else if (node->client->xwayland_view)
+      instruction->scene_tree = node->client->xwayland_view->scene_tree;
+    else
+      instruction->scene_tree = NULL;
   }
 }
 
@@ -147,6 +156,13 @@ static void apply_node_state(node_t *node,
     return;
   }
 
+  if (node->destroying) {
+    node->client->shown = false;
+    if (instruction->scene_tree)
+      wlr_scene_node_set_enabled(&instruction->scene_tree->node, false);
+    return;
+  }
+
   // check if toplevel or xwayland_view exists
   if (!node->client->toplevel && !node->client->xwayland_view) {
     wlr_log(WLR_DEBUG, "Skipping apply for node %u - no toplevel or xwayland_view", node->id);
@@ -158,12 +174,6 @@ static void apply_node_state(node_t *node,
   // copy rectangles
   node->client->tiled_rectangle = instruction->tiled_rectangle;
   node->client->floating_rectangle = instruction->floating_rectangle;
-
-  // node is destroying, hide it now atomically with other changes
-  if (node->destroying) {
-    node->client->shown = false;
-    return;
-  }
 
   // apply geometry
   bool ready = node->client->toplevel ? toplevel_is_ready(node->client->toplevel) : true;
@@ -332,10 +342,11 @@ static int handle_timeout(void *data) {
 
   transaction_destroy(txn);
 
-  // commit pending transaction if any
+  // promote built-up commit to immediate
   if (txn_state.pending_transaction) {
+    struct bwm_transaction *pending = txn_state.pending_transaction;
     txn_state.pending_transaction = NULL;
-    transaction_commit_dirty();
+    transaction_commit(pending);
   }
 
   return 0;
@@ -350,9 +361,12 @@ static void transaction_progress(void) {
     transaction_destroy(txn_state.queued_transaction);
     txn_state.queued_transaction = NULL;
 
-    // process pending transaction if any
-    if (txn_state.pending_transaction)
-      transaction_commit_dirty();
+    // promote built-up commit to immediate
+    if (txn_state.pending_transaction) {
+      struct bwm_transaction *txn = txn_state.pending_transaction;
+      txn_state.pending_transaction = NULL;
+      transaction_commit(txn);
+    }
   }
 }
 

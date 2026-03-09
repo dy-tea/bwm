@@ -336,6 +336,25 @@ void toplevel_map(struct wl_listener *listener, void *data) {
           n->client->title[0] ? n->client->title : "untitled");
 }
 
+void toplevel_freeze_sibling_buffers(desktop_t *d, node_t *n) {
+  if (!d || !d->root)
+    return;
+
+  node_t *root = d->root;
+  node_t *leaf = first_extrema(root);
+  while (leaf) {
+    if (leaf != n
+        && leaf->client
+        && leaf->client->shown
+        && leaf->client->toplevel
+        && !leaf->client->toplevel->saved_surface_tree) {
+      toplevel_save_buffer(leaf->client->toplevel);
+      wlr_log(WLR_DEBUG, "Froze buffer for sibling node %u", leaf->id);
+    }
+    leaf = next_leaf(leaf, root);
+  }
+}
+
 void toplevel_unmap(struct wl_listener *listener, void *data) {
   (void)data;
   struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, unmap);
@@ -357,13 +376,11 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
     toplevel->foreign_toplevel = NULL;
   }
 
-  if (toplevel->node && toplevel->node->client && toplevel->node->client->shown) {
-    toplevel_save_buffer(toplevel);
-    wlr_log(WLR_DEBUG, "Saved buffer for unmapping toplevel to prevent gap");
-  }
-
   if (toplevel->node == NULL)
     return;
+
+  if (toplevel->node->client && toplevel->node->client->shown)
+    toplevel_save_buffer(toplevel);
 
   node_t *n = toplevel->node;
 
@@ -398,6 +415,9 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
     }
   }
 
+  // freeze resizing siblings
+  toplevel_freeze_sibling_buffers(d, n);
+
   if (m && d) {
     if (n)
       node_set_dirty(n);
@@ -407,9 +427,12 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
     if (n)
       n->destroying = true;
 
-    toplevel->node = NULL;
-
     arrange(m, d, true);
+
+    if (n && n->client)
+      n->client->toplevel = NULL;
+
+    toplevel->node = NULL;
 
     // focus handling after removing node
     if (d->focus != NULL && d->focus->client != NULL &&
@@ -646,7 +669,7 @@ void focus_toplevel(struct bwm_toplevel *toplevel) {
                                    seat->keyboard_state.keyboard->keycodes,
                                    seat->keyboard_state.keyboard->num_keycodes,
                                    &seat->keyboard_state.keyboard->modifiers);
-  
+
   // Update input method focus
   input_method_relay_set_focus(server.input_method_relay, surface);
 }
@@ -705,6 +728,9 @@ void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
     return;
   }
 
+  toplevel->unmap.notify = toplevel_unmap;
+  wl_signal_add(&xdg_toplevel->base->surface->events.unmap, &toplevel->unmap);
+
   // create surface scene within the content tree
   struct wlr_scene_tree *xdg_tree =
       wlr_scene_xdg_surface_create(toplevel->content_tree, xdg_toplevel->base);
@@ -727,9 +753,6 @@ void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
   // register event listeners
   toplevel->map.notify = toplevel_map;
   wl_signal_add(&xdg_toplevel->base->surface->events.map, &toplevel->map);
-
-  toplevel->unmap.notify = toplevel_unmap;
-  wl_signal_add(&xdg_toplevel->base->surface->events.unmap, &toplevel->unmap);
 
   toplevel->commit.notify = toplevel_commit;
   wl_signal_add(&xdg_toplevel->base->surface->events.commit, &toplevel->commit);

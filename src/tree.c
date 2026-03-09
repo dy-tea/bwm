@@ -207,8 +207,11 @@ node_t *prev_leaf(node_t *n, node_t *r) {
 }
 
 void arrange(monitor_t *m, desktop_t *d, bool use_transaction) {
-  if (d->root == NULL)
+  if (d->root == NULL) {
+    if (use_transaction)
+      transaction_commit_dirty();
     return;
+  }
 
   struct wlr_box rect;
   if (m->output)
@@ -769,6 +772,9 @@ void close_node(node_t *n) {
 void kill_node(monitor_t *m, desktop_t *d, node_t *n) {
   if (n == NULL)
     return;
+
+  // freeze buffers before closing nodes
+  toplevel_freeze_sibling_buffers(d, n);
 
   close_node(n);
 }

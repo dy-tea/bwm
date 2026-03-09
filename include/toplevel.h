@@ -64,4 +64,6 @@ void toplevel_save_buffer(struct bwm_toplevel *toplevel);
 void toplevel_remove_saved_buffer(struct bwm_toplevel *toplevel);
 void toplevel_send_frame_done(struct bwm_toplevel *toplevel);
 
+void toplevel_freeze_sibling_buffers(desktop_t *d, node_t *n);
+
 void handle_new_toplevel_capture_request(struct wl_listener *listener, void *data);

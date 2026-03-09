@@ -554,9 +554,18 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
       for (node_t *n_iter = first_extrema(target->root); n_iter != NULL; n_iter = next_leaf(n_iter, target->root)) {
         if (n_iter->client) {
           n_iter->client->shown = true;
-          struct wlr_scene_tree *scene_tree = client_get_scene_tree(n_iter->client);
-          if (scene_tree)
-            wlr_scene_node_set_enabled(&scene_tree->node, true);
+          // Only directly enable windows that have already been configured
+          // (positioned by a prior transaction). New unconfigured tiled windows
+          // sit at (0,0); enabling them here causes a top-left flash before
+          // arrange()/apply_node_state() positions and enables them atomically.
+          bool already_configured = true;
+          if (n_iter->client->toplevel)
+            already_configured = n_iter->client->toplevel->configured;
+          if (already_configured) {
+            struct wlr_scene_tree *scene_tree = client_get_scene_tree(n_iter->client);
+            if (scene_tree)
+              wlr_scene_node_set_enabled(&scene_tree->node, true);
+          }
         }
       }
       arrange(m, target, true);
@@ -576,9 +585,14 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
       for (node_t *n_iter = first_extrema(src_desk->root); n_iter != NULL; n_iter = next_leaf(n_iter, src_desk->root)) {
         if (n_iter->client) {
           n_iter->client->shown = true;
-          struct wlr_scene_tree *scene_tree = client_get_scene_tree(n_iter->client);
-          if (scene_tree)
-            wlr_scene_node_set_enabled(&scene_tree->node, true);
+          bool already_configured = true;
+          if (n_iter->client->toplevel)
+            already_configured = n_iter->client->toplevel->configured;
+          if (already_configured) {
+            struct wlr_scene_tree *scene_tree = client_get_scene_tree(n_iter->client);
+            if (scene_tree)
+              wlr_scene_node_set_enabled(&scene_tree->node, true);
+          }
         }
       }
       arrange(m, src_desk, true);

@@ -5,6 +5,7 @@
 #include <time.h>
 #include <wayland-server-core.h>
 #include <wlr/util/box.h>
+#include <wlr/types/wlr_scene.h>
 
 // forward declarations
 struct node_t;
@@ -28,6 +29,9 @@ struct bwm_transaction_inst {
   uint32_t serial;
   bool waiting;
   bool server_request;
+
+  // scene tree snapshot during alive state
+  struct wlr_scene_tree *scene_tree;
 };
 
 struct bwm_transaction {
