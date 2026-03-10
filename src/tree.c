@@ -20,9 +20,19 @@ bool borderless_monocle = false;
 bool borderless_singleton = false;
 bool gapless_monocle = false;
 bool removal_adjustment = true;
+bool focus_follows_pointer = false;
+bool pointer_follows_focus = false;
 padding_t monocle_padding = {0, 0, 0, 0};
+padding_t padding = {0, 0, 0, 0};
 int border_width = 2;
 int window_gap = 10;
+double split_ratio = 0.5;
+
+// border colors
+char normal_border_color[16] = "#444444";
+char active_border_color[16] = "#555555";
+char focused_border_color[16] = "#1793df";
+char presel_feedback_color[16] = "#ff5555";
 
 // global state
 monitor_t *mon = NULL;
@@ -1024,6 +1034,49 @@ void flip_tree(node_t *n, flip_t flp) {
 
   flip_tree(n->first_child, flp);
   flip_tree(n->second_child, flp);
+}
+
+static void equalize_rec(node_t *n) {
+  if (n == NULL)
+    return;
+
+  if (is_leaf(n))
+    return;
+
+  n->split_ratio = 0.5;
+
+  equalize_rec(n->first_child);
+  equalize_rec(n->second_child);
+}
+
+void equalize_tree(node_t *n) {
+  if (n == NULL)
+    return;
+
+  equalize_rec(n);
+}
+
+static void balance_rec(node_t *n) {
+  if (n == NULL)
+    return;
+
+  if (is_leaf(n))
+    return;
+
+  unsigned int c1 = clients_count_in(n->first_child);
+  unsigned int total = c1 + clients_count_in(n->second_child);
+  if (total > 0)
+    n->split_ratio = (double)c1 / (double)total;
+
+  balance_rec(n->first_child);
+  balance_rec(n->second_child);
+}
+
+void balance_tree(node_t *n) {
+  if (n == NULL)
+    return;
+
+  balance_rec(n);
 }
 
 struct wlr_box get_rectangle(monitor_t *m, desktop_t *d, node_t *n) {

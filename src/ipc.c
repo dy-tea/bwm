@@ -15,23 +15,21 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <wlr/util/log.h>
-#include <sys/stat.h>
+#include <stdarg.h>
 #include <fcntl.h>
-#include <wlr/types/wlr_xdg_shell.h>
-#include <wlr/types/wlr_scene.h>
-#include <wayland-util.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 #include <wlr/util/log.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <wlr/types/wlr_xdg_shell.h>
-#include <wlr/types/wlr_scene.h>
+#include <sys/stat.h>
+#include <wlr/util/box.h>
+#include <wayland-server-core.h>
 
 static int ipc_socket_fd = -1;
 static char socket_path[256];
+
+static bwm_subscriber_t *subscriber_head = NULL;
+static bwm_subscriber_t *subscriber_tail = NULL;
+
+static void ipc_cmd_subscribe(char **args, int num, int client_fd);
 
 const char *ipc_get_socket_path(void) {
   return socket_path;
@@ -608,6 +606,192 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     }
 
     send_success(client_fd, "node sent to desktop\n");
+  } else if (streq("-g", *args) || streq("--flag", *args)) {
+    if (num < 2) {
+      send_failure(client_fd, "node -g: missing flag argument\n");
+      return;
+    }
+    args++;
+    num--;
+
+    monitor_t *m = server.focused_monitor;
+    if (!m || !m->desk) {
+      send_failure(client_fd, "node -g: no focused desktop\n");
+      return;
+    }
+
+    node_t *n = m->desk->focus;
+    if (!n) {
+      send_failure(client_fd, "node -g: no focused node\n");
+      return;
+    }
+
+    char *key = strtok(*args, "=");
+    char *val = strtok(NULL, "=");
+
+    bool set_value;
+    bool has_value = false;
+
+    if (val == NULL) {
+      has_value = false;
+    } else {
+      has_value = true;
+      if (strcmp(val, "true") == 0 || strcmp(val, "on") == 0 || strcmp(val, "1") == 0) {
+        set_value = true;
+      } else if (strcmp(val, "false") == 0 || strcmp(val, "off") == 0 || strcmp(val, "0") == 0) {
+        set_value = false;
+      } else {
+        send_failure(client_fd, "node -g: invalid value\n");
+        return;
+      }
+    }
+
+    if (strcmp(key, "hidden") == 0) {
+      n->hidden = has_value ? set_value : !n->hidden;
+      transaction_commit_dirty();
+      send_success(client_fd, "flag changed\n");
+    } else if (strcmp(key, "sticky") == 0) {
+      n->sticky = has_value ? set_value : !n->sticky;
+      transaction_commit_dirty();
+      send_success(client_fd, "flag changed\n");
+    } else if (strcmp(key, "private") == 0) {
+      n->private_node = has_value ? set_value : !n->private_node;
+      transaction_commit_dirty();
+      send_success(client_fd, "flag changed\n");
+    } else if (strcmp(key, "locked") == 0) {
+      n->locked = has_value ? set_value : !n->locked;
+      transaction_commit_dirty();
+      send_success(client_fd, "flag changed\n");
+    } else if (strcmp(key, "marked") == 0) {
+      n->marked = has_value ? set_value : !n->marked;
+      transaction_commit_dirty();
+      send_success(client_fd, "flag changed\n");
+    } else {
+      send_failure(client_fd, "node -g: unknown flag\n");
+      return;
+    }
+  } else if (streq("-v", *args) || streq("--move", *args)) {
+    if (num < 3) {
+      send_failure(client_fd, "node -v: missing delta arguments\n");
+      return;
+    }
+    args++;
+    num--;
+
+    monitor_t *m = server.focused_monitor;
+    if (!m || !m->desk) {
+      send_failure(client_fd, "node -v: no focused desktop\n");
+      return;
+    }
+
+    node_t *n = m->desk->focus;
+    if (!n || !n->client) {
+      send_failure(client_fd, "node -v: no focused client\n");
+      return;
+    }
+
+    int dx = 0, dy = 0;
+    if (sscanf(*args, "%d", &dx) != 1) {
+      send_failure(client_fd, "node -v: invalid dx\n");
+      return;
+    }
+    args++;
+    num--;
+
+    if (sscanf(*args, "%d", &dy) != 1) {
+      send_failure(client_fd, "node -v: invalid dy\n");
+      return;
+    }
+
+    n->client->state = STATE_FLOATING;
+    n->client->floating_rectangle.x += dx;
+    n->client->floating_rectangle.y += dy;
+
+    transaction_commit_dirty();
+    send_success(client_fd, "moved\n");
+  } else if (streq("-z", *args) || streq("--resize", *args)) {
+    if (num < 4) {
+      send_failure(client_fd, "node -z: missing arguments\n");
+      return;
+    }
+    args++;
+    num--;
+
+    monitor_t *m = server.focused_monitor;
+    if (!m || !m->desk) {
+      send_failure(client_fd, "node -z: no focused desktop\n");
+      return;
+    }
+
+    node_t *n = m->desk->focus;
+    if (!n || !n->client) {
+      send_failure(client_fd, "node -z: no focused client\n");
+      return;
+    }
+
+    char *handle = *args;
+    int dx = 0, dy = 0;
+
+    args++;
+    num--;
+
+    if (sscanf(*args, "%d", &dx) != 1) {
+      send_failure(client_fd, "node -z: invalid dx\n");
+      return;
+    }
+    args++;
+    num--;
+
+    if (sscanf(*args, "%d", &dy) != 1) {
+      send_failure(client_fd, "node -z: invalid dy\n");
+      return;
+    }
+
+    n->client->state = STATE_FLOATING;
+
+    if (strcmp(handle, "northwest") == 0 || strcmp(handle, "nw") == 0 || strcmp(handle, "left") == 0) {
+      n->client->floating_rectangle.x += dx;
+      n->client->floating_rectangle.y += dy;
+      n->client->floating_rectangle.width -= dx;
+      n->client->floating_rectangle.height -= dy;
+    } else if (strcmp(handle, "north") == 0 || strcmp(handle, "n") == 0) {
+      n->client->floating_rectangle.y += dy;
+      n->client->floating_rectangle.height -= dy;
+    } else if (strcmp(handle, "northeast") == 0 || strcmp(handle, "ne") == 0) {
+      n->client->floating_rectangle.y += dy;
+      n->client->floating_rectangle.width += dx;
+      n->client->floating_rectangle.height -= dy;
+    } else if (strcmp(handle, "east") == 0 || strcmp(handle, "e") == 0 || strcmp(handle, "right") == 0) {
+      n->client->floating_rectangle.width += dx;
+    } else if (strcmp(handle, "southeast") == 0 || strcmp(handle, "se") == 0) {
+      n->client->floating_rectangle.width += dx;
+      n->client->floating_rectangle.height += dy;
+    } else if (strcmp(handle, "south") == 0 || strcmp(handle, "s") == 0) {
+      n->client->floating_rectangle.height += dy;
+    } else if (strcmp(handle, "southwest") == 0 || strcmp(handle, "sw") == 0) {
+      n->client->floating_rectangle.x += dx;
+      n->client->floating_rectangle.width -= dx;
+      n->client->floating_rectangle.height += dy;
+    } else if (strcmp(handle, "west") == 0 || strcmp(handle, "w") == 0) {
+      n->client->floating_rectangle.x += dx;
+      n->client->floating_rectangle.width -= dx;
+    } else if (strcmp(handle, "center") == 0 || strcmp(handle, "c") == 0) {
+      n->client->floating_rectangle.x += dx;
+      n->client->floating_rectangle.y += dy;
+      n->client->floating_rectangle.width += dx;
+      n->client->floating_rectangle.height += dy;
+    } else {
+      send_failure(client_fd, "node -z: invalid resize handle\n");
+      return;
+    }
+
+    if (n->client->floating_rectangle.width < 50)
+      n->client->floating_rectangle.width = 50;
+    if (n->client->floating_rectangle.height < 50)
+      n->client->floating_rectangle.height = 50;
+
+    transaction_commit_dirty();
+    send_success(client_fd, "resized\n");
   } else {
     send_failure(client_fd, "node: unknown command\n");
   }
@@ -692,6 +876,150 @@ static void ipc_cmd_desktop(char **args, int num, int client_fd) {
     desk->name[SMALEN - 1] = '\0';
     transaction_commit_dirty();
     send_success(client_fd, "renamed\n");
+  } else if (streq("-s", *args) || streq("--swap", *args)) {
+    if (num < 2) {
+      send_failure(client_fd, "desktop -s: missing target desktop\n");
+      return;
+    }
+    args++;
+    num--;
+
+    desktop_t *target = find_desktop_by_name_in_monitor(mon, *args);
+    if (!target) {
+      send_failure(client_fd, "desktop -s: target desktop not found\n");
+      return;
+    }
+
+    if (target == desk) {
+      send_failure(client_fd, "desktop -s: cannot swap with self\n");
+      return;
+    }
+
+    desktop_t *d0 = desk;
+    desktop_t *d1 = target;
+    monitor_t *m0 = d0->monitor;
+    monitor_t *m1 = d1->monitor;
+
+    if (m0 == m1) {
+      desktop_t *prev0 = d0->prev;
+      desktop_t *next0 = d0->next;
+      desktop_t *prev1 = d1->prev;
+      desktop_t *next1 = d1->next;
+
+      if (next0 == d1) {
+        d0->prev = d1;
+        d0->next = next1;
+        d1->prev = prev0;
+        d1->next = d0;
+        if (prev0) prev0->next = d1;
+        if (next1) next1->next = d0;
+      } else {
+        d0->prev = prev1;
+        d0->next = next1;
+        d1->prev = prev0;
+        d1->next = next0;
+        if (prev0) prev0->next = d1;
+        if (next0) next0->next = d1;
+        if (prev1) prev1->next = d0;
+        if (next1) next1->next = d0;
+      }
+
+      if (m0->desk == d0) m0->desk = d1;
+      else if (m0->desk == d1) m0->desk = d0;
+    } else {
+      desktop_t *prev0 = d0->prev;
+      desktop_t *next0 = d0->next;
+      desktop_t *prev1 = d1->prev;
+      desktop_t *next1 = d1->next;
+
+      d0->prev = prev1;
+      d0->next = next1;
+      d1->prev = prev0;
+      d1->next = next0;
+
+      if (prev0) prev0->next = d1; else m0->desk = d1;
+      if (next0) next0->next = d1;
+      if (prev1) prev1->next = d0; else m1->desk = d0;
+      if (next1) next1->next = d0;
+
+      d0->monitor = m1;
+      d1->monitor = m0;
+    }
+
+    if (mon->desk == d0) mon->desk = d1;
+    else if (mon->desk == d1) mon->desk = d0;
+
+    transaction_commit_dirty();
+    send_success(client_fd, "swapped\n");
+  } else if (streq("-r", *args) || streq("--remove", *args)) {
+    if (!desk->prev && !desk->next) {
+      send_failure(client_fd, "desktop -r: cannot remove the only desktop\n");
+      return;
+    }
+
+    desktop_t *prev = desk->prev;
+    desktop_t *next = desk->next;
+
+    if (prev)
+      prev->next = next;
+    else if (mon->desk)
+      mon->desk = next;
+
+    if (next)
+      next->prev = prev;
+
+    if (mon->desk == desk) {
+      mon->desk = next ? next : prev;
+      if (mon->desk)
+        focus_node(mon, mon->desk, mon->desk->focus);
+    }
+
+    free(desk);
+    transaction_commit_dirty();
+    send_success(client_fd, "removed\n");
+  } else if (streq("-b", *args) || streq("--bubble", *args)) {
+    if (num < 2) {
+      send_failure(client_fd, "desktop -b: missing direction\n");
+      return;
+    }
+    args++;
+    num--;
+
+    if (streq("up", *args) || streq("prev", *args)) {
+      if (desk->prev) {
+        desktop_t *prev = desk->prev;
+        desktop_t *prev_prev = prev->prev;
+
+        desk->prev = prev_prev;
+        desk->next = prev;
+        prev->prev = desk;
+        prev->next = desk;
+
+        if (prev_prev)
+          prev_prev->next = desk;
+        else
+          mon->desk = desk;
+      }
+    } else if (streq("down", *args) || streq("next", *args)) {
+      if (desk->next) {
+        desktop_t *next = desk->next;
+        desktop_t *next_next = next->next;
+
+        desk->prev = next;
+        desk->next = next_next;
+        next->prev = desk;
+        next->next = desk;
+
+        if (next_next)
+          next_next->prev = desk;
+      }
+    } else {
+      send_failure(client_fd, "desktop -b: unknown direction\n");
+      return;
+    }
+
+    transaction_commit_dirty();
+    send_success(client_fd, "bubbled\n");
   } else {
     send_failure(client_fd, "desktop: unknown command\n");
   }
@@ -903,6 +1231,65 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
       offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", m->name);
     }
     send_success(client_fd, buf);
+  } else if (streq("-s", *args) || streq("--swap", *args)) {
+    if (!has_target) {
+      send_failure(client_fd, "monitor -s: no source monitor specified\n");
+      return;
+    }
+    if (num < 2) {
+      send_failure(client_fd, "monitor -s: missing target monitor\n");
+      return;
+    }
+    args++;
+    num--;
+
+    monitor_t *target = find_monitor_by_name(*args);
+    if (!target) {
+      send_failure(client_fd, "monitor -s: target monitor not found\n");
+      return;
+    }
+
+    if (target == mon) {
+      send_failure(client_fd, "monitor -s: cannot swap with self\n");
+      return;
+    }
+
+    monitor_t *m0 = mon;
+    monitor_t *m1 = target;
+
+    desktop_t *d0 = m0->desk;
+    desktop_t *d1 = m1->desk;
+
+    m0->desk = d1;
+    m0->desk_head = d1 ? d1 : m0->desk_head;
+    m0->desk_tail = d1 ? (d1->prev ? d1->prev : d1) : m0->desk_tail;
+
+    m1->desk = d0;
+    m1->desk_head = d0 ? d0 : m1->desk_head;
+    m1->desk_tail = d0 ? (d0->prev ? d0->prev : d0) : m1->desk_tail;
+
+    if (d0) {
+      for (desktop_t *d = d0; d != NULL; d = d->next)
+        d->monitor = m1;
+      d0->prev = NULL;
+      desktop_t *tail = d0;
+      while (tail->next)
+        tail = tail->next;
+      tail->next = d1;
+      if (d1) d1->prev = tail;
+    }
+
+    if (d1)
+      for (desktop_t *d = d1; d != NULL; d = d->next)
+        d->monitor = m0;
+
+    if (server.focused_monitor == m0)
+      server.focused_monitor = m1;
+    else if (server.focused_monitor == m1)
+      server.focused_monitor = m0;
+
+    transaction_commit_dirty();
+    send_success(client_fd, "swapped\n");
   } else {
     send_failure(client_fd, "monitor: unknown command\n");
   }
@@ -1089,22 +1476,20 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       // Parse comma-separated list of proportions
       char *value = args[1];
       int count = 1;
-      for (char *p = value; *p; p++) {
+      for (char *p = value; *p; p++)
         if (*p == ',') count++;
-      }
-      
+
       // Free old presets
-      if (scroller_proportion_preset) {
+      if (scroller_proportion_preset)
         free(scroller_proportion_preset);
-      }
-      
+
       // Allocate new array
       scroller_proportion_preset = malloc(count * sizeof(float));
       if (!scroller_proportion_preset) {
         send_failure(client_fd, "memory allocation failed\n");
         return;
       }
-      
+
       // Parse values
       char *token = strtok(value, ",");
       int i = 0;
@@ -1116,7 +1501,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
         token = strtok(NULL, ",");
       }
       scroller_proportion_preset_count = i;
-      
+
       send_success(client_fd, "scroller_proportion_preset set\n");
     } else {
       char buf[512];
@@ -1176,6 +1561,117 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       char buf[64];
       snprintf(buf, sizeof(buf), "%d\n", scroller_structs);
       send_success(client_fd, buf);
+    }
+  } else if (streq("focus_follows_pointer", *args)) {
+    if (num >= 2) {
+      focus_follows_pointer = (strcmp(args[1], "true") == 0);
+      transaction_commit_dirty();
+      send_success(client_fd, "focus_follows_pointer set\n");
+    } else {
+      send_success(client_fd, focus_follows_pointer ? "true\n" : "false\n");
+    }
+  } else if (streq("pointer_follows_focus", *args)) {
+    if (num >= 2) {
+      pointer_follows_focus = (strcmp(args[1], "true") == 0);
+      transaction_commit_dirty();
+      send_success(client_fd, "pointer_follows_focus set\n");
+    } else {
+      send_success(client_fd, pointer_follows_focus ? "true\n" : "false\n");
+    }
+  } else if (streq("split_ratio", *args)) {
+    if (num >= 2) {
+      double val = atof(args[1]);
+      if (val > 0 && val < 1) {
+        split_ratio = val;
+        transaction_commit_dirty();
+        send_success(client_fd, "split_ratio set\n");
+      } else {
+        send_failure(client_fd, "config split_ratio: invalid value\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%f\n", split_ratio);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("top_padding", *args)) {
+    if (num >= 2) {
+      padding.top = atoi(args[1]);
+      transaction_commit_dirty();
+      send_success(client_fd, "top_padding set\n");
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d\n", padding.top);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("right_padding", *args)) {
+    if (num >= 2) {
+      padding.right = atoi(args[1]);
+      transaction_commit_dirty();
+      send_success(client_fd, "right_padding set\n");
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d\n", padding.right);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("bottom_padding", *args)) {
+    if (num >= 2) {
+      padding.bottom = atoi(args[1]);
+      transaction_commit_dirty();
+      send_success(client_fd, "bottom_padding set\n");
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d\n", padding.bottom);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("left_padding", *args)) {
+    if (num >= 2) {
+      padding.left = atoi(args[1]);
+      transaction_commit_dirty();
+      send_success(client_fd, "left_padding set\n");
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d\n", padding.left);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("normal_border_color", *args)) {
+    if (num >= 2) {
+      strncpy(normal_border_color, args[1], sizeof(normal_border_color) - 1);
+      normal_border_color[sizeof(normal_border_color) - 1] = '\0';
+      transaction_commit_dirty();
+      send_success(client_fd, "normal_border_color set\n");
+    } else {
+      send_success(client_fd, normal_border_color);
+      send_success(client_fd, "\n");
+    }
+  } else if (streq("active_border_color", *args)) {
+    if (num >= 2) {
+      strncpy(active_border_color, args[1], sizeof(active_border_color) - 1);
+      active_border_color[sizeof(active_border_color) - 1] = '\0';
+      transaction_commit_dirty();
+      send_success(client_fd, "active_border_color set\n");
+    } else {
+      send_success(client_fd, active_border_color);
+      send_success(client_fd, "\n");
+    }
+  } else if (streq("focused_border_color", *args)) {
+    if (num >= 2) {
+      strncpy(focused_border_color, args[1], sizeof(focused_border_color) - 1);
+      focused_border_color[sizeof(focused_border_color) - 1] = '\0';
+      transaction_commit_dirty();
+      send_success(client_fd, "focused_border_color set\n");
+    } else {
+      send_success(client_fd, focused_border_color);
+      send_success(client_fd, "\n");
+    }
+  } else if (streq("presel_feedback_color", *args)) {
+    if (num >= 2) {
+      strncpy(presel_feedback_color, args[1], sizeof(presel_feedback_color) - 1);
+      presel_feedback_color[sizeof(presel_feedback_color) - 1] = '\0';
+      transaction_commit_dirty();
+      send_success(client_fd, "presel_feedback_color set\n");
+    } else {
+      send_success(client_fd, presel_feedback_color);
+      send_success(client_fd, "\n");
     }
   } else {
     send_failure(client_fd, "config: unknown setting\n");
@@ -1309,6 +1805,46 @@ static void ipc_cmd_flip(char **args, int num, int client_fd) {
   } else {
     send_failure(client_fd, "flip: unknown direction\n");
   }
+}
+
+static void ipc_cmd_equalize(char **args, int num, int client_fd) {
+  (void)args;
+  (void)num;
+
+  monitor_t *m = server.focused_monitor;
+  if (!m || !m->desk) {
+    send_failure(client_fd, "equalize: no focused desktop\n");
+    return;
+  }
+
+  if (!m->desk->root) {
+    send_failure(client_fd, "equalize: no tree\n");
+    return;
+  }
+
+  equalize_tree(m->desk->root);
+  transaction_commit_dirty();
+  send_success(client_fd, "equalized\n");
+}
+
+static void ipc_cmd_balance(char **args, int num, int client_fd) {
+  (void)args;
+  (void)num;
+
+  monitor_t *m = server.focused_monitor;
+  if (!m || !m->desk) {
+    send_failure(client_fd, "balance: no focused desktop\n");
+    return;
+  }
+
+  if (!m->desk->root) {
+    send_failure(client_fd, "balance: no tree\n");
+    return;
+  }
+
+  balance_tree(m->desk->root);
+  transaction_commit_dirty();
+  send_success(client_fd, "balanced\n");
 }
 
 static void ipc_cmd_send(char **args, int num, int client_fd) {
@@ -1517,107 +2053,107 @@ static void ipc_cmd_scroller(char **args, int num, int client_fd) {
       send_failure(client_fd, "scroller proportion: missing value\n");
       return;
     }
-    
+
     if (!desk->focus || !desk->focus->client) {
       send_failure(client_fd, "scroller proportion: no focused client\n");
       return;
     }
-    
+
     float value = atof(args[1]);
     if (value < 0.1f || value > 1.0f) {
       send_failure(client_fd, "scroller proportion: value must be between 0.1 and 1.0\n");
       return;
     }
-    
+
     client_t *head = scroller_get_stack_head(desk->focus->client);
     head->scroller_proportion = value;
     arrange(mon, desk, true);
     send_success(client_fd, "proportion set\n");
-    
+
   } else if (streq("stack", *args)) {
     if (!desk->focus || !desk->focus->client) {
       send_failure(client_fd, "scroller stack: no focused client\n");
       return;
     }
-    
+
     // Find another client to stack with (for now, just stack with previous leaf)
     node_t *target = prev_leaf(desk->focus, desk->root);
     if (!target || !target->client) {
       send_failure(client_fd, "scroller stack: no target to stack with\n");
       return;
     }
-    
+
     client_t *head = scroller_get_stack_head(target->client);
     scroller_stack_push(head, desk->focus->client);
     arrange(mon, desk, true);
     send_success(client_fd, "stacked\n");
-    
+
   } else if (streq("unstack", *args)) {
     if (!desk->focus || !desk->focus->client) {
       send_failure(client_fd, "scroller unstack: no focused client\n");
       return;
     }
-    
+
     scroller_stack_remove(desk->focus->client);
     arrange(mon, desk, true);
     send_success(client_fd, "unstacked\n");
-    
+
   } else if (streq("resize", *args)) {
     if (num < 2) {
       send_failure(client_fd, "scroller resize: missing delta\n");
       return;
     }
-    
+
     if (!desk->focus || !desk->focus->client) {
       send_failure(client_fd, "scroller resize: no focused client\n");
       return;
     }
-    
+
     float delta = atof(args[1]);
     scroller_resize_width(desk->focus->client, delta);
     arrange(mon, desk, true);
     send_success(client_fd, "resized\n");
-    
+
   } else if (streq("set_proportion", *args)) {
     if (num < 2) {
       send_failure(client_fd, "scroller set_proportion: missing value\n");
       return;
     }
-    
+
     if (!desk->focus || !desk->focus->client) {
       send_failure(client_fd, "scroller set_proportion: no focused client\n");
       return;
     }
-    
+
     float value = atof(args[1]);
     scroller_set_proportion(desk->focus->client, value);
     arrange(mon, desk, true);
     send_success(client_fd, "proportion set\n");
-    
+
   } else if (streq("cycle_preset", *args)) {
     if (!desk->focus || !desk->focus->client) {
       send_failure(client_fd, "scroller cycle_preset: no focused client\n");
       return;
     }
-    
+
     if (scroller_proportion_preset_count == 0) {
       send_failure(client_fd, "scroller cycle_preset: no presets configured\n");
       return;
     }
-    
+
     scroller_cycle_proportion_preset(desk->focus->client);
     arrange(mon, desk, true);
     send_success(client_fd, "cycled to next preset\n");
-    
+
   } else if (streq("center", *args)) {
     if (!desk->focus || !desk->focus->client) {
       send_failure(client_fd, "scroller center: no focused client\n");
       return;
     }
-    
+
     scroller_center_window(desk, desk->focus->client);
     send_success(client_fd, "window centered\n");
-    
+
   } else {
     send_failure(client_fd, "scroller: unknown subcommand\n");
   }
@@ -1671,6 +2207,8 @@ static void process_ipc_message(char *msg, int msg_len, int client_fd) {
     ipc_cmd_config(++args, --num, client_fd);
   } else if (streq("quit", *args)) {
     ipc_cmd_quit(++args, --num, client_fd);
+  } else if (streq("subscribe", *args)) {
+    ipc_cmd_subscribe(++args, --num, client_fd);
   } else if (streq("output", *args)) {
     ipc_cmd_output(++args, --num, client_fd);
   } else if (streq("input", *args)) {
@@ -1687,6 +2225,10 @@ static void process_ipc_message(char *msg, int msg_len, int client_fd) {
     ipc_cmd_rotate(++args, --num, client_fd);
   } else if (streq("flip", *args)) {
     ipc_cmd_flip(++args, --num, client_fd);
+  } else if (streq("equalize", *args)) {
+    ipc_cmd_equalize(++args, --num, client_fd);
+  } else if (streq("balance", *args)) {
+    ipc_cmd_balance(++args, --num, client_fd);
   } else if (streq("send", *args)) {
     ipc_cmd_send(++args, --num, client_fd);
    } else if (streq("rule", *args)) {
@@ -1725,4 +2267,300 @@ void ipc_cleanup(void) {
     unlink(socket_path);
     ipc_socket_fd = -1;
   }
+
+  bwm_subscriber_t *sb = subscriber_head;
+  while (sb != NULL) {
+    bwm_subscriber_t *next = sb->next;
+    if (sb->event_source) {
+      wl_event_source_remove(sb->event_source);
+    }
+    close(sb->client_fd);
+    if (sb->fifo_path) {
+      unlink(sb->fifo_path);
+      free(sb->fifo_path);
+    }
+    free(sb);
+    sb = next;
+  }
+  subscriber_head = subscriber_tail = NULL;
+}
+
+static bwm_subscriber_t *make_subscriber(int client_fd, char *fifo_path, bwm_subscriber_mask_t mask, int count) {
+  bwm_subscriber_t *sb = calloc(1, sizeof(bwm_subscriber_t));
+  if (!sb) {
+    return NULL;
+  }
+  sb->client_fd = client_fd;
+  sb->fifo_path = fifo_path;
+  sb->mask = mask;
+  sb->count = count;
+  sb->prev = sb->next = NULL;
+  sb->event_source = NULL;
+  return sb;
+}
+
+static void remove_subscriber(bwm_subscriber_t *sb) {
+  if (!sb) return;
+
+  bwm_subscriber_t *a = sb->prev;
+  bwm_subscriber_t *b = sb->next;
+
+  if (a) a->next = b;
+  else subscriber_head = b;
+
+  if (b) b->prev = a;
+  else subscriber_tail = a;
+
+  if (sb->event_source) {
+    wl_event_source_remove(sb->event_source);
+  }
+
+  close(sb->client_fd);
+  if (sb->fifo_path) {
+    unlink(sb->fifo_path);
+    free(sb->fifo_path);
+  }
+  free(sb);
+}
+
+static void add_subscriber(bwm_subscriber_t *sb) {
+  if (subscriber_head == NULL) {
+    subscriber_head = subscriber_tail = sb;
+  } else {
+    subscriber_tail->next = sb;
+    sb->prev = subscriber_tail;
+    subscriber_tail = sb;
+  }
+
+  int flags = fcntl(sb->client_fd, F_GETFD);
+  fcntl(sb->client_fd, F_SETFD, flags & ~FD_CLOEXEC);
+
+  if (sb->mask & BWM_MASK_REPORT) {
+    ipc_print_report(sb->client_fd);
+    if (sb->count-- == 1) {
+      remove_subscriber(sb);
+    }
+  }
+}
+
+void ipc_print_report(int fd) {
+  char buf[BWM_BUFSIZ];
+  size_t offset = 0;
+
+  for (monitor_t *m = server.monitors; m != NULL; m = m->next) {
+    char mon_flag = (server.focused_monitor == m) ? 'M' : 'm';
+    offset += snprintf(buf + offset, sizeof(buf) - offset, "%c%s", mon_flag, m->name);
+
+    for (desktop_t *d = m->desk; d != NULL; d = d->next) {
+      char desk_flag;
+      if (m->desk == d) {
+        if (d->focus) {
+          desk_flag = 'O';
+        } else {
+          desk_flag = 'F';
+        }
+      } else {
+        if (d->focus) {
+          desk_flag = 'o';
+        } else {
+          desk_flag = 'f';
+        }
+      }
+      offset += snprintf(buf + offset, sizeof(buf) - offset, ":%c%s", desk_flag, d->name);
+    }
+
+    if (m->desk) {
+      offset += snprintf(buf + offset, sizeof(buf) - offset, ":L%c",
+        m->desk->layout == LAYOUT_TILED ? 'T' :
+        m->desk->layout == LAYOUT_MONOCLE ? 'M' : 'S');
+
+      if (m->desk->focus) {
+        char state_char = 'T';
+        client_state_t state = STATE_TILED;
+        if (m->desk->focus->client) {
+          state = m->desk->focus->client->state;
+        }
+        if (state == STATE_FLOATING) state_char = 'F';
+        else if (state == STATE_FULLSCREEN) state_char = 'U';
+        else if (state == STATE_PSEUDO_TILED) state_char = 'P';
+
+        offset += snprintf(buf + offset, sizeof(buf) - offset, ":T%c", state_char);
+
+        int i = 0;
+        char flags[6] = {0};
+        if (m->desk->focus->sticky) flags[i++] = 'S';
+        if (m->desk->focus->private_node) flags[i++] = 'P';
+        if (m->desk->focus->locked) flags[i++] = 'L';
+        if (m->desk->focus->marked) flags[i++] = 'M';
+        if (m->desk->focus->hidden) flags[i++] = 'H';
+        if (i > 0) {
+          offset += snprintf(buf + offset, sizeof(buf) - offset, ":G%s", flags);
+        }
+      }
+    }
+
+    if (m->next) {
+      offset += snprintf(buf + offset, sizeof(buf) - offset, "%s", ":");
+    }
+  }
+
+  offset += snprintf(buf + offset, sizeof(buf) - offset, "%s", "\n");
+  write(fd, buf, offset);
+}
+
+void ipc_put_status(bwm_subscriber_mask_t mask, const char *fmt, ...) {
+  bwm_subscriber_t *sb = subscriber_head;
+  char buf[BWM_BUFSIZ];
+  size_t len = 0;
+
+  if (mask == BWM_MASK_REPORT) {
+    ipc_print_report(-1);
+    return;
+  }
+
+  if (fmt) {
+    va_list args;
+    va_start(args, fmt);
+    len = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    if (len >= sizeof(buf)) {
+      len = sizeof(buf) - 1;
+    }
+  }
+
+  while (sb != NULL) {
+    bwm_subscriber_t *next = sb->next;
+    if (sb->mask & mask) {
+      if (sb->count > 0) {
+        sb->count--;
+      }
+
+      if (mask == BWM_MASK_REPORT) {
+        ipc_print_report(sb->client_fd);
+      } else if (len > 0) {
+        write(sb->client_fd, buf, len);
+      }
+
+      if (sb->count == 0) {
+        remove_subscriber(sb);
+      }
+    }
+    sb = next;
+  }
+}
+
+static void ipc_cmd_subscribe(char **args, int num, int client_fd) {
+  bwm_subscriber_mask_t mask = 0;
+  int count = -1;
+  char *fifo_path = NULL;
+  bool explicit_fifo = false;
+
+  while (num > 0) {
+    if (streq("-c", *args) || streq("--count", *args)) {
+      if (num < 2) {
+        send_failure(client_fd, "subscribe -c: missing count\n");
+        return;
+      }
+      args++;
+      num--;
+      if (sscanf(*args, "%d", &count) != 1 || count < 1) {
+        send_failure(client_fd, "subscribe -c: invalid count\n");
+        return;
+      }
+    } else if (streq("-f", *args) || streq("--fifo", *args)) {
+      explicit_fifo = true;
+    } else if (streq("report", *args) || streq("R", *args)) {
+      mask |= BWM_MASK_REPORT;
+    } else if (streq("monitor", *args) || streq("M", *args)) {
+      mask |= BWM_MASK_MONITOR_ADD | BWM_MASK_MONITOR_REMOVE | BWM_MASK_MONITOR_FOCUS | BWM_MASK_MONITOR_CHANGE;
+    } else if (streq("monitor_add", *args)) {
+      mask |= BWM_MASK_MONITOR_ADD;
+    } else if (streq("monitor_remove", *args)) {
+      mask |= BWM_MASK_MONITOR_REMOVE;
+    } else if (streq("monitor_focus", *args)) {
+      mask |= BWM_MASK_MONITOR_FOCUS;
+    } else if (streq("monitor_change", *args)) {
+      mask |= BWM_MASK_MONITOR_CHANGE;
+    } else if (streq("desktop", *args) || streq("D", *args)) {
+      mask |= BWM_MASK_DESKTOP_ADD | BWM_MASK_DESKTOP_REMOVE | BWM_MASK_DESKTOP_FOCUS | BWM_MASK_DESKTOP_CHANGE | BWM_MASK_DESKTOP_LAYOUT;
+    } else if (streq("desktop_add", *args)) {
+      mask |= BWM_MASK_DESKTOP_ADD;
+    } else if (streq("desktop_remove", *args)) {
+      mask |= BWM_MASK_DESKTOP_REMOVE;
+    } else if (streq("desktop_focus", *args)) {
+      mask |= BWM_MASK_DESKTOP_FOCUS;
+    } else if (streq("desktop_change", *args)) {
+      mask |= BWM_MASK_DESKTOP_CHANGE;
+    } else if (streq("desktop_layout", *args)) {
+      mask |= BWM_MASK_DESKTOP_LAYOUT;
+    } else if (streq("node", *args) || streq("N", *args)) {
+      mask |= BWM_MASK_NODE_ADD | BWM_MASK_NODE_REMOVE | BWM_MASK_NODE_FOCUS | BWM_MASK_NODE_CHANGE | BWM_MASK_NODE_STATE | BWM_MASK_NODE_FLAG;
+    } else if (streq("node_add", *args)) {
+      mask |= BWM_MASK_NODE_ADD;
+    } else if (streq("node_remove", *args)) {
+      mask |= BWM_MASK_NODE_REMOVE;
+    } else if (streq("node_focus", *args)) {
+      mask |= BWM_MASK_NODE_FOCUS;
+    } else if (streq("node_change", *args)) {
+      mask |= BWM_MASK_NODE_CHANGE;
+    } else if (streq("node_state", *args)) {
+      mask |= BWM_MASK_NODE_STATE;
+    } else if (streq("node_flag", *args)) {
+      mask |= BWM_MASK_NODE_FLAG;
+    } else if (streq("all", *args) || streq("A", *args)) {
+      mask = BWM_MASK_ALL;
+    } else {
+      send_failure(client_fd, "subscribe: unknown argument\n");
+      return;
+    }
+    args++;
+    num--;
+  }
+
+  if (mask == 0) {
+    mask = BWM_MASK_REPORT;
+  }
+
+  if (!explicit_fifo) {
+    char template[] = "/tmp/bwm_fifo_XXXXXX";
+    int fd = mkstemp(template);
+    if (fd < 0) {
+      send_failure(client_fd, "subscribe: failed to create fifo path\n");
+      return;
+    }
+    close(fd);
+    unlink(template);
+    fifo_path = strdup(template);
+    if (!fifo_path) {
+      send_failure(client_fd, "subscribe: memory error\n");
+      return;
+    }
+    if (mkfifo(fifo_path, 0666) == -1) {
+      free(fifo_path);
+      fifo_path = NULL;
+    }
+  }
+
+  if (fifo_path) {
+    int fifo_fd = open(fifo_path, O_WRONLY);
+    if (fifo_fd < 0) {
+      free(fifo_path);
+      send_failure(client_fd, "subscribe: failed to open fifo\n");
+      return;
+    }
+    char response[BWM_BUFSIZ];
+    snprintf(response, sizeof(response), "%s\n", fifo_path);
+    write(client_fd, response, strlen(response));
+    close(client_fd);
+    client_fd = fifo_fd;
+  }
+
+  bwm_subscriber_t *sb = make_subscriber(client_fd, fifo_path, mask, count);
+  if (!sb) {
+    if (fifo_path) free(fifo_path);
+    send_failure(client_fd, "subscribe: failed to create subscriber\n");
+    return;
+  }
+
+  add_subscriber(sb);
 }

@@ -176,9 +176,17 @@ extern bool borderless_monocle;
 extern bool borderless_singleton;
 extern bool gapless_monocle;
 extern bool removal_adjustment;
+extern bool focus_follows_pointer;
+extern bool pointer_follows_focus;
 extern padding_t monocle_padding;
+extern padding_t padding;
 extern int border_width;
 extern int window_gap;
+extern double split_ratio;
+extern char normal_border_color[16];
+extern char active_border_color[16];
+extern char focused_border_color[16];
+extern char presel_feedback_color[16];
 
 // global state
 extern monitor_t *mon;

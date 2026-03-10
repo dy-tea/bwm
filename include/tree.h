@@ -56,6 +56,8 @@ void presel_cancel(monitor_t *m, desktop_t *d, node_t *n);
 // tree transformations
 void rotate_tree(node_t *n, int deg);
 void flip_tree(node_t *n, flip_t flp);
+void equalize_tree(node_t *n);
+void balance_tree(node_t *n);
 
 // geometry
 struct wlr_box get_rectangle(monitor_t *m, desktop_t *d, node_t *n);
