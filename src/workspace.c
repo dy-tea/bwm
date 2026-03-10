@@ -209,14 +209,18 @@ static void update_window_visibility(node_t *node, monitor_t *m, desktop_t *curr
     should_show = false;
 
 found_desktop:
-  if (should_show && !node->client->shown) {
+  // in monocle layout, only the focused node should be visible
+  if (should_show && current_desktop->layout == LAYOUT_MONOCLE)
+    should_show = (node == current_desktop->focus);
+
+  if (should_show) {
     node->client->shown = true;
     bool already_configured = true;
     if (node->client->toplevel)
       already_configured = node->client->toplevel->configured;
     if (already_configured)
       wlr_scene_node_set_enabled(&scene_tree->node, true);
-  } else if (!should_show && node->client->shown) {
+  } else {
     node->client->shown = false;
     wlr_scene_node_set_enabled(&scene_tree->node, false);
   }
