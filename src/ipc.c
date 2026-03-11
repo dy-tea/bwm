@@ -1414,7 +1414,13 @@ static void ipc_cmd_desktop(char **args, int num, int client_fd) {
       send_failure(client_fd, "desktop -l: unknown layout\n");
       return;
     }
-    transaction_commit_dirty();
+    if (desk->root != NULL) {
+      arrange(mon, desk, true);
+      if (desk->focus != NULL)
+        focus_node(mon, desk, desk->focus);
+    } else {
+      transaction_commit_dirty();
+    }
     send_success(client_fd, "layout changed\n");
   } else if (streq("-n", *args) || streq("--rename", *args)) {
     if (num < 2) {

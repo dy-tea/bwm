@@ -516,7 +516,8 @@ void focus_prev_desktop(void) {
 
   desktop_t *prev = server.focused_monitor->desk->prev;
   if (prev != NULL) {
-   	wlr_log(WLR_DEBUG, "Focus prev desktop - %s", prev->name);
+    wlr_log(WLR_DEBUG, "Focus prev desktop - %s", prev->name);
+    workspace_switch_to_desktop(prev->name);
   }
 }
 

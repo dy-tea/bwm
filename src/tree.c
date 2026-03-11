@@ -798,14 +798,16 @@ bool focus_node(monitor_t *m, desktop_t *d, node_t *n) {
 
   bool is_current_desktop = (m->desk == d);
   if (is_current_desktop && d->layout == LAYOUT_MONOCLE && d->root != NULL) {
-    // mark visibility state
-    for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
-      if (node->client != NULL)
-        node->client->shown = false;
-
-    // mark focused window as shown
-    if (n != NULL && n->client != NULL)
-      n->client->shown = true;
+    // update visibility state and scene graph for all nodes
+    for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root)) {
+      if (node->client == NULL)
+        continue;
+      bool should_show = (node == n);
+      node->client->shown = should_show;
+      struct wlr_scene_tree *scene_tree = client_get_scene_tree(node->client);
+      if (scene_tree)
+        wlr_scene_node_set_enabled(&scene_tree->node, should_show);
+    }
   } else if (is_current_desktop && d->layout == LAYOUT_SCROLLER && d->root != NULL) {
     for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
       if (node->client != NULL)
