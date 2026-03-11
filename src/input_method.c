@@ -404,8 +404,49 @@ struct bwm_ime_relay *input_method_relay_create(void) {
 }
 
 void input_method_relay_finish(struct bwm_ime_relay *relay) {
+	if (!relay)
+		return;
+
+	if (relay->focused_surface) {
+		wl_list_remove(&relay->focused_surface_destroy.link);
+		relay->focused_surface = NULL;
+	}
+
+	struct bwm_ime_text *text_input, *tmp;
+	wl_list_for_each_safe(text_input, tmp, &relay->text_inputs, link) {
+		wl_list_remove(&text_input->link);
+		if (text_input->input) {
+			wl_list_remove(&text_input->enable.link);
+			wl_list_remove(&text_input->commit.link);
+			wl_list_remove(&text_input->disable.link);
+			wl_list_remove(&text_input->destroy.link);
+		}
+		free(text_input);
+	}
+
+	struct bwm_ime_popup *popup, *popup_tmp;
+	wl_list_for_each_safe(popup, popup_tmp, &relay->popups, link) {
+		wl_list_remove(&popup->link);
+		wlr_scene_node_destroy(&popup->tree->node);
+		free(popup);
+	}
+
+	if (relay->popup_tree)
+		wlr_scene_node_destroy(&relay->popup_tree->node);
+
 	wl_list_remove(&relay->new_text_input.link);
 	wl_list_remove(&relay->new_input_method.link);
+
+	if (relay->input_method) {
+		wl_list_remove(&relay->input_method_commit.link);
+		wl_list_remove(&relay->input_method_grab_keyboard.link);
+		wl_list_remove(&relay->input_method_destroy.link);
+		wl_list_remove(&relay->input_method_new_popup_surface.link);
+	}
+
+	if (relay->keyboard_grab_destroy.link.prev)
+		wl_list_remove(&relay->keyboard_grab_destroy.link);
+
 	free(relay);
 }
 

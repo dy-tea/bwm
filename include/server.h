@@ -163,3 +163,4 @@ void begin_interactive(struct bwm_toplevel *toplevel, enum cursor_mode mode, uin
 void server_init(void);
 int server_run(void);
 void server_fini(void);
+void server_restart(void);

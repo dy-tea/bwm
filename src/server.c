@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include <pthread.h>
 #include <wayland-server-core.h>
 #include <wayland-util.h>
@@ -600,6 +601,16 @@ int server_run(void) {
   return 0;
 }
 
+// this will probably not work
+void server_restart(void) {
+  ipc_cleanup();
+
+  wl_display_terminate(server.wl_display);
+
+  if (fork() == 0)
+  	execl("/bin/sh", "/bin/sh", "bwm", (char *)NULL);
+}
+
 void server_fini(void) {
   if (server.xwayland.wlr_xwayland) {
   	wl_list_remove(&server.xwayland_ready.link);
@@ -607,6 +618,7 @@ void server_fini(void) {
     wlr_xwayland_destroy(server.xwayland.wlr_xwayland);
     server.xwayland.wlr_xwayland = NULL;
   }
+
   transaction_fini();
   workspace_fini();
   ipc_cleanup();
@@ -657,6 +669,9 @@ void server_fini(void) {
   wl_list_remove(&server.output_manager_test.link);
 
   wl_list_remove(&server.new_toplevel_capture_request.link);
+
+  wl_list_remove(&server.ring_system_bell.link);
+
 #ifdef WLR_HAS_DRM_BACKEND
 	if (server.drm_lease_manager)
 		wl_list_remove(&server.drm_lease_request.link);

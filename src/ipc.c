@@ -6,6 +6,7 @@
 #include "workspace.h"
 #include "tree.h"
 #include "output_config.h"
+#include "output.h"
 #include "input.h"
 #include "keyboard.h"
 #include "rule.h"
@@ -32,6 +33,7 @@ static bwm_subscriber_t *subscriber_tail = NULL;
 
 static void ipc_cmd_subscribe(char **args, int num, int client_fd);
 static monitor_t *find_monitor_by_name(const char *name);
+void toplevel_map(struct wl_listener *listener, void *data);
 
 const char *ipc_get_socket_path(void) {
   return socket_path;
@@ -2015,46 +2017,173 @@ static void ipc_cmd_query(char **args, int num, int client_fd) {
     return;
   }
 
+  // Parse optional selectors
+  monitor_t *filter_mon = NULL;
+  desktop_t *filter_desk = NULL;
+  node_t *filter_node = NULL;
+  bool use_names = false;
+
+  while (num > 0 && (streq("-m", *args) || streq("--monitor", *args) ||
+                     streq("-d", *args) || streq("--desktop", *args) ||
+                     streq("-n", *args) || streq("--node", *args) ||
+                     streq("--names", *args))) {
+    if (streq("-m", *args) || streq("--monitor", *args)) {
+      if (num < 2) {
+        send_failure(client_fd, "query -m: missing monitor\n");
+        return;
+      }
+      args++;
+      num--;
+      filter_mon = find_monitor_by_name(*args);
+      if (!filter_mon) {
+        send_failure(client_fd, "query -m: monitor not found\n");
+        return;
+      }
+    } else if (streq("-d", *args) || streq("--desktop", *args)) {
+      if (num < 2) {
+        send_failure(client_fd, "query -d: missing desktop\n");
+        return;
+      }
+      args++;
+      num--;
+      filter_desk = find_desktop_by_name(*args);
+      if (!filter_desk) {
+        send_failure(client_fd, "query -d: desktop not found\n");
+        return;
+      }
+    } else if (streq("-n", *args) || streq("--node", *args)) {
+      if (num < 2) {
+        send_failure(client_fd, "query -n: missing node\n");
+        return;
+      }
+      args++;
+      num--;
+      int node_id = atoi(*args);
+      if (node_id <= 0) {
+        send_failure(client_fd, "query -n: invalid node id\n");
+        return;
+      }
+      struct bwm_toplevel *toplevel;
+      wl_list_for_each(toplevel, &server.toplevels, link) {
+        if (toplevel->node && toplevel->node->id == (uint32_t)node_id) {
+          filter_node = toplevel->node;
+          break;
+        }
+      }
+      if (!filter_node) {
+        send_failure(client_fd, "query -n: node not found\n");
+        return;
+      }
+    } else if (streq("--names", *args)) {
+      use_names = true;
+    }
+    args++;
+    num--;
+  }
+
+  if (num < 1) {
+    send_failure(client_fd, "query: missing query type\n");
+    return;
+  }
+
   if (streq("-T", *args) || streq("--tree", *args)) {
     offset += snprintf(buf + offset, sizeof(buf) - offset, "{\n");
 
-    for (monitor_t *m = server.monitors;
-      m != NULL;
-      m = m->next) {
+    monitor_t *m_start = filter_mon ? filter_mon : server.monitors;
+    monitor_t *m_end = filter_mon ? filter_mon->next : NULL;
+
+    for (monitor_t *m = m_start; m != m_end; ) {
       offset += snprintf(buf + offset, sizeof(buf) - offset,
         "  \"monitor\": {\"name\": \"%s\", \"id\": %u},\n",
         m->name, m->id);
-      for (desktop_t *d = m->desk; d != NULL; d = d->next)
+
+      desktop_t *d_start = filter_desk ? filter_desk : m->desk;
+      desktop_t *d_end = filter_desk ? filter_desk->next : NULL;
+
+      for (desktop_t *d = d_start; d != d_end; ) {
         offset += snprintf(buf + offset, sizeof(buf) - offset,
           "  \"desktop\": {\"name\": \"%s\", \"id\": %u, \"layout\": %d},\n",
           d->name, d->id, d->layout);
+        if (filter_desk) break;
+        d = d->next;
+      }
+
+      if (filter_mon) break;
+      m = m->next;
     }
 
     struct bwm_toplevel *toplevel;
-    wl_list_for_each(toplevel, &server.toplevels, link)
-      offset += snprintf(buf + offset, sizeof(buf) - offset,
-        "  \"toplevel\": {\"app_id\": \"%s\", \"title\": \"%s\", \"identifier\": \"%s\"}\n",
-        toplevel->node && toplevel->node->client ? toplevel->node->client->app_id : "?",
-        toplevel->node && toplevel->node->client ? toplevel->node->client->title : "?",
-        toplevel->foreign_identifier ? toplevel->foreign_identifier : "?");
+    wl_list_for_each(toplevel, &server.toplevels, link) {
+      bool include = true;
+      if (filter_node && toplevel->node != filter_node)
+        include = false;
+      if (filter_desk && toplevel->node && toplevel->node->monitor &&
+          toplevel->node->monitor->desk != filter_desk)
+        include = false;
+      if (filter_mon && toplevel->node && toplevel->node->monitor != filter_mon)
+        include = false;
+
+      if (include)
+        offset += snprintf(buf + offset, sizeof(buf) - offset,
+          "  \"toplevel\": {\"app_id\": \"%s\", \"title\": \"%s\", \"identifier\": \"%s\"}\n",
+          toplevel->node && toplevel->node->client ? toplevel->node->client->app_id : "?",
+          toplevel->node && toplevel->node->client ? toplevel->node->client->title : "?",
+          toplevel->foreign_identifier ? toplevel->foreign_identifier : "?");
+    }
 
     offset += snprintf(buf + offset, sizeof(buf) - offset, "}\n");
     send_success(client_fd, buf);
   } else if (streq("-M", *args) || streq("--monitors", *args)) {
-    for (monitor_t *m = server.monitors; m != NULL; m = m->next)
-     	offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", m->name);
+    for (monitor_t *m = filter_mon ? filter_mon : server.monitors;
+         m != NULL; m = filter_mon ? NULL : m->next) {
+      if (use_names)
+        offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", m->name);
+      else
+        offset += snprintf(buf + offset, sizeof(buf) - offset, "%u %s\n", m->id, m->name);
+      if (filter_mon) break;
+    }
     send_success(client_fd, buf);
   } else if (streq("-D", *args) || streq("--desktops", *args)) {
-    for (monitor_t *m = server.monitors; m != NULL; m = m->next)
-      for (desktop_t *d = m->desk; d != NULL; d = d->next)
-        offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", d->name);
+    monitor_t *m_start = filter_mon ? filter_mon : server.monitors;
+    for (monitor_t *m = m_start; m != NULL; m = filter_mon ? NULL : m->next) {
+      desktop_t *d_start = filter_desk ? filter_desk : m->desk;
+      for (desktop_t *d = d_start; d != NULL; d = filter_desk ? NULL : d->next) {
+        if (use_names)
+          offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", d->name);
+        else
+          offset += snprintf(buf + offset, sizeof(buf) - offset, "%u %s\n", d->id, d->name);
+        if (filter_desk) break;
+      }
+      if (filter_mon) break;
+    }
     send_success(client_fd, buf);
   } else if (streq("-N", *args) || streq("--nodes", *args)) {
     struct bwm_toplevel *toplevel;
-    wl_list_for_each(toplevel, &server.toplevels, link)
-      offset += snprintf(buf + offset, sizeof(buf) - offset, "%u %s\n",
-        toplevel->node ? toplevel->node->id : 0,
-        toplevel->foreign_identifier ? toplevel->foreign_identifier : "?");
+    wl_list_for_each(toplevel, &server.toplevels, link) {
+      bool include = true;
+      if (filter_node && toplevel->node != filter_node)
+        include = false;
+      if (filter_desk && toplevel->node && toplevel->node->monitor &&
+          toplevel->node->monitor->desk != filter_desk)
+        include = false;
+      if (filter_mon && toplevel->node && toplevel->node->monitor != filter_mon)
+        include = false;
+
+      if (include) {
+        if (use_names) {
+          const char *name = "?";
+          if (toplevel->node && toplevel->node->client && toplevel->node->client->title[0])
+            name = toplevel->node->client->title;
+          else if (toplevel->node && toplevel->node->client && toplevel->node->client->app_id[0])
+            name = toplevel->node->client->app_id;
+          offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", name);
+        } else {
+          offset += snprintf(buf + offset, sizeof(buf) - offset, "%u %s\n",
+            toplevel->node ? toplevel->node->id : 0,
+            toplevel->foreign_identifier ? toplevel->foreign_identifier : "?");
+        }
+      }
+    }
     send_success(client_fd, buf);
   } else if (streq("-f", *args) || streq("--focused", *args)) {
     monitor_t *m = server.focused_monitor;
@@ -2074,23 +2203,169 @@ static void ipc_cmd_query(char **args, int num, int client_fd) {
         foreign_id = toplevel->foreign_identifier ? toplevel->foreign_identifier : "?";
         break;
       }
-    offset += snprintf(buf + offset, sizeof(buf) - offset,
-      "{\"monitor\": \"%s\", \"desktop\": \"%s\", \"id\": %u, \"type\": %d, "
-      "\"rect\": {\"x\": %d, \"y\": %d, \"width\": %d, \"height\": %d}, "
-      "\"client\": \"%s\", \"identifier\": \"%s\"}\n",
-      m->name,
-      m->desk->name,
-      n->id,
-      n->split_type,
-      n->rectangle.x,
-      n->rectangle.y,
-      n->rectangle.width,
-      n->rectangle.height,
-      n->client && n->client->app_id[0] ? n->client->app_id : "?",
-      foreign_id);
+
+    if (use_names) {
+      offset += snprintf(buf + offset, sizeof(buf) - offset,
+        "{\"monitor\": \"%s\", \"desktop\": \"%s\", \"node\": \"%s\", \"type\": %d, "
+        "\"rect\": {\"x\": %d, \"y\": %d, \"width\": %d, \"height\": %d}, "
+        "\"client\": \"%s\", \"identifier\": \"%s\"}\n",
+        m->name,
+        m->desk->name,
+        n->client && n->client->title[0] ? n->client->title :
+        (n->client && n->client->app_id[0] ? n->client->app_id : "?"),
+        n->split_type,
+        n->rectangle.x,
+        n->rectangle.y,
+        n->rectangle.width,
+        n->rectangle.height,
+        n->client && n->client->app_id[0] ? n->client->app_id : "?",
+        foreign_id);
+    } else {
+      offset += snprintf(buf + offset, sizeof(buf) - offset,
+        "{\"monitor\": \"%s\", \"desktop\": \"%s\", \"id\": %u, \"type\": %d, "
+        "\"rect\": {\"x\": %d, \"y\": %d, \"width\": %d, \"height\": %d}, "
+        "\"client\": \"%s\", \"identifier\": \"%s\"}\n",
+        m->name,
+        m->desk->name,
+        n->id,
+        n->split_type,
+        n->rectangle.x,
+        n->rectangle.y,
+        n->rectangle.width,
+        n->rectangle.height,
+        n->client && n->client->app_id[0] ? n->client->app_id : "?",
+        foreign_id);
+    }
     send_success(client_fd, buf);
   } else {
     send_failure(client_fd, "query: unknown command\n");
+  }
+}
+
+static void ipc_cmd_wm(char **args, int num, int client_fd) {
+  char buf[BWM_BUFSIZ];
+  size_t offset = 0;
+
+  if (num < 1) {
+    send_failure(client_fd, "wm: missing command\n");
+    return;
+  }
+
+  if (streq("-d", *args) || streq("--dump-state", *args)) {
+    // dump current state as JSON
+    offset += snprintf(buf + offset, sizeof(buf) - offset, "{\n");
+    offset += snprintf(buf + offset, sizeof(buf) - offset, "  \"monitors\": [\n");
+
+    bool first_mon = true;
+    for (monitor_t *m = server.monitors; m != NULL; m = m->next) {
+      if (!first_mon) offset += snprintf(buf + offset, sizeof(buf) - offset, ",\n");
+      first_mon = false;
+      offset += snprintf(buf + offset, sizeof(buf) - offset,
+        "    {\"name\": \"%s\", \"id\": %u, \"rect\": {\"x\": %d, \"y\": %d, \"width\": %d, \"height\": %d}}",
+        m->name, m->id, m->rectangle.x, m->rectangle.y, m->rectangle.width, m->rectangle.height);
+    }
+    offset += snprintf(buf + offset, sizeof(buf) - offset, "\n  ],\n");
+
+    offset += snprintf(buf + offset, sizeof(buf) - offset, "  \"settings\": {\n");
+    offset += snprintf(buf + offset, sizeof(buf) - offset,
+      "    \"border_width\": %d,\n", border_width);
+    offset += snprintf(buf + offset, sizeof(buf) - offset,
+      "    \"window_gap\": %d,\n", window_gap);
+    offset += snprintf(buf + offset, sizeof(buf) - offset,
+      "    \"split_ratio\": %.2f,\n", split_ratio);
+    offset += snprintf(buf + offset, sizeof(buf) - offset,
+      "    \"single_monocle\": %s,\n", single_monocle ? "true" : "false");
+    offset += snprintf(buf + offset, sizeof(buf) - offset,
+      "    \"automatic_scheme\": %d,\n", automatic_scheme);
+    offset += snprintf(buf + offset, sizeof(buf) - offset,
+      "    \"record_history\": %s\n", record_history ? "true" : "false");
+    offset += snprintf(buf + offset, sizeof(buf) - offset, "  }\n");
+    offset += snprintf(buf + offset, sizeof(buf) - offset, "}\n");
+
+    send_success(client_fd, buf);
+  } else if (streq("-l", *args) || streq("--load-state", *args)) {
+    send_success(client_fd, "load-state: not implemented\n");
+  } else if (streq("-a", *args) || streq("--add-monitor", *args)) {
+    if (num < 2) {
+      send_failure(client_fd, "wm -a: missing monitor name\n");
+      return;
+    }
+    args++;
+    num--;
+
+    if (find_monitor_by_name(*args)) {
+      send_failure(client_fd, "wm -a: monitor already exists\n");
+      return;
+    }
+
+    struct output_config *oc = output_config_create(*args);
+    if (oc) {
+      send_success(client_fd, "monitor config added\n");
+    } else {
+      send_failure(client_fd, "wm -a: failed to add monitor\n");
+    }
+  } else if (streq("-O", *args) || streq("--reorder-monitors", *args)) {
+    if (num < 2) {
+      send_failure(client_fd, "wm -O: missing monitor list\n");
+      return;
+    }
+    args++;
+    num--;
+
+    send_success(client_fd, "unimplemented\n");
+  } else if (streq("-o", *args) || streq("--adopt-orphans", *args)) {
+    struct bwm_toplevel *toplevel, *tmp;
+    int adopted = 0;
+    wl_list_for_each_safe(toplevel, tmp, &server.toplevels, link) {
+      if (!toplevel->node && toplevel->xdg_toplevel && toplevel->mapped) {
+        toplevel_map(NULL, toplevel);
+        adopted++;
+      }
+    }
+    offset += snprintf(buf + offset, sizeof(buf) - offset, "adopted %d orphans\n", adopted);
+    send_success(client_fd, buf);
+  } else if (streq("-g", *args) || streq("--get-status", *args)) {
+    int output_count = 0;
+    struct bwm_output *output;
+    wl_list_for_each(output, &server.outputs, link)
+      output_count++;
+
+    offset += snprintf(buf + offset, sizeof(buf) - offset,
+      "status: running\n"
+      "monitors: %d\n", output_count);
+
+    monitor_t *m = server.focused_monitor;
+    if (m && m->desk) {
+      offset += snprintf(buf + offset, sizeof(buf) - offset,
+        "focused_monitor: %s\n"
+        "focused_desktop: %s\n",
+        m->name, m->desk->name);
+      if (m->desk->focus) {
+        offset += snprintf(buf + offset, sizeof(buf) - offset,
+          "focused_node: %u\n", m->desk->focus->id);
+      }
+    }
+
+    send_success(client_fd, buf);
+  } else if (streq("-h", *args) || streq("--record-history", *args)) {
+    if (num >= 2) {
+      if (streq("true", args[1]) || streq("on", args[1]) || streq("1", args[1])) {
+        record_history = true;
+        send_success(client_fd, "record-history enabled\n");
+      } else if (streq("false", args[1]) || streq("off", args[1]) || streq("0", args[1])) {
+        record_history = false;
+        send_success(client_fd, "record-history disabled\n");
+      } else {
+        send_failure(client_fd, "wm -h: invalid value (use true/false)\n");
+      }
+    } else {
+      send_success(client_fd, record_history ? "true\n" : "false\n");
+    }
+  } else if (streq("-r", *args) || streq("--restart", *args)) {
+    server_restart();
+    send_success(client_fd, "restarting\n");
+  } else {
+    send_failure(client_fd, "wm: unknown command\n");
   }
 }
 
@@ -2383,6 +2658,101 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
     } else {
       send_success(client_fd, presel_feedback_color);
       send_success(client_fd, "\n");
+    }
+  } else if (streq("automatic_scheme", *args)) {
+    if (num >= 2) {
+      if (streq("longest_side", args[1]) || streq("longest-side", args[1])) {
+        automatic_scheme = SCHEME_LONGEST_SIDE;
+      } else if (streq("alternate", args[1])) {
+        automatic_scheme = SCHEME_ALTERNATE;
+      } else if (streq("spiral", args[1])) {
+        automatic_scheme = SCHEME_SPIRAL;
+      } else {
+        send_failure(client_fd, "config automatic_scheme: invalid value\n");
+        return;
+      }
+      transaction_commit_dirty();
+      send_success(client_fd, "automatic_scheme set\n");
+    } else {
+      char scheme_buf[64];
+      const char *scheme_str = "spiral";
+      if (automatic_scheme == SCHEME_LONGEST_SIDE) scheme_str = "longest_side";
+      else if (automatic_scheme == SCHEME_ALTERNATE) scheme_str = "alternate";
+      snprintf(scheme_buf, sizeof(scheme_buf), "%s\n", scheme_str);
+      send_success(client_fd, scheme_buf);
+    }
+  } else if (streq("initial_polarity", *args)) {
+    if (num >= 2) {
+      if (streq("first_child", args[1]) || streq("first-child", args[1])) {
+        initial_polarity = FIRST_CHILD;
+      } else if (streq("second_child", args[1]) || streq("second-child", args[1])) {
+        initial_polarity = SECOND_CHILD;
+      } else {
+        send_failure(client_fd, "config initial_polarity: invalid value\n");
+        return;
+      }
+      send_success(client_fd, "initial_polarity set\n");
+    } else {
+      send_success(client_fd, initial_polarity == FIRST_CHILD ? "first_child\n" : "second_child\n");
+    }
+  } else if (streq("directional_focus_tightness", *args)) {
+    if (num >= 2) {
+      int val = atoi(args[1]);
+      if (val >= 0 && val <= 100) {
+        directional_focus_tightness = val;
+        send_success(client_fd, "directional_focus_tightness set\n");
+      } else {
+        send_failure(client_fd, "config directional_focus_tightness: invalid value\n");
+        return;
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d\n", directional_focus_tightness);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("mapping_events_count", *args)) {
+    if (num >= 2) {
+      int val = atoi(args[1]);
+      if (val >= 0) {
+        mapping_events_count = val;
+        send_success(client_fd, "mapping_events_count set\n");
+      } else {
+        send_failure(client_fd, "config mapping_events_count: invalid value\n");
+        return;
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d\n", mapping_events_count);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("ignore_ewmh_fullscreen", *args)) {
+    if (num >= 2) {
+      int val = atoi(args[1]);
+      if (val >= 0 && val <= 2) {
+        ignore_ewmh_fullscreen = val;
+        send_success(client_fd, "ignore_ewmh_fullscreen set\n");
+      } else {
+        send_failure(client_fd, "config ignore_ewmh_fullscreen: invalid value (0-2)\n");
+        return;
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d\n", ignore_ewmh_fullscreen);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("click_to_focus", *args)) {
+    if (num >= 2) {
+      click_to_focus = (strcmp(args[1], "true") == 0);
+      send_success(client_fd, "click_to_focus set\n");
+    } else {
+      send_success(client_fd, click_to_focus ? "true\n" : "false\n");
+    }
+  } else if (streq("record_history", *args)) {
+    if (num >= 2) {
+      record_history = (strcmp(args[1], "true") == 0);
+      send_success(client_fd, "record_history set\n");
+    } else {
+      send_success(client_fd, record_history ? "true\n" : "false\n");
     }
   } else {
     send_failure(client_fd, "config: unknown setting\n");
@@ -2914,6 +3284,8 @@ static void process_ipc_message(char *msg, int msg_len, int client_fd) {
     ipc_cmd_monitor(++args, --num, client_fd);
   } else if (streq("query", *args)) {
     ipc_cmd_query(++args, --num, client_fd);
+  } else if (streq("wm", *args)) {
+    ipc_cmd_wm(++args, --num, client_fd);
   } else if (streq("config", *args)) {
     ipc_cmd_config(++args, --num, client_fd);
   } else if (streq("quit", *args)) {
