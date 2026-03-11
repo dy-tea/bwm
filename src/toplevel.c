@@ -435,13 +435,12 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
     toplevel->node = NULL;
 
     // focus handling after removing node
-    if (d->focus != NULL && d->focus->client != NULL &&
-        d->focus->client->toplevel != NULL)
-      focus_toplevel(d->focus->client->toplevel);
-    else if (d->root != NULL) {
+    if (d->focus != NULL && d->focus->client != NULL) {
+      focus_node(m, d, d->focus);
+    } else if (d->root != NULL) {
       d->focus = first_extrema(d->root);
-      if (d->focus && d->focus->client && d->focus->client->toplevel)
-        focus_toplevel(d->focus->client->toplevel);
+      if (d->focus != NULL)
+        focus_node(m, d, d->focus);
     }
   }
 }

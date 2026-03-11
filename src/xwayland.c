@@ -668,8 +668,16 @@ static void handle_unmap(struct wl_listener *listener, void *data) {
 
 		if (desk) {
 			remove_node(mon, desk, xwayland_view->node);
-			if (mon && desk)
+			if (mon && desk) {
 				arrange(mon, desk, true);
+				if (desk->focus != NULL && desk->focus->client != NULL)
+					focus_node(mon, desk, desk->focus);
+				else if (desk->root != NULL) {
+					desk->focus = first_extrema(desk->root);
+					if (desk->focus != NULL)
+						focus_node(mon, desk, desk->focus);
+				}
+			}
 		}
 
 		xwayland_view->node->destroying = true;
