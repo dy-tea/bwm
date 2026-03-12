@@ -1069,9 +1069,13 @@ void flip_tree(node_t *n, flip_t flp) {
   if (n == NULL || is_leaf(n))
     return;
 
-  node_t *tmp = n->first_child;
-  n->first_child = n->second_child;
-  n->second_child = tmp;
+  // flip if split direction matched flip type
+  if ((flp == FLIP_HORIZONTAL && n->split_type == TYPE_HORIZONTAL) ||
+      (flp == FLIP_VERTICAL && n->split_type == TYPE_VERTICAL)) {
+    node_t *tmp = n->first_child;
+    n->first_child = n->second_child;
+    n->second_child = tmp;
+  }
 
   flip_tree(n->first_child, flp);
   flip_tree(n->second_child, flp);
