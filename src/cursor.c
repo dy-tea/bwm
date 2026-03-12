@@ -301,7 +301,10 @@ void cursor_button(struct wl_listener *listener, void *data) {
     if (type == NULL)
     	return;
 
-    if (wlr_layer_surface_v1_try_from_wlr_surface(surface)) {
+    struct wlr_xdg_surface *xdg_surface = wlr_xdg_surface_try_from_wlr_surface(surface);
+    if (xdg_surface != NULL && xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {
+    	// le skip
+    } else if (wlr_layer_surface_v1_try_from_wlr_surface(surface)) {
     	struct bwm_layer_surface* layer = type;
       if (layer)
       	focus_layer_surface(layer);
