@@ -40,10 +40,34 @@ bmsg config borderless_monocle true|false
 When true, removes borders in monocle layout.
 
 ```
+bmsg config borderless_singleton true|false
+```
+
+When true, removes borders for singleton windows.
+
+```
 bmsg config gapless_monocle true|false
 ```
 
 When true, windows are rearranged to fill gaps when windows are closed.
+
+```
+bmsg config edge_scroller_pointer_focus true|false
+```
+
+When true, pointer focus affects scroller behavior at edges.
+
+```
+bmsg config scroller_default_proportion <value>
+```
+
+Sets the default proportion for scroller layout (0.1-1.0).
+
+```
+bmsg config scroller_proportion_preset <values>
+```
+
+Sets preset proportions for scroller layout (comma-separated).
 
 ### Monitor/Desktop Setup
 
@@ -98,7 +122,7 @@ When holding Alt with a mouse button on a floating window, bwm provides built-in
 
 ```
 alt + mouse_left   # Interactive move (drag to reposition)
-alt + mouse_right # Interactive resize (drag to resize, edges detected from cursor position)
+alt + mouse_right  # Interactive resize (drag to resize, edges detected from cursor position)
 ```
 
 The resize operation detects which edge(s) to resize based on cursor position (10px border threshold), defaulting to bottom-right if clicking in the center.
@@ -119,15 +143,34 @@ All commands use the `bmsg` prefix. Commands not starting with `bmsg` are execut
 #### Node/Window Commands
 
 ```
-bmsg node --close                  # Close focused window
-bmsg node --focus                  # Focus most recently focused window
-bmsg node --state tiled            # Set focused window to tiled
-bmsg node --state floating         # Set focused window to floating
-bmsg node --state fullscreen       # Set focused window to fullscreen
-bmsg node --to-desktop <n>         # Send window to desktop n (1-10)
-bmsg node --to-desktop <name>      # Send window to named desktop
-bmsg node interactive_move         # Interactive move (for mouse button binds on floating windows)
-bmsg node interactive_resize        # Interactive resize (for mouse button binds on floating windows)
+bmsg node --close                  						# Close focused window
+bmsg node --focus                  						# Focus most recently focused window
+bmsg node --state tiled            						# Set focused window to tiled
+bmsg node --state floating         						# Set focused window to floating
+bmsg node --state fullscreen       						# Set focused window to fullscreen
+bmsg node --to-desktop <n>         						# Send window to desktop n (1-10)
+bmsg node --to-desktop <name>      						# Send window to named desktop
+bmsg node --flag hidden=true       						# Toggle hidden flag on window
+bmsg node --flag sticky=on         						# Toggle sticky flag on window
+bmsg node --flag private=off       						# Toggle private flag on window
+bmsg node --flag locked=true       						# Toggle locked flag on window
+bmsg node --flag marked=off        						# Toggle marked flag on window
+bmsg node --move <dx> <dy>         						# Move floating window by delta x,y
+bmsg node --resize <handle> <dx> <dy>  				# Resize floating window (handle: northwest/nw/north/n/ne/east/e/southeast/se/south/s/southwest/sw/west/w/center/c)
+bmsg node --activate               						# Activate focused window
+bmsg node --kill                   						# Kill focused window
+bmsg node --to-monitor <name>      						# Send window to monitor
+bmsg node --to-node <id>           						# Send window to node with id
+bmsg node --layer below|normal|above  				# Set window layer
+bmsg node --type horizontal|vertical  				# Set split type for container
+bmsg node --ratio <value>          						# Set split ratio for container
+bmsg node --circulate forward|backward  			# Circulate focus in tree
+bmsg node --insert-receptacle      						# Insert receptacle at focused node
+bmsg node --presel-dir west|east|north|south  # Preselect direction for next window
+bmsg node --presel-ratio <value>   						# Set preselection ratio
+bmsg node --swap <id>              						# Swap with node by id
+bmsg node interactive_move         						# Interactive move (for mouse button binds on floating windows)
+bmsg node interactive_resize       						# Interactive resize (for mouse button binds on floating windows)
 ```
 
 #### Desktop Commands
@@ -178,6 +221,7 @@ bmsg presel cancel                   # Cancel current preselection
 ```
 bmsg toggle floating                # Toggle focused window floating/tiled
 bmsg toggle fullscreen              # Toggle focused window fullscreen
+bmsg toggle pseudo_tiled            # Toggle focused window pseudo-tiled
 bmsg toggle monocle                 # Toggle monocle layout on desktop
 ```
 
@@ -408,8 +452,50 @@ bmsg query -N --nodes    # List node IDs
 
 ```
 bmsg config border_width [<n>]    # Get or set border width
-bmsg config window_gap [<n>]     # Get or set window gap
+bmsg config window_gap [<n>]     	# Get or set window gap
 bmsg config single_monocle [true|false]
 bmsg config borderless_monocle [true|false]
+bmsg config borderless_singleton [true|false]
 bmsg config gapless_monocle [true|false]
+bmsg config edge_scroller_pointer_focus [true|false]
+bmsg config scroller_default_proportion [<value>]
+bmsg config scroller_proportion_preset [<values>]
+```
+
+### WM Commands
+
+```
+bmsg wm --dump-state               # Dump current WM state as JSON
+bmsg wm --load-state               # Load WM state (not implemented)
+bmsg wm --add-monitor <name>       # Add a new monitor
+```
+
+### Subscribe Commands
+
+```
+bmsg subscribe [-c <count>] [-f <fifo>] <event>...
+```
+
+Subscribe to WM events (advanced usage).
+
+### Keyboard Grouping Commands
+
+```
+bmsg keyboard_grouping none|smart|default
+```
+
+Set keyboard grouping mode.
+
+### Scroller Commands
+
+```
+bmsg scroller proportion <value>   # Set proportion for focused scroller client
+bmsg scroller stack                # Stack focused client with previous
+```
+
+### Equalize/Balance Commands
+
+```
+bmsg equalize # Equalize window sizes in tree
+bmsg balance  # Balance window sizes in tree
 ```
