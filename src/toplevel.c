@@ -469,7 +469,7 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
     if (successful)
       wlr_log(WLR_DEBUG, "Transaction completed for serial=%u", serial);
 
-    // ack as configured is serial is non-zero
+    // ack as configured if serial is non-zero
     if (!toplevel->configured && serial != 0) {
       toplevel->configured = true;
       wlr_log(WLR_DEBUG, "Toplevel marked configured via serial=%u (transaction match=%d)",
@@ -478,6 +478,36 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
 
     if (toplevel->saved_surface_tree && !successful)
       toplevel_send_frame_done(toplevel);
+
+    if (toplevel->configured && toplevel->node && toplevel->node->client) {
+      client_t *c = toplevel->node->client;
+
+      // enforce size for fullscreen and tiled nodes
+      if (c->state != STATE_FLOATING && c->state != STATE_PSEUDO_TILED) {
+        struct wlr_box *desired;
+        if (c->state == STATE_FULLSCREEN) {
+          monitor_t *m = toplevel->node->monitor;
+          desired = m ? &m->rectangle : NULL;
+        } else desired = &c->tiled_rectangle;
+
+        if (desired && desired->width > 0 && desired->height > 0) {
+          int cwidth = xdg_surface->current.geometry.width;
+          int cheight = xdg_surface->current.geometry.height;
+
+          if (cwidth == 0 || cheight == 0) {
+            cwidth = xdg_surface->surface->current.width;
+            cheight = xdg_surface->surface->current.height;
+          }
+
+          if (cwidth != desired->width || cheight != desired->height) {
+            wlr_log(WLR_DEBUG,
+              "Client committed wrong size (%dx%d), re-enforcing desired (%dx%d)",
+              cwidth, cheight, desired->width, desired->height);
+            wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, desired->width, desired->height);
+          }
+        }
+      }
+    }
   }
 }
 
