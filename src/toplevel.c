@@ -479,32 +479,23 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
     if (toplevel->saved_surface_tree && !successful)
       toplevel_send_frame_done(toplevel);
 
-    if (toplevel->configured && toplevel->node && toplevel->node->client) {
-      client_t *c = toplevel->node->client;
+    struct wlr_box *new_geo = &xdg_surface->geometry;
+    bool new_size = new_geo->width != toplevel->geometry.width ||
+      new_geo->height != toplevel->geometry.height ||
+      new_geo->x != toplevel->geometry.x ||
+      new_geo->y != toplevel->geometry.y;
 
-      // enforce size for fullscreen and tiled nodes
-      if (c->state != STATE_FLOATING && c->state != STATE_PSEUDO_TILED) {
-        struct wlr_box *desired;
-        if (c->state == STATE_FULLSCREEN) {
-          monitor_t *m = toplevel->node->monitor;
-          desired = m ? &m->rectangle : NULL;
-        } else desired = &c->tiled_rectangle;
+    if (new_size) {
+      // update stored geometry
+      memcpy(&toplevel->geometry, new_geo, sizeof(struct wlr_box));
 
-        if (desired && desired->width > 0 && desired->height > 0) {
-          int cwidth = xdg_surface->current.geometry.width;
-          int cheight = xdg_surface->current.geometry.height;
-
-          if (cwidth == 0 || cheight == 0) {
-            cwidth = xdg_surface->surface->current.width;
-            cheight = xdg_surface->surface->current.height;
-          }
-
-          if (cwidth != desired->width || cheight != desired->height) {
-            wlr_log(WLR_DEBUG,
-              "Client committed wrong size (%dx%d), re-enforcing desired (%dx%d)",
-              cwidth, cheight, desired->width, desired->height);
-            wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, desired->width, desired->height);
-          }
+      if (toplevel->node && toplevel->node->client &&
+          toplevel->node->client->state == STATE_FLOATING) {
+        if (toplevel->node->client->floating_rectangle.width > 0) {
+          wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel,
+                                   toplevel->geometry.width,
+                                   toplevel->geometry.height);
+          transaction_commit_dirty_client();
         }
       }
     }
