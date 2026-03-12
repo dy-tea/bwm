@@ -269,6 +269,8 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   if (!target_monitor)
     target_monitor = m;
 
+  n->monitor = target_monitor;
+
   // center to output if floating, also ensure it does not tile
   if (rule && rule->state == STATE_FLOATING) {
   	wlr_scene_node_reparent(&toplevel->scene_tree->node, server.float_tree);
@@ -300,6 +302,10 @@ void toplevel_map(struct wl_listener *listener, void *data) {
 
   // create borders if applicable
   create_borders(toplevel->scene_tree, &toplevel->border_tree, toplevel->border_rects);
+
+  // mark dirty to update borders
+  if (n->client->state == STATE_FLOATING)
+    node_set_dirty(n);
 
   // insert node into tree
   node_t *focus = target_desktop->focus;

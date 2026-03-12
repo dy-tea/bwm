@@ -490,6 +490,11 @@ node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
   if (d == NULL || n == NULL)
     return NULL;
 
+  if (n->client && IS_FLOATING(n->client)) {
+    n->parent = NULL;
+    return NULL;
+  }
+
   if (f == NULL)
     f = d->root;
 
@@ -677,6 +682,14 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
   bool n_is_first = is_first_child(n);
 
   if (p == NULL) {
+    if (d->root != n) {
+      wlr_log(WLR_DEBUG, "remove_node: Node %u has no parent and is not root, skipping tree fixup",
+              n->id);
+      if (d->focus == n)
+        d->focus = d->root ? first_extrema(d->root) : NULL;
+      return;
+    }
+
   	// check if root has brother
     node_t *b = brother_tree(n);
     if (b != NULL) {

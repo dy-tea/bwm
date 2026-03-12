@@ -1,4 +1,5 @@
 #include "cursor.h"
+#include "transaction.h"
 #include "input_method.h"
 #include "keyboard.h"
 #include "layer.h"
@@ -153,6 +154,9 @@ static void process_cursor_resize(void) {
 
     wlr_xwayland_surface_configure(xwayland_view->xwayland_surface,
       new_left, new_top, new_width, new_height);
+
+    node_set_dirty(xwayland_view->node);
+    transaction_commit_dirty();
     return;
   }
 
@@ -166,6 +170,9 @@ static void process_cursor_resize(void) {
 
   wlr_scene_node_set_position(&toplevel->scene_tree->node, new_left, new_top);
   wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, new_width, new_height);
+
+  node_set_dirty(toplevel->node);
+  transaction_commit_dirty();
 }
 
 static void process_cursor_motion(uint32_t time, double dx, double dy, double dx_unaccel, double dy_unaccel) {

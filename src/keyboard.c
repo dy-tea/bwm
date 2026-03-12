@@ -419,12 +419,23 @@ void toggle_floating(void) {
   if (n->client->state == STATE_FLOATING) {
     n->hidden = false;
     wlr_scene_node_reparent(&scene_tree->node, server.tile_tree);
+
+    node_t *ref = mon->desk->focus != n ? mon->desk->focus : NULL;
+    insert_node(mon, mon->desk, n, ref);
+
     set_state(mon, mon->desk, n, STATE_TILED);
     wlr_log(WLR_INFO, "Window tiled");
   } else if (n->client->state == STATE_TILED) {
     n->client->floating_rectangle = n->rectangle;
+
+    remove_node(mon, mon->desk, n);
     n->hidden = true;
     wlr_scene_node_reparent(&scene_tree->node, server.float_tree);
+    node_set_dirty(n);
+
+    // restore focus
+    mon->desk->focus = n;
+
     set_state(mon, mon->desk, n, STATE_FLOATING);
     wlr_log(WLR_INFO, "Window floating");
   }
