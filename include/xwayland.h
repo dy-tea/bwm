@@ -36,6 +36,9 @@ struct bwm_xwayland_view {
 	struct wlr_scene_tree *scene_tree;
 	struct wlr_scene_tree *content_tree;
 
+	struct wlr_scene_tree *border_tree;
+	struct wlr_scene_rect *border_rects[4];
+
 	bool mapped;
 	struct wlr_box geometry;
 

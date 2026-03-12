@@ -298,6 +298,9 @@ void toplevel_map(struct wl_listener *listener, void *data) {
     n->client->state = STATE_PSEUDO_TILED;
   }
 
+  // create borders if applicable
+  create_borders(toplevel->scene_tree, &toplevel->border_tree, toplevel->border_rects);
+
   // insert node into tree
   node_t *focus = target_desktop->focus;
   insert_node(target_monitor, target_desktop, n, focus);
@@ -500,9 +503,11 @@ void toplevel_destroy(struct wl_listener *listener, void *data) {
   }
 
   if (toplevel->image_capture != NULL) {
- 		wlr_scene_node_destroy(&toplevel->image_capture->tree.node);
+		wlr_scene_node_destroy(&toplevel->image_capture->tree.node);
    	toplevel->image_capture = NULL;
   }
+
+  destroy_borders(&toplevel->border_tree, toplevel->border_rects);
 
   toplevel->saved_surface_tree = NULL;
 
@@ -731,6 +736,11 @@ void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
     free(toplevel);
     return;
   }
+
+  // initialize border fields
+  toplevel->border_tree = NULL;
+  for (int i = 0; i < 4; i++)
+    toplevel->border_rects[i] = NULL;
 
   toplevel->unmap.notify = toplevel_unmap;
   wl_signal_add(&xdg_toplevel->base->surface->events.unmap, &toplevel->unmap);

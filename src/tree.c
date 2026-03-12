@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wlr/util/log.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/types/wlr_scene.h>
@@ -34,10 +35,10 @@ int window_gap = 10;
 double split_ratio = 0.5;
 
 // border colors
-char normal_border_color[16] = "#444444";
-char active_border_color[16] = "#555555";
-char focused_border_color[16] = "#1793df";
-char presel_feedback_color[16] = "#ff5555";
+char normal_border_color[16] = "444444ff";
+char active_border_color[16] = "555555ff";
+char focused_border_color[16] = "1793dfff";
+char presel_feedback_color[16] = "ff5555ff";
 
 // global state
 monitor_t *mon = NULL;
@@ -839,6 +840,21 @@ bool focus_node(monitor_t *m, desktop_t *d, node_t *n) {
       xwayland_view_set_activated(n->client->xwayland_view, true);
   }
 
+  // update border colors for all visible clients on this desktop
+  if (is_current_desktop && d->root != NULL) {
+    for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root)) {
+      if (node->client == NULL)
+        continue;
+      if (node->client->toplevel) {
+        update_border_colors(node->client->toplevel->border_tree,
+                            node->client->toplevel->border_rects, node->client);
+      } else if (node->client->xwayland_view) {
+        update_border_colors(node->client->xwayland_view->border_tree,
+                            node->client->xwayland_view->border_rects, node->client);
+      }
+    }
+  }
+
   return true;
 }
 
@@ -987,6 +1003,15 @@ void presel_dir(monitor_t *m, desktop_t *d, node_t *n, direction_t dir) {
     n->presel = make_presel();
 
   n->presel->split_dir = dir;
+
+  if (n->client) {
+    if (n->client->toplevel)
+      update_border_colors(n->client->toplevel->border_tree,
+                           n->client->toplevel->border_rects, n->client);
+    else if (n->client->xwayland_view)
+      update_border_colors(n->client->xwayland_view->border_tree,
+                           n->client->xwayland_view->border_rects, n->client);
+  }
 }
 
 void presel_cancel(monitor_t *m, desktop_t *d, node_t *n) {
@@ -995,6 +1020,15 @@ void presel_cancel(monitor_t *m, desktop_t *d, node_t *n) {
 
   free(n->presel);
   n->presel = NULL;
+
+  if (n->client) {
+    if (n->client->toplevel)
+      update_border_colors(n->client->toplevel->border_tree,
+                           n->client->toplevel->border_rects, n->client);
+    else if (n->client->xwayland_view)
+      update_border_colors(n->client->xwayland_view->border_tree,
+                           n->client->xwayland_view->border_rects, n->client);
+  }
 }
 
 void rotate_tree(node_t *n, int deg) {
@@ -1167,4 +1201,153 @@ void print_tree(node_t *n, int depth) {
     print_tree(n->first_child, depth + 1);
     print_tree(n->second_child, depth + 1);
   }
+}
+
+static int hex_digit(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+  if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+  return 0;
+}
+
+static void parse_color(const char *hex, float *color) {
+  if (!hex || strlen(hex) != 8) {
+    color[0] = color[1] = color[2] = 0.5f;
+    color[3] = 1.0f;
+    return;
+  }
+  color[0] = (float)(hex_digit(hex[0]) * 16 + hex_digit(hex[1])) / 255.0f;
+  color[1] = (float)(hex_digit(hex[2]) * 16 + hex_digit(hex[3])) / 255.0f;
+  color[2] = (float)(hex_digit(hex[4]) * 16 + hex_digit(hex[5])) / 255.0f;
+  color[3] = (float)(hex_digit(hex[6]) * 16 + hex_digit(hex[7])) / 255.0f;
+}
+
+static void get_border_color(client_t *client, float *color) {
+  if (!client || border_width == 0) {
+    color[0] = color[1] = color[2] = 0.0f;
+    color[3] = 1.0f;
+    return;
+  }
+
+  const char *color_str;
+  monitor_t *m = client->toplevel ? client->toplevel->node->monitor :
+  	client->xwayland_view ? client->xwayland_view->node->monitor : NULL;
+  desktop_t *d = m ? m->desk : NULL;
+
+  bool the_only_window = (mon_head == mon_tail) && d && d->root && d->root->client;
+  bool no_border = (borderless_monocle && d &&
+  	d->layout == LAYOUT_MONOCLE && IS_TILED(client)) ||
+    (borderless_singleton && the_only_window) ||
+    client->state == STATE_FULLSCREEN;
+
+  if (no_border) {
+    color[0] = color[1] = color[2] = 0.0f;
+    color[3] = 0.0f;
+    return;
+  }
+
+  // check if this client's node has an active preselection
+  node_t *n = client->toplevel ? client->toplevel->node :
+              client->xwayland_view ? client->xwayland_view->node : NULL;
+  if (n && n->presel) {
+    parse_color(presel_feedback_color, color);
+    return;
+  }
+
+  bool is_focused = (d && d->focus && d->focus->client == client);
+  bool is_active = (d && d->focus && d->focus->client != NULL);
+  if (is_focused)
+    color_str = focused_border_color;
+  else if (is_active)
+    color_str = active_border_color;
+  else
+    color_str = normal_border_color;
+
+  parse_color(color_str, color);
+}
+
+void create_borders(struct wlr_scene_tree *parent, struct wlr_scene_tree **border_tree,
+                    struct wlr_scene_rect *rects[4]) {
+  if (border_width == 0) {
+    if (*border_tree) {
+      wlr_scene_node_destroy(&(*border_tree)->node);
+      *border_tree = NULL;
+      for (int i = 0; i < 4; i++)
+        rects[i] = NULL;
+    }
+    return;
+  }
+
+  // create border tree container
+  *border_tree = wlr_scene_tree_create(parent);
+  if (!*border_tree)
+    return;
+
+  float color[4];
+  parse_color(focused_border_color, color);
+
+  rects[0] = wlr_scene_rect_create(*border_tree, 0, border_width, color);
+  rects[1] = wlr_scene_rect_create(*border_tree, 0, border_width, color);
+  rects[2] = wlr_scene_rect_create(*border_tree, border_width, 0, color);
+  rects[3] = wlr_scene_rect_create(*border_tree, border_width, 0, color);
+}
+
+void destroy_borders(struct wlr_scene_tree **border_tree, struct wlr_scene_rect *rects[4]) {
+  if (*border_tree) {
+    wlr_scene_node_destroy(&(*border_tree)->node);
+    *border_tree = NULL;
+    for (int i = 0; i < 4; i++)
+      rects[i] = NULL;
+  }
+}
+
+void update_borders(struct wlr_scene_tree *border_tree, struct wlr_scene_rect *rects[4],
+                    struct wlr_box geo, unsigned int bw) {
+  if (!border_tree || bw == 0) {
+    if (border_tree)
+      wlr_scene_node_set_enabled(&border_tree->node, false);
+    return;
+  }
+
+  wlr_scene_node_set_enabled(&border_tree->node, true);
+
+  int w = geo.width;
+  int h = geo.height;
+  int bwi = (int)bw;
+
+  wlr_scene_node_set_position(&border_tree->node, -bwi, -bwi);
+
+  // top
+  if (rects[0]) {
+    wlr_scene_node_set_position(&rects[0]->node, 0, 0);
+    wlr_scene_rect_set_size(rects[0], w + 2 * bwi, bwi);
+  }
+  // bottom
+  if (rects[1]) {
+    wlr_scene_node_set_position(&rects[1]->node, 0, h + bwi);
+    wlr_scene_rect_set_size(rects[1], w + 2 * bwi, bwi);
+  }
+  // left
+  if (rects[2]) {
+    wlr_scene_node_set_position(&rects[2]->node, 0, bwi);
+    wlr_scene_rect_set_size(rects[2], bwi, h);
+  }
+  // right
+  if (rects[3]) {
+    wlr_scene_node_set_position(&rects[3]->node, w + bwi, bwi);
+    wlr_scene_rect_set_size(rects[3], bwi, h);
+  }
+}
+
+void update_border_colors(struct wlr_scene_tree *border_tree, struct wlr_scene_rect *rects[4],
+                          client_t *client) {
+  if (border_width == 0 || !border_tree)
+    return;
+
+  float color[4];
+  get_border_color(client, color);
+
+  for (int i = 0; i < 4; i++)
+    if (rects[i])
+      wlr_scene_rect_set_color(rects[i], color);
 }

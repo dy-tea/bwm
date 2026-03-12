@@ -725,6 +725,8 @@ static void handle_destroy(struct wl_listener *listener, void *data) {
 		xwayland_view->image_capture = NULL;
 	}
 
+	destroy_borders(&xwayland_view->border_tree, xwayland_view->border_rects);
+
 	if (xwayland_view->scene_tree) {
 		wlr_scene_node_destroy(&xwayland_view->scene_tree->node);
 		xwayland_view->scene_tree = NULL;
@@ -969,6 +971,13 @@ static struct bwm_xwayland_view *create_xwayland_view(struct wlr_xwayland_surfac
 
 	xwayland_view->scene_tree->node.data = xwayland_view;
 	wlr_scene_node_set_enabled(&xwayland_view->scene_tree->node, false);
+
+	// initialize borders
+	xwayland_view->border_tree = NULL;
+	for (int i = 0; i < 4; i++)
+		xwayland_view->border_rects[i] = NULL;
+	create_borders(xwayland_view->scene_tree, &xwayland_view->border_tree,
+	               xwayland_view->border_rects);
 
 	// Create image capture scene
 	xwayland_view->image_capture = wlr_scene_create();

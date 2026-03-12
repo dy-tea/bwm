@@ -23,6 +23,9 @@ struct bwm_toplevel {
   struct wlr_scene *image_capture;
   struct wlr_scene_tree *image_capture_tree;
 
+  struct wlr_scene_tree *border_tree;
+  struct wlr_scene_rect *border_rects[4];
+
   node_t *node;
 
   struct wlr_box geometry;  // Client-committed surface geometry

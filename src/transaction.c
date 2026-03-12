@@ -221,6 +221,25 @@ static void apply_node_state(node_t *node,
 
     wlr_scene_node_set_position(&scene_tree->node, rect->x, rect->y);
 
+    // update borders
+    if (node->client->border_width != 0) {
+	    if (node->client->toplevel) {
+	      unsigned int bw = node->client->border_width;
+	      const struct wlr_box geo = {0, 0, rect->width, rect->height};
+	      update_borders(node->client->toplevel->border_tree,
+	        node->client->toplevel->border_rects, geo, bw);
+	      update_border_colors(node->client->toplevel->border_tree,
+	        node->client->toplevel->border_rects, node->client);
+	    } else if (node->client->xwayland_view) {
+	      unsigned int bw = node->client->border_width;
+	      const struct wlr_box geo = {0, 0, rect->width, rect->height};
+	      update_borders(node->client->xwayland_view->border_tree,
+	        node->client->xwayland_view->border_rects, geo, bw);
+	      update_border_colors(node->client->xwayland_view->border_tree,
+	        node->client->xwayland_view->border_rects, node->client);
+	    }
+    }
+
     // configure size for xwayland
     if (node->client->xwayland_view && node->client->xwayland_view->xwayland_surface) {
       struct wlr_xwayland_surface *xsurface = node->client->xwayland_view->xwayland_surface;

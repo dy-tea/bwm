@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.h"
+#include <wlr/types/wlr_scene.h>
 
 #define MIN_WIDTH 32
 #define MIN_HEIGHT 32
@@ -74,6 +75,15 @@ void node_set_pending_hidden(node_t *n, bool hidden);
 void print_tree(node_t *n, int depth);
 
 struct wlr_scene_tree *client_get_scene_tree(client_t *client);
+
+// Border helpers
+void create_borders(struct wlr_scene_tree *parent, struct wlr_scene_tree **border_tree,
+                    struct wlr_scene_rect *rects[4]);
+void destroy_borders(struct wlr_scene_tree **border_tree, struct wlr_scene_rect *rects[4]);
+void update_borders(struct wlr_scene_tree *border_tree, struct wlr_scene_rect *rects[4],
+                    struct wlr_box geo, unsigned int bw);
+void update_border_colors(struct wlr_scene_tree *border_tree, struct wlr_scene_rect *rects[4],
+                          client_t *client);
 
 // macros for state checking
 #define IS_TILED(c) (is_tiled(c))
