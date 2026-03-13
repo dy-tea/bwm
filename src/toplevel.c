@@ -126,6 +126,53 @@ static void handle_foreign_destroy(struct wl_listener *listener, void *data) {
   wl_list_remove(&toplevel->foreign_destroy.link);
 }
 
+static void toplevel_center_and_clip_surface(struct bwm_toplevel *toplevel) {
+  if (!toplevel || !toplevel->content_tree || !toplevel->node || !toplevel->node->client)
+    return;
+
+  client_t *c = toplevel->node->client;
+  bool floating = (c->state == STATE_FLOATING);
+  int x = 0, y = 0;
+
+  if (floating) {
+    struct wlr_box *rect = &c->floating_rectangle;
+    x = (rect->width - toplevel->geometry.width) / 2 > 0 ? (rect->width - toplevel->geometry.width) / 2 : 0;
+    y = (rect->height - toplevel->geometry.height) / 2 > 0 ? (rect->height - toplevel->geometry.height) : 0;
+  }
+
+  wlr_scene_node_set_position(&toplevel->content_tree->node, x, y);
+
+  bool clip_to_geometry = true;
+  if (floating && (toplevel->geometry.x != 0 || toplevel->geometry.y != 0))
+    clip_to_geometry = false;
+
+  if (!wl_list_empty(&toplevel->content_tree->children)) {
+    struct wlr_box *rect = NULL;
+
+    if (floating) {
+      rect = &c->floating_rectangle;
+    } else if (c->state == STATE_FULLSCREEN) {
+      monitor_t *m = toplevel->node->monitor;
+      rect = m ? &m->rectangle : &c->tiled_rectangle;
+    } else {
+      rect = &c->tiled_rectangle;
+    }
+
+    if (clip_to_geometry) {
+      struct wlr_box clip = {
+        .x = toplevel->geometry.x,
+        .y = toplevel->geometry.y,
+        .width = rect->width,
+        .height = rect->height
+      };
+
+      wlr_scene_subsurface_tree_set_clip(&toplevel->content_tree->node, &clip);
+    } else {
+      wlr_scene_subsurface_tree_set_clip(&toplevel->content_tree->node, NULL);
+    }
+  }
+}
+
 void toplevel_map(struct wl_listener *listener, void *data) {
 	(void)data;
   struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, map);
@@ -460,12 +507,11 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
   struct wlr_xdg_surface *xdg_surface = toplevel->xdg_toplevel->base;
 
   if (xdg_surface->initial_commit) {
-    wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, 0, 0);
-    
     // initialize last_configured_size to 0,0 for initial configure
     toplevel->last_configured_size.width = 0;
     toplevel->last_configured_size.height = 0;
 
+    wlr_xdg_surface_schedule_configure(xdg_surface);
     wlr_xdg_toplevel_set_wm_capabilities(toplevel->xdg_toplevel,
         WLR_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN |
         WLR_XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE);
@@ -501,52 +547,33 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
 
       if (toplevel->node && toplevel->node->client) {
         client_t *c = toplevel->node->client;
-        
+
         if (c->state == STATE_FLOATING) {
-          // For floating windows, resize immediately like Sway does
           if (c->floating_rectangle.width > 0) {
             wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel,
                                      toplevel->geometry.width,
                                      toplevel->geometry.height);
             transaction_commit_dirty_client();
           }
+        } else {
+          struct wlr_box *rect = NULL;
+          if (c->state == STATE_FULLSCREEN) {
+            monitor_t *m = toplevel->node->monitor;
+            rect = m ? &m->rectangle : &c->tiled_rectangle;
+          } else {
+            rect = &c->tiled_rectangle;
+          }
+          if (rect &&
+              (toplevel->geometry.width < rect->width ||
+               toplevel->geometry.height < rect->height)) {
+            toplevel->geometry.width = rect->width;
+            toplevel->geometry.height = rect->height;
+          }
         }
       }
     }
 
-    // Center and clip surface like Sway does on every commit
-    if (new_size && toplevel->node && toplevel->node->client) {
-      client_t *c = toplevel->node->client;
-      
-      if (c->state != STATE_FLOATING) {
-        // For tiled/fullscreen windows, center and clip the surface
-        wlr_scene_node_set_position(&toplevel->content_tree->node, 0, 0);
-        
-        // Only clip surfaces with zero geometry offsets to avoid CSD clipping issues
-        // Surfaces with geometry offsets (CSD, shadows, etc.) handle their own layout
-        if (toplevel->geometry.x == 0 && toplevel->geometry.y == 0) {
-          struct wlr_box *current_rect;
-          if (c->state == STATE_FULLSCREEN) {
-            monitor_t *m = toplevel->node->monitor;
-            current_rect = m ? &m->rectangle : &c->tiled_rectangle;
-          } else {
-            current_rect = &c->tiled_rectangle;
-          }
-          
-          struct wlr_box clip = {
-            .x = 0,
-            .y = 0,
-            .width = current_rect->width,
-            .height = current_rect->height
-          };
-          
-          wlr_scene_subsurface_tree_set_clip(&toplevel->content_tree->node, &clip);
-        } else {
-          // Disable clipping for CSD surfaces to prevent visual artifacts
-          wlr_scene_subsurface_tree_set_clip(&toplevel->content_tree->node, NULL);
-        }
-      }
-    }
+    toplevel_center_and_clip_surface(toplevel);
   }
 }
 
@@ -772,19 +799,7 @@ void toplevel_apply_geometry(struct bwm_toplevel *toplevel) {
   wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, rect->width, rect->height);
   wlr_scene_node_set_position(&toplevel->scene_tree->node, rect->x, rect->y);
 
-  // For tiled/fullscreen windows, apply clipping like Sway does
-  if (c->state != STATE_FLOATING) {
-    wlr_scene_node_set_position(&toplevel->content_tree->node, 0, 0);
-    
-    struct wlr_box clip = {
-      .x = toplevel->geometry.x,
-      .y = toplevel->geometry.y,
-      .width = rect->width,
-      .height = rect->height
-    };
-    
-    wlr_scene_subsurface_tree_set_clip(&toplevel->content_tree->node, &clip);
-  }
+  toplevel_center_and_clip_surface(toplevel);
 
   wlr_log(WLR_DEBUG, "Applied geometry: %dx%d at %d,%d", rect->width,
           rect->height, rect->x, rect->y);
