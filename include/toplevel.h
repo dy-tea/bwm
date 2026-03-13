@@ -29,6 +29,7 @@ struct bwm_toplevel {
   node_t *node;
 
   struct wlr_box geometry;  // Client-committed surface geometry
+  struct wlr_box last_configured_size;  // Last size sent via configure
 
   bool mapped;
   bool configured;

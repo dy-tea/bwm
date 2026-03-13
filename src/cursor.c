@@ -155,24 +155,40 @@ static void process_cursor_resize(void) {
     wlr_xwayland_surface_configure(xwayland_view->xwayland_surface,
       new_left, new_top, new_width, new_height);
 
-    node_set_dirty(xwayland_view->node);
-    transaction_commit_dirty();
+    if (!xwayland_view->node || !xwayland_view->node->client)
+      return;
+
+    // update borders
+    client_t *client = xwayland_view->node->client;
+    unsigned int bw = client->border_width;
+    if (bw != 0) {
+      const struct wlr_box geo = {0, 0, new_width, new_height};
+      update_borders(xwayland_view->border_tree, xwayland_view->border_rects, geo, bw);
+      update_border_colors(xwayland_view->border_tree, xwayland_view->border_rects, client);
+    }
+
     return;
   }
 
   if (!toplevel || !toplevel->node || !toplevel->node->client)
     return;
 
-  toplevel->node->client->floating_rectangle.x = new_left;
-  toplevel->node->client->floating_rectangle.y = new_top;
-  toplevel->node->client->floating_rectangle.width = new_width;
-  toplevel->node->client->floating_rectangle.height = new_height;
+  client_t *client = toplevel->node->client;
+  client->floating_rectangle.x = new_left;
+  client->floating_rectangle.y = new_top;
+  client->floating_rectangle.width = new_width;
+  client->floating_rectangle.height = new_height;
 
   wlr_scene_node_set_position(&toplevel->scene_tree->node, new_left, new_top);
   wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, new_width, new_height);
 
-  node_set_dirty(toplevel->node);
-  transaction_commit_dirty();
+  // update borders
+ 	unsigned int bw = client->border_width;
+  if (bw != 0) {
+    const struct wlr_box geo = {0, 0, new_width, new_height};
+    update_borders(toplevel->border_tree, toplevel->border_rects, geo, bw);
+    update_border_colors(toplevel->border_tree, toplevel->border_rects, client);
+  }
 }
 
 static void process_cursor_motion(uint32_t time, double dx, double dy, double dx_unaccel, double dy_unaccel) {

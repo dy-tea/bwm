@@ -345,24 +345,13 @@ static bool should_configure(node_t *node,
   else
     target_rect = instruction->tiled_rectangle;
 
-  // get committed size from surface
-  struct wlr_xdg_surface *xdg_surface = node->client->toplevel->xdg_toplevel->base;
-  int current_width = xdg_surface->current.geometry.width;
-  int current_height = xdg_surface->current.geometry.height;
+  // compare target size against last configured size
+  struct wlr_box *last_configured = &node->client->toplevel->last_configured_size;
+  bool size_changed = last_configured->width != target_rect.width ||
+                      last_configured->height != target_rect.height;
 
-  // if geometry not set, use surface size
-  if (current_width == 0 || current_height == 0) {
-    if (xdg_surface->surface) {
-      current_width = xdg_surface->surface->current.width;
-      current_height = xdg_surface->surface->current.height;
-    }
-  }
-
-  bool size_changed = current_width != target_rect.width ||
-                      current_height != target_rect.height;
-
-  wlr_log(WLR_DEBUG, "should_configure node %u: current=(%dx%d) target=(%dx%d) changed=%d",
-          node->id, current_width, current_height,
+  wlr_log(WLR_DEBUG, "should_configure node %u: last_configured=(%dx%d) target=(%dx%d) changed=%d",
+          node->id, last_configured->width, last_configured->height,
           target_rect.width, target_rect.height, size_changed);
 
   return size_changed;
@@ -449,6 +438,10 @@ static void transaction_commit(struct bwm_transaction *txn) {
           node->client->toplevel->xdg_toplevel,
           rect->width,
           rect->height);
+
+        // update last configured size to prevent feedback loops
+        node->client->toplevel->last_configured_size.width = rect->width;
+        node->client->toplevel->last_configured_size.height = rect->height;
 
         // wait for all mapped toplevels to respond
         instruction->waiting = true;
