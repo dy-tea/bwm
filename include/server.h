@@ -6,6 +6,7 @@
 #include "gesture.h"
 #include "xwayland.h"
 #include "input_method.h"
+#include <wayland-protocols/color-management-v1-enum.h>
 #include <wayland-server.h>
 #include <xkbcommon/xkbcommon.h>
 #include <wlr/types/wlr_ext_workspace_v1.h>
@@ -82,6 +83,9 @@ struct bwm_server {
 
   struct wlr_relative_pointer_manager_v1 *relative_pointer_manager;
   struct wlr_idle_notifier_v1 *idle_notifier;
+
+  struct wlr_virtual_pointer_manager_v1 *virtual_pointer_manager;
+  struct wl_listener new_virtual_pointer;
 
   struct wlr_seat *seat;
   struct wl_listener new_input;

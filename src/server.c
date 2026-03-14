@@ -44,6 +44,7 @@
 #include <wlr/types/wlr_relative_pointer_v1.h>
 #include <wlr/types/wlr_pointer_constraints_v1.h>
 #include <wlr/types/wlr_cursor_shape_v1.h>
+#include <wlr/types/wlr_virtual_pointer_v1.h>
 #include <wlr/types/wlr_session_lock_v1.h>
 #include <wlr/types/wlr_xdg_foreign_registry.h>
 #include <wlr/types/wlr_xdg_foreign_v1.h>
@@ -231,6 +232,12 @@ void server_init(void) {
 
   // pointer gestures
   server.pointer_gestures = wlr_pointer_gestures_v1_create(server.wl_display);
+
+  // virtual pointer
+  server.virtual_pointer_manager = wlr_virtual_pointer_manager_v1_create(server.wl_display);
+
+  server.new_virtual_pointer.notify = handle_new_virtual_pointer;
+  wl_signal_add(&server.virtual_pointer_manager->events.new_virtual_pointer, &server.new_virtual_pointer);
 
   // xwayland support
   server.xwayland.wlr_xwayland = wlr_xwayland_create(server.wl_display, server.compositor, true);
@@ -655,6 +662,8 @@ void server_fini(void) {
   wl_list_remove(&server.pinch_end.link);
   wl_list_remove(&server.hold_begin.link);
   wl_list_remove(&server.hold_end.link);
+
+  wl_list_remove(&server.new_virtual_pointer.link);
 
   wl_list_remove(&server.new_session_lock.link);
 

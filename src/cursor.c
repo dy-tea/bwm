@@ -27,6 +27,7 @@
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_pointer_constraints_v1.h>
 #include <wlr/types/wlr_cursor_shape_v1.h>
+#include <wlr/types/wlr_virtual_pointer_v1.h>
 #include <wlr/util/region.h>
 #include <wlr/util/log.h>
 #include <wlr/util/box.h>
@@ -870,4 +871,15 @@ void cursor_init_gestures(void) {
 
   server.swipe_end.notify = handle_pointer_swipe_end;
   wl_signal_add(&server.cursor->events.swipe_end, &server.swipe_end);
+}
+
+void handle_new_virtual_pointer(struct wl_listener *listener, void *data) {
+	(void)listener;
+	struct wlr_virtual_pointer_v1_new_pointer_event *event = data;
+	struct wlr_virtual_pointer_v1 *pointer = event->new_pointer;
+	struct wlr_input_device *device = &pointer->pointer.base;
+
+	wlr_cursor_attach_input_device(server.cursor, device);
+	if (event->suggested_output)
+		wlr_cursor_map_input_to_output(server.cursor, device, event->suggested_output);
 }
