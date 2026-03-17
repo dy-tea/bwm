@@ -13,6 +13,7 @@
 #include "input.h"
 #include "idle.h"
 #include "rule.h"
+#include "keyboard.h"
 #include "xwayland.h"
 #include <stdbool.h>
 #include <stdlib.h>
@@ -72,6 +73,7 @@
 #include <wlr/types/wlr_drm_lease_v1.h>
 #include <wlr/types/wlr_linux_drm_syncobj_v1.h>
 #include <wlr/types/wlr_xdg_system_bell_v1.h>
+#include <wlr/types/wlr_virtual_keyboard_v1.h>
 
 void handle_request_start_drag(struct wl_listener *listener, void *data);
 void handle_start_drag(struct wl_listener *listener, void *data);
@@ -238,6 +240,12 @@ void server_init(void) {
 
   server.new_virtual_pointer.notify = handle_new_virtual_pointer;
   wl_signal_add(&server.virtual_pointer_manager->events.new_virtual_pointer, &server.new_virtual_pointer);
+
+  // virtual keyboard
+  server.virtual_keyboard_manager = wlr_virtual_keyboard_manager_v1_create(server.wl_display);
+
+  server.new_virtual_keyboard.notify = handle_new_virtual_keyboard;
+  wl_signal_add(&server.virtual_keyboard_manager->events.new_virtual_keyboard, &server.new_virtual_keyboard);
 
   // xwayland support
   server.xwayland.wlr_xwayland = wlr_xwayland_create(server.wl_display, server.compositor, true);
@@ -664,6 +672,8 @@ void server_fini(void) {
   wl_list_remove(&server.hold_end.link);
 
   wl_list_remove(&server.new_virtual_pointer.link);
+
+  wl_list_remove(&server.new_virtual_keyboard.link);
 
   wl_list_remove(&server.new_session_lock.link);
 

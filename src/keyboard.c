@@ -19,6 +19,7 @@
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
+#include <wlr/types/wlr_virtual_keyboard_v1.h>
 #include <wlr/util/log.h>
 
 extern struct bwm_server server;
@@ -1129,4 +1130,10 @@ void keyboard_reapply_grouping(void) {
     if (first)
       wlr_seat_set_keyboard(server.seat, first->wlr_keyboard);
   }
+}
+
+void handle_new_virtual_keyboard(struct wl_listener *listener, void *data) {
+	(void)listener;
+	struct wlr_virtual_keyboard_v1 *virtual_keyboard = data;
+	handle_new_keyboard(&virtual_keyboard->keyboard.base);
 }

@@ -92,3 +92,5 @@ void cancel_presel(void);
 
 // keybind processing
 bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym);
+
+void handle_new_virtual_keyboard(struct wl_listener *listener, void *data);
