@@ -87,7 +87,10 @@ void output_frame(struct wl_listener *listener, void *data) {
 
   output_configure_scene(output);
 
-  wlr_scene_output_commit(scene_output, NULL);
+  struct wlr_scene_output_state_options opts = {
+    .color_transform = output->color_transform,
+  };
+  wlr_scene_output_commit(scene_output, &opts);
 
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
@@ -131,6 +134,7 @@ static void handle_output_destroy(struct wl_listener *listener, void *data) {
   wl_list_remove(&output->request_state.link);
   wl_list_remove(&output->destroy.link);
   wl_list_remove(&output->link);
+  wlr_color_transform_unref(output->color_transform);
   free(output);
 }
 

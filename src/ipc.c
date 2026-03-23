@@ -17,6 +17,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <wlr/util/log.h>
 #include <wlr/types/wlr_xdg_shell.h>
@@ -128,6 +129,47 @@ static void ipc_cmd_quit(char **args, int num, int client_fd) {
 static void ipc_cmd_output(char **args, int num, int client_fd) {
   if (num < 1) {
     send_failure(client_fd, "output: missing arguments\n");
+    return;
+  }
+
+  if (streq("list", *args) || streq("--list", *args) || streq("-l", *args)) {
+    char buf[BWM_BUFSIZ];
+    int offset = 0;
+    offset += snprintf(buf + offset, sizeof(buf) - offset, "[\n");
+    bool first = true;
+    struct bwm_output *output;
+    wl_list_for_each(output, &server.outputs, link) {
+      struct wlr_output *wo = output->wlr_output;
+      if (!first)
+        offset += snprintf(buf + offset, sizeof(buf) - offset, ",\n");
+      first = false;
+      offset += snprintf(buf + offset, sizeof(buf) - offset,
+        "  {\n"
+        "    \"name\": \"%s\",\n"
+        "    \"description\": \"%s\",\n"
+        "    \"make\": \"%s\",\n"
+        "    \"model\": \"%s\",\n"
+        "    \"serial\": \"%s\",\n"
+        "    \"width\": %d,\n"
+        "    \"height\": %d,\n"
+        "    \"refresh\": %d,\n"
+        "    \"scale\": %.6g,\n"
+        "    \"phys_width\": %d,\n"
+        "    \"phys_height\": %d,\n"
+        "    \"enabled\": %s\n"
+        "  }",
+        wo->name ? wo->name : "",
+        wo->description ? wo->description : "",
+        wo->make ? wo->make : "",
+        wo->model ? wo->model : "",
+        wo->serial ? wo->serial : "",
+        wo->width, wo->height, wo->refresh,
+        wo->scale,
+        wo->phys_width, wo->phys_height,
+        wo->enabled ? "true" : "false");
+    }
+    offset += snprintf(buf + offset, sizeof(buf) - offset, "\n]\n");
+    send_success(client_fd, buf);
     return;
   }
 
@@ -322,6 +364,77 @@ static void ipc_cmd_output(char **args, int num, int client_fd) {
 
     output_config_apply(oc);
     send_success(client_fd, "output render_bit_depth set\n");
+  } else if (streq("color_profile", subcmd)) {
+    if (num < 2) {
+      send_failure(client_fd, "output color_profile: missing profile type (gamma22|srgb|icc <path>)\n");
+      return;
+    }
+    args++;
+    num--;
+
+    struct wlr_color_transform *new_transform = NULL;
+    if (streq("gamma22", *args)) {
+    	// no transform
+    } else if (streq("srgb", *args)) {
+      new_transform = wlr_color_transform_init_linear_to_inverse_eotf(
+          WLR_COLOR_TRANSFER_FUNCTION_SRGB);
+      if (!new_transform) {
+        send_failure(client_fd, "output color_profile: failed to create sRGB transform\n");
+        return;
+      }
+    } else if (streq("icc", *args)) {
+      if (num < 2) {
+        send_failure(client_fd, "output color_profile icc: missing file path\n");
+        return;
+      }
+      args++;
+      num--;
+
+      int fd = open(*args, O_RDONLY | O_NOCTTY | O_CLOEXEC);
+      if (fd == -1) {
+        send_failure(client_fd, "output color_profile icc: cannot open file\n");
+        return;
+      }
+      struct stat info;
+      if (fstat(fd, &info) == -1 || !S_ISREG(info.st_mode) || info.st_size <= 0) {
+        close(fd);
+        send_failure(client_fd, "output color_profile icc: invalid file\n");
+        return;
+      }
+      void *icc_data = malloc(info.st_size);
+      if (!icc_data) {
+        close(fd);
+        send_failure(client_fd, "output color_profile icc: out of memory\n");
+        return;
+      }
+      size_t nread = 0;
+      while (nread < (size_t)info.st_size) {
+        ssize_t r = read(fd, (char *)icc_data + nread, (size_t)info.st_size - nread);
+        if ((r == -1 && errno != EINTR) || r == 0) {
+          free(icc_data);
+          close(fd);
+          send_failure(client_fd, "output color_profile icc: read error\n");
+          return;
+        }
+        nread += (size_t)r;
+      }
+      close(fd);
+
+      new_transform = wlr_color_transform_init_linear_to_icc(icc_data, (size_t)info.st_size);
+      free(icc_data);
+      if (!new_transform) {
+        send_failure(client_fd, "output color_profile icc: failed to initialize ICC transform\n");
+        return;
+      }
+    } else {
+      send_failure(client_fd, "output color_profile: invalid type (gamma22|srgb|icc <path>)\n");
+      return;
+    }
+
+    wlr_color_transform_unref(oc->color_transform);
+    oc->color_transform = new_transform;
+    output_config_apply(oc);
+    send_success(client_fd, "output color_profile set\n");
   } else {
     send_failure(client_fd, "output: unknown subcommand\n");
   }

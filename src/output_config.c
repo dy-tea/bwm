@@ -47,6 +47,7 @@ void output_config_destroy(struct output_config *oc) {
   free(oc->name);
   free(oc->background);
   free(oc->background_option);
+  wlr_color_transform_unref(oc->color_transform);
   free(oc);
 }
 
@@ -204,6 +205,13 @@ void output_config_apply(struct output_config *oc) {
     output_set_power(wlr_output, ZWLR_OUTPUT_POWER_V1_MODE_OFF);
   else if (oc->dpms_state == OUTPUT_CONFIG_DPMS_ON)
     output_set_power(wlr_output, ZWLR_OUTPUT_POWER_V1_MODE_ON);
+
+  if (output) {
+    wlr_color_transform_unref(output->color_transform);
+    if (oc->color_transform)
+      wlr_color_transform_ref(oc->color_transform);
+    output->color_transform = oc->color_transform;
+  }
 }
 
 void output_apply_all_config(void) {

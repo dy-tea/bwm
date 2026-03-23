@@ -368,13 +368,10 @@ gesture hold:*
 	bmsg desktop -f -l prev
 ```
 
-## IPC Commands (Advanced)
-
-These commands can be used in scripts via `bmsg`:
-
 ### Output Commands
 
 ```
+bmsg output list
 bmsg output <name> enable
 bmsg output <name> disable
 bmsg output <name> mode <width>x<height>[@<refresh>]
@@ -384,7 +381,27 @@ bmsg output <name> transform <normal|90|180|270|flipped|flipped-90|flipped-270>
 bmsg output <name> dpms on|off
 bmsg output <name> adaptive_sync on|off
 bmsg output <name> render_bit_depth 8|10
+bmsg output <name> color_profile gamma22
+bmsg output <name> color_profile srgb
+bmsg output <name> color_profile icc /path/to/profile.icc
 ```
+
+`output list` (also `--list` / `-l`) returns a JSON array of all connected outputs. Each entry includes:
+
+- `name` — connector name (e.g. `DP-1`, `HDMI-A-1`)
+- `description` — human-readable description string
+- `make` / `model` / `serial` — manufacturer, model, and serial number
+- `width` / `height` — current resolution in pixels
+- `refresh` — current refresh rate in mHz (e.g. `143856` = 143.856 Hz)
+- `scale` — current scale factor
+- `phys_width` / `phys_height` — physical display size in millimeters
+- `enabled` — whether the output is currently active
+
+`color_profile` controls the color transform applied to the output:
+
+- `gamma22` — default gamma 2.2, no transform applied
+- `srgb` — apply an sRGB inverse EOTF transfer function (useful for HDR-capable displays running in SDR mode)
+- `icc <path>` — load a custom ICC color profile from a file and apply it as a linear-to-display transform
 
 ### Input Commands
 

@@ -2,6 +2,7 @@
 
 #include <wayland-server.h>
 #include <wlr/util/box.h>
+#include <wlr/render/color.h>
 #include <time.h>
 
 struct monitor_t;
@@ -41,6 +42,8 @@ struct bwm_output {
 
   enum scale_filter_mode scale_filter_mode;
   enum wl_output_subpixel detected_subpixel;
+
+  struct wlr_color_transform *color_transform;
 };
 
 void handle_new_output(struct wl_listener *listener, void *data);
