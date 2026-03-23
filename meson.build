@@ -8,8 +8,17 @@ add_project_arguments('-DWLR_USE_UNSTABLE', language: 'c')
 
 wayland_protos = dependency('wayland-protocols')
 
+wlroots_version = ['>=0.20.0', '<0.21.0']
+subproject(
+	'wlroots',
+	default_options: ['examples=false'],
+	required: false,
+	version: wlroots_version,
+)
+wlroots = dependency('wlroots-0.20', version: wlroots_version, fallback: 'wlroots')
+
 libs = [
-	dependency('wlroots-0.20'),
+	wlroots,
 	dependency('wayland-server'),
 	dependency('xkbcommon'),
 	dependency('libinput'),
