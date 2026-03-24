@@ -9,6 +9,7 @@
 #include "input.h"
 #include "scroller.h"
 #include "input_method.h"
+#include "xwayland.h"
 #include <stdlib.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
@@ -421,21 +422,36 @@ void toggle_floating(void) {
     n->hidden = false;
     wlr_scene_node_reparent(&scene_tree->node, server.tile_tree);
 
+    n->client->last_state = n->client->state;
+    n->client->state = STATE_TILED;
+
     node_t *ref = mon->desk->focus != n ? mon->desk->focus : NULL;
     insert_node(mon, mon->desk, n, ref);
 
-    set_state(mon, mon->desk, n, STATE_TILED);
+    arrange(mon, mon->desk, true);
     wlr_log(WLR_INFO, "Window tiled");
   } else if (n->client->state == STATE_TILED) {
-    n->client->floating_rectangle = n->rectangle;
+    n->client->floating_rectangle = n->client->tiled_rectangle;
 
     remove_node(mon, mon->desk, n);
     n->hidden = true;
+
+    if (n->client->toplevel) {
+      wlr_scene_node_set_position(&n->client->toplevel->scene_tree->node,
+        n->client->floating_rectangle.x, n->client->floating_rectangle.y);
+      toplevel_center_and_clip_surface(n->client->toplevel);
+    } else if (n->client->xwayland_view)
+      wlr_scene_node_set_position(&n->client->xwayland_view->scene_tree->node,
+        n->client->floating_rectangle.x, n->client->floating_rectangle.y);
+
     wlr_scene_node_reparent(&scene_tree->node, server.float_tree);
-    node_set_dirty(n);
 
     // restore focus
     mon->desk->focus = n;
+    if (n->client->toplevel)
+      focus_toplevel(n->client->toplevel);
+    else if (n->client->xwayland_view)
+      xwayland_view_set_activated(n->client->xwayland_view, true);
 
     set_state(mon, mon->desk, n, STATE_FLOATING);
     wlr_log(WLR_INFO, "Window floating");

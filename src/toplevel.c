@@ -126,19 +126,13 @@ static void handle_foreign_destroy(struct wl_listener *listener, void *data) {
   wl_list_remove(&toplevel->foreign_destroy.link);
 }
 
-static void toplevel_center_and_clip_surface(struct bwm_toplevel *toplevel) {
+void toplevel_center_and_clip_surface(struct bwm_toplevel *toplevel) {
   if (!toplevel || !toplevel->content_tree || !toplevel->node || !toplevel->node->client)
     return;
 
   client_t *c = toplevel->node->client;
   bool floating = (c->state == STATE_FLOATING);
   int x = 0, y = 0;
-
-  if (floating) {
-    struct wlr_box *rect = &c->floating_rectangle;
-    x = (rect->width - toplevel->geometry.width) / 2 > 0 ? (rect->width - toplevel->geometry.width) / 2 : 0;
-    y = (rect->height - toplevel->geometry.height) / 2 > 0 ? (rect->height - toplevel->geometry.height) : 0;
-  }
 
   wlr_scene_node_set_position(&toplevel->content_tree->node, x, y);
 
