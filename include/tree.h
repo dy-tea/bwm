@@ -73,6 +73,7 @@ void node_set_pending_hidden(node_t *n, bool hidden);
 
 // Debug helpers
 void print_tree(node_t *n, int depth);
+void validate_tree(const char *context, desktop_t *d);
 
 struct wlr_scene_tree *client_get_scene_tree(client_t *client);
 
@@ -88,4 +89,4 @@ void update_border_colors(struct wlr_scene_tree *border_tree, struct wlr_scene_r
 // macros for state checking
 #define IS_TILED(c) (is_tiled(c))
 #define IS_FLOATING(c) (is_floating(c))
-#define IS_RECEPTACLE(n) ((n) != NULL && (n)->client == NULL)
+#define IS_RECEPTACLE(n) ((n) != NULL && (n)->client == NULL && is_leaf(n))

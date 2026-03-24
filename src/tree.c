@@ -379,8 +379,9 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
     // fix tree structure
     if ((first_valid && !second_valid) || (!first_valid && second_valid)) {
       node_t *valid_child = first_valid ? n->first_child : n->second_child;
-      wlr_log(WLR_DEBUG, "Node %u has only one valid child (first=%d, second=%d), promoting child %u",
-              n->id, first_valid, second_valid, valid_child->id);
+      wlr_log(WLR_ERROR, "apply_layout: node %u has only one valid child (first_valid=%d second_valid=%d) - "
+        "promoting child %u; this indicates a tree inconsistency that should have been "
+        "resolved by remove_node", n->id, first_valid, second_valid, valid_child->id);
 
       if (n->parent != NULL) {
         if (is_first_child(n))
@@ -490,7 +491,21 @@ node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
   if (d == NULL || n == NULL)
     return NULL;
 
+  wlr_log(WLR_DEBUG, "insert_node: n=%u (state=%d hidden=%d parent=%u) f=%u root=%u focus=%u",
+    n->id, n->client ? n->client->state : -1, n->hidden,
+    n->parent ? n->parent->id : 0,
+    f ? f->id : 0,
+    d->root ? d->root->id : 0,
+    d->focus ? d->focus->id : 0);
+
+  if (n->parent != NULL) {
+    wlr_log(WLR_ERROR, "insert_node: node %u already has parent %u, inserting while still in tree",
+      n->id, n->parent->id);
+  }
+
   if (n->client && IS_FLOATING(n->client)) {
+    wlr_log(WLR_ERROR, "insert_node: node %u is floating (state=%d), should have been set to tiled first",
+      n->id, n->client->state);
     n->parent = NULL;
     return NULL;
   }
@@ -499,13 +514,15 @@ node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
     f = d->root;
 
   if (f == NULL) {
+    wlr_log(WLR_DEBUG, "insert_node: empty tree, node %u becomes root", n->id);
     d->root = n;
     n->parent = NULL;
     return f;
   }
 
-  // If f is a receptacle with no preselection, replace it
+  // if f is a receptacle (leaf with no client) with no preselection, replace it
   if (IS_RECEPTACLE(f) && f->presel == NULL) {
+    wlr_log(WLR_DEBUG, "insert_node: replacing receptacle %u with node %u", f->id, n->id);
     node_t *p = f->parent;
     if (p != NULL) {
       if (is_first_child(f))
@@ -668,6 +685,13 @@ node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
     presel_cancel(m, d, f);
   }
 
+  wlr_log(WLR_DEBUG, "insert_node: done, n=%u parent=%u root=%u",
+    n->id, n->parent ? n->parent->id : 0, d->root ? d->root->id : 0);
+
+  if (d->root && d->root->parent != NULL)
+    wlr_log(WLR_ERROR, "insert_node: post-insert root %u has non-NULL parent %u, tree split detected",
+      d->root->id, d->root->parent->id);
+
   return f;
 }
 
@@ -675,16 +699,22 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
   if (n == NULL || d == NULL)
     return;
 
-  wlr_log(WLR_DEBUG, "remove_node: Removing node %u from desktop %s (root=%p)",
-          n->id, d->name, (void*)d->root);
+  wlr_log(WLR_DEBUG, "remove_node: node=%u state=%d parent=%u root=%u focus=%u",
+    n->id, n->client ? n->client->state : -1,
+    n->parent ? n->parent->id : 0,
+    d->root ? d->root->id : 0,
+    d->focus ? d->focus->id : 0);
 
   node_t *p = n->parent;
   bool n_is_first = is_first_child(n);
 
   if (p == NULL) {
     if (d->root != n) {
-      wlr_log(WLR_DEBUG, "remove_node: Node %u has no parent and is not root, skipping tree fixup",
-              n->id);
+      if (n->client && IS_TILED(n->client))
+        wlr_log(WLR_ERROR, "remove_node: tiled node %u has no parent and is not root, tree is corrupt (root=%u)",
+          n->id, d->root ? d->root->id : 0);
+      else
+        wlr_log(WLR_DEBUG, "remove_node: node %u has no parent and is not root, already detached", n->id);
       if (d->focus == n)
         d->focus = d->root ? first_extrema(d->root) : NULL;
       return;
@@ -786,6 +816,15 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
         focus_toplevel(d->focus->client->toplevel);
     }
   }
+
+  wlr_log(WLR_DEBUG, "remove_node: done, root=%u focus=%u n->parent=%u",
+    d->root ? d->root->id : 0,
+    d->focus ? d->focus->id : 0,
+    n->parent ? n->parent->id : 0);
+
+  if (d->root && d->root->parent != NULL)
+    wlr_log(WLR_ERROR, "remove_node: post-remove root %u has non-NULL parent %u, tree split detected",
+      d->root->id, d->root->parent->id);
 }
 
 void close_node(node_t *n) {
@@ -1218,6 +1257,82 @@ void print_tree(node_t *n, int depth) {
     print_tree(n->first_child, depth + 1);
     print_tree(n->second_child, depth + 1);
   }
+}
+
+static bool validate_subtree(node_t *n, node_t *expected_parent, int depth) {
+  if (n == NULL)
+    return true;
+
+  if (depth > 64) {
+    wlr_log(WLR_ERROR, "validate_tree: depth limit reached at node %u, possible cycle", n->id);
+    return false;
+  }
+
+  if (n->parent != expected_parent) {
+    wlr_log(WLR_ERROR, "validate_tree: node %u has wrong parent: expected %u, got %u",
+      n->id,
+      expected_parent ? expected_parent->id : 0,
+      n->parent ? n->parent->id : 0);
+    return false;
+  }
+
+  if (is_leaf(n))
+    return true;
+
+  bool ok = true;
+  if (n->first_child == NULL) {
+    wlr_log(WLR_ERROR, "validate_tree: internal node %u has NULL first_child", n->id);
+    ok = false;
+  }
+  if (n->second_child == NULL) {
+    wlr_log(WLR_ERROR, "validate_tree: internal node %u has NULL second_child", n->id);
+    ok = false;
+  }
+  if (!ok)
+    return false;
+
+  ok &= validate_subtree(n->first_child, n, depth + 1);
+  ok &= validate_subtree(n->second_child, n, depth + 1);
+  return ok;
+}
+
+void validate_tree(const char *context, desktop_t *d) {
+  if (d == NULL)
+    return;
+
+  if (d->root == NULL) {
+    wlr_log(WLR_DEBUG, "validate_tree [%s]: root is NULL", context);
+    return;
+  }
+
+  if (d->root->parent != NULL) {
+    wlr_log(WLR_ERROR,
+            "validate_tree [%s]: d->root (node %u) has non-NULL parent (node %u), second tree detected",
+            context, d->root->id, d->root->parent->id);
+    return;
+  }
+
+  if (!validate_subtree(d->root, NULL, 0)) {
+    wlr_log(WLR_ERROR, "validate_tree [%s]: tree is CORRUPT, my life is OVER :deadge: (root=%u)", context, d->root->id);
+    return;
+  }
+
+  // verify d->focus is either in the tree or explicitly floating/NULL
+  if (d->focus != NULL && d->focus->client != NULL && IS_TILED(d->focus->client)) {
+    bool found = false;
+    for (node_t *f = first_extrema(d->root); f != NULL; f = next_leaf(f, d->root)) {
+      if (f == d->focus) {
+        found = true;
+        break;
+      }
+    }
+    if (!found)
+      wlr_log(WLR_ERROR, "validate_tree [%s]: d->focus (node %u, tiled) is NOT reachable from root %u, second tree",
+        context, d->focus->id, d->root->id);
+  }
+
+  wlr_log(WLR_DEBUG, "validate_tree [%s]: OK (root=%u, focus=%u)", context,
+    d->root->id, d->focus ? d->focus->id : 0);
 }
 
 static int hex_digit(char c) {

@@ -418,7 +418,17 @@ void toggle_floating(void) {
     return;
   }
 
+  wlr_log(WLR_INFO, "toggle_floating: node=%u state=%d hidden=%d parent=%u root=%u focus=%u",
+    n->id, n->client->state, n->hidden,
+    n->parent ? n->parent->id : 0,
+    mon->desk->root ? mon->desk->root->id : 0,
+    mon->desk->focus ? mon->desk->focus->id : 0);
+
   if (n->client->state == STATE_FLOATING) {
+    if (n->parent != NULL)
+      wlr_log(WLR_ERROR, "toggle_floating: floating node %u has non-NULL parent %u, unexpected state",
+       n->id, n->parent->id);
+
     n->hidden = false;
     wlr_scene_node_reparent(&scene_tree->node, server.tile_tree);
 
@@ -429,8 +439,15 @@ void toggle_floating(void) {
     insert_node(mon, mon->desk, n, ref);
 
     arrange(mon, mon->desk, true);
-    wlr_log(WLR_INFO, "Window tiled");
+
+    wlr_log(WLR_INFO, "toggle_floating: now tiled, node=%u parent=%u root=%u",
+      n->id, n->parent ? n->parent->id : 0,
+      mon->desk->root ? mon->desk->root->id : 0);
   } else if (n->client->state == STATE_TILED) {
+    if (n->parent == NULL && mon->desk->root != n)
+      wlr_log(WLR_ERROR, "toggle_floating: tiled node %u has no parent and is not root, already detached",
+        n->id);
+
     n->client->floating_rectangle = n->client->tiled_rectangle;
 
     remove_node(mon, mon->desk, n);
@@ -454,7 +471,10 @@ void toggle_floating(void) {
       xwayland_view_set_activated(n->client->xwayland_view, true);
 
     set_state(mon, mon->desk, n, STATE_FLOATING);
-    wlr_log(WLR_INFO, "Window floating");
+    wlr_log(WLR_INFO, "toggle_floating: now floating, node=%u root=%u focus=%u",
+      n->id,
+      mon->desk->root ? mon->desk->root->id : 0,
+      mon->desk->focus ? mon->desk->focus->id : 0);
   }
 }
 
