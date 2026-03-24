@@ -32,3 +32,7 @@ bwm -c ./examples/
 The **bwmrc** is a bash file that is run at startup, and can be used to configure settings and launch applications (like an **.xinitrc**).
 
 The **bwmhkrc** is a config file for your hotkeys, and is reloaded on every save. It uses a config format similar to [sxhkd](https://github.com/baskerville/sxhkd) and can execute compositor binds by calling the `bmsg` command.
+
+## Links
+
+[![Hypercommit](https://img.shields.io/badge/Hypercommit-DB2475)](https://hypercommit.com/bwm)
