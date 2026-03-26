@@ -26,8 +26,9 @@
 
 bool blur_enabled = true;
 enum blur_algorithm blur_algorithm = BLUR_ALGORITHM_KAWASE;
-int blur_passes = 3;
+int blur_passes = 1;
 float blur_radius = 8.0f;
+int blur_downsample = 4;
 bool mica_enabled = false;
 float mica_tint[4] = {0.12f, 0.12f, 0.14f, 1.0f};
 float mica_tint_strength = 0.35f;
@@ -94,21 +95,34 @@ static const char *frag_gauss_v_src =
   "    gl_FragColor = color / total;\n"
   "}\n";
 
-static const char *frag_box_src =
+static const char *frag_box_h_src =
   "precision mediump float;\n"
   "uniform sampler2D tex;\n"
   "uniform vec2 texel_size;\n"
   "uniform float radius;\n"
   "varying vec2 v_uv;\n"
   "void main() {\n"
-  "  vec4 color = vec4(0.0); float count = 0.0;\n"
-  "  for (float x = -radius; x <= radius; x += 1.0) {\n"
-  "    for (float y = -radius; y <= radius; y += 1.0) {\n"
-  "      color += texture2D(tex, v_uv + vec2(x, y) * texel_size);\n"
-  "      count += 1.0;\n"
-  "    }\n"
-  "  }\n"
-  "  gl_FragColor = color / count;\n"
+  "    float r = floor(radius);\n"
+  "    float count = 2.0 * r + 1.0;\n"
+  "    vec4 color = vec4(0.0);\n"
+  "    for (float i = -r; i <= r; i += 1.0)\n"
+  "        color += texture2D(tex, v_uv + vec2(i * texel_size.x, 0.0));\n"
+  "    gl_FragColor = color / count;\n"
+  "}\n";
+
+static const char *frag_box_v_src =
+  "precision mediump float;\n"
+  "uniform sampler2D tex;\n"
+  "uniform vec2 texel_size;\n"
+  "uniform float radius;\n"
+  "varying vec2 v_uv;\n"
+  "void main() {\n"
+  "    float r = floor(radius);\n"
+  "    float count = 2.0 * r + 1.0;\n"
+  "    vec4 color = vec4(0.0);\n"
+  "    for (float i = -r; i <= r; i += 1.0)\n"
+  "        color += texture2D(tex, v_uv + vec2(0.0, i * texel_size.y));\n"
+  "    gl_FragColor = color / count;\n"
   "}\n";
 
 static const char *frag_blit_src =
@@ -330,31 +344,38 @@ static void blur_pass(GLuint src_tex, GLuint dst_fbo, int w, int h, int pass_ind
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, src_tex);
 
-  switch (blur_algorithm) {
-  case BLUR_ALGORITHM_KAWASE:
-    glUseProgram(blur_ctx.prog_kawase);
-    glUniform1i(blur_ctx.u_kawase.tex, 0);
-    glUniform2f(blur_ctx.u_kawase.halfpixel, 0.5f / (float)w, 0.5f / (float)h);
-    glUniform1f(blur_ctx.u_kawase.offset, (float)(pass_index + 1));
-    break;
-  case BLUR_ALGORITHM_GAUSSIAN:
-    glUseProgram(blur_ctx.prog_gauss_h);
-    glUniform1i(blur_ctx.u_gauss.tex, 0);
-    glUniform2f(blur_ctx.u_gauss.texel_size, 1.0f / w, 1.0f / h);
-    glUniform1f(blur_ctx.u_gauss.radius, blur_radius);
-    break;
-  case BLUR_ALGORITHM_BOX:
-    glUseProgram(blur_ctx.prog_box);
-    glUniform1i(blur_ctx.u_box.tex, 0);
-    glUniform2f(blur_ctx.u_box.texel_size, 1.0f / w, 1.0f / h);
-    glUniform1f(blur_ctx.u_box.radius, blur_radius);
-    break;
-  default:
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    return;
-  }
+  glUseProgram(blur_ctx.prog_kawase);
+  glUniform1i(blur_ctx.u_kawase.tex, 0);
+  glUniform2f(blur_ctx.u_kawase.halfpixel, 0.5f / (float)w, 0.5f / (float)h);
+  glUniform1f(blur_ctx.u_kawase.offset, (float)(pass_index + 1));
+
   draw_quad();
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+static void box_pass(GLuint src_tex, GLuint ping_fbo, GLuint ping_tex,
+    GLuint pong_fbo, int w, int h) {
+  // H: src_tex -> ping_fbo
+  glBindFramebuffer(GL_FRAMEBUFFER, ping_fbo);
+  glViewport(0, 0, w, h);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, src_tex);
+  glUseProgram(blur_ctx.prog_box_h);
+  glUniform1i(blur_ctx.u_box.tex, 0);
+  glUniform2f(blur_ctx.u_box.texel_size, 1.0f / w, 1.0f / h);
+  glUniform1f(blur_ctx.u_box.radius, blur_radius);
+  draw_quad();
+
+  // V: ping_tex -> pong_fbo
+  glBindFramebuffer(GL_FRAMEBUFFER, pong_fbo);
+  glBindTexture(GL_TEXTURE_2D, ping_tex);
+  glUseProgram(blur_ctx.prog_box_v);
+  glUniform1i(blur_ctx.u_box.tex, 0);
+  glUniform2f(blur_ctx.u_box.texel_size, 1.0f / w, 1.0f / h);
+  glUniform1f(blur_ctx.u_box.radius, blur_radius);
+  draw_quad();
+
   glBindTexture(GL_TEXTURE_2D, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
@@ -403,6 +424,11 @@ static GLuint apply_blur(struct bwm_blur_output_ctx *ctx,
         ctx->fbo[pong], w, h);
       current = ctx->tex[pong];
       ping = pong;
+    } else if (blur_algorithm == BLUR_ALGORITHM_BOX) {
+      box_pass(current, ctx->fbo[ping], ctx->tex[ping],
+        ctx->fbo[pong], w, h);
+      current = ctx->tex[pong];
+      ping = pong;
     } else {
       blur_pass(current, ctx->fbo[ping], w, h, i);
       current = ctx->tex[ping];
@@ -432,13 +458,15 @@ bool blur_init(void) {
   blur_ctx.prog_kawase    = link_program(frag_kawase_src);
   blur_ctx.prog_gauss_h   = link_program(frag_gauss_h_src);
   blur_ctx.prog_gauss_v   = link_program(frag_gauss_v_src);
-  blur_ctx.prog_box       = link_program(frag_box_src);
+  blur_ctx.prog_box_h     = link_program(frag_box_h_src);
+  blur_ctx.prog_box_v     = link_program(frag_box_v_src);
   blur_ctx.prog_blit      = link_program(frag_blit_src);
   blur_ctx.prog_mica_tint = link_program(frag_mica_tint_src);
   blur_ctx.prog_ext_blit  = link_program(frag_ext_blit_src);
 
-  if (!blur_ctx.prog_kawase || !blur_ctx.prog_gauss_h || !blur_ctx.prog_gauss_v || !blur_ctx.prog_box ||
-      !blur_ctx.prog_blit || !blur_ctx.prog_mica_tint) {
+  if (!blur_ctx.prog_kawase || !blur_ctx.prog_gauss_h || !blur_ctx.prog_gauss_v ||
+      !blur_ctx.prog_box_h  || !blur_ctx.prog_box_v   ||
+      !blur_ctx.prog_blit   || !blur_ctx.prog_mica_tint) {
     wlr_log(WLR_ERROR, "blur: one or more required shaders failed to compile");
     egl_unset_current();
     return false;
@@ -452,9 +480,9 @@ bool blur_init(void) {
   blur_ctx.u_gauss.texel_size = glGetUniformLocation(blur_ctx.prog_gauss_h, "texel_size");
   blur_ctx.u_gauss.radius = glGetUniformLocation(blur_ctx.prog_gauss_h, "radius");
 
-  blur_ctx.u_box.tex = glGetUniformLocation(blur_ctx.prog_box, "tex");
-  blur_ctx.u_box.texel_size = glGetUniformLocation(blur_ctx.prog_box, "texel_size");
-  blur_ctx.u_box.radius = glGetUniformLocation(blur_ctx.prog_box, "radius");
+  blur_ctx.u_box.tex = glGetUniformLocation(blur_ctx.prog_box_h, "tex");
+  blur_ctx.u_box.texel_size = glGetUniformLocation(blur_ctx.prog_box_h, "texel_size");
+  blur_ctx.u_box.radius = glGetUniformLocation(blur_ctx.prog_box_h, "radius");
 
   blur_ctx.u_blit.tex = glGetUniformLocation(blur_ctx.prog_blit, "tex");
 
@@ -488,7 +516,8 @@ void blur_fini(void) {
   glDeleteProgram(blur_ctx.prog_kawase);
   glDeleteProgram(blur_ctx.prog_gauss_h);
   glDeleteProgram(blur_ctx.prog_gauss_v);
-  glDeleteProgram(blur_ctx.prog_box);
+  glDeleteProgram(blur_ctx.prog_box_h);
+  glDeleteProgram(blur_ctx.prog_box_v);
   glDeleteProgram(blur_ctx.prog_blit);
   glDeleteProgram(blur_ctx.prog_mica_tint);
   if (blur_ctx.prog_ext_blit)
@@ -505,10 +534,13 @@ struct bwm_blur_output_ctx *blur_output_init(int width, int height) {
   if (!ctx) return NULL;
   ctx->width  = width;
   ctx->height = height;
+  int ds = blur_downsample > 0 ? blur_downsample : 1;
+  ctx->blur_w = (width  / ds) > 0 ? (width  / ds) : 1;
+  ctx->blur_h = (height / ds) > 0 ? (height / ds) : 1;
 
   egl_make_current();
-  bool ok = create_fbo(width, height, &ctx->fbo[0], &ctx->tex[0]) &&
-    create_fbo(width, height, &ctx->fbo[1], &ctx->tex[1]);
+  bool ok = create_fbo(ctx->blur_w, ctx->blur_h, &ctx->fbo[0], &ctx->tex[0]) &&
+    create_fbo(ctx->blur_w, ctx->blur_h, &ctx->fbo[1], &ctx->tex[1]);
   egl_unset_current();
 
   if (!ok) {
@@ -541,35 +573,45 @@ void blur_output_fini(struct bwm_blur_output_ctx *ctx) {
   if (ctx->mica_buf) {
     wlr_buffer_unlock(ctx->mica_buf);
     ctx->mica_buf = NULL;
+    ctx->mica_buf_fbo = 0;
   }
   if (ctx->blur_buf) {
     wlr_buffer_unlock(ctx->blur_buf);
     ctx->blur_buf = NULL;
-	}
+    ctx->blur_buf_fbo = 0;
+  }
   destroy_capture_output(ctx);
   free(ctx);
 }
 
 void blur_output_resize(struct bwm_blur_output_ctx *ctx, int width, int height) {
   if (!ctx || !blur_ctx.available) return;
-  if (ctx->width == width && ctx->height == height) return;
+  int ds = blur_downsample > 0 ? blur_downsample : 1;
+  int new_bw = (width  / ds) > 0 ? (width  / ds) : 1;
+  int new_bh = (height / ds) > 0 ? (height / ds) : 1;
+  if (ctx->width == width && ctx->height == height &&
+      ctx->blur_w == new_bw && ctx->blur_h == new_bh) return;
 
   egl_make_current();
   destroy_fbo(&ctx->fbo[0], &ctx->tex[0]);
   destroy_fbo(&ctx->fbo[1], &ctx->tex[1]);
   ctx->width  = width;
   ctx->height = height;
-  create_fbo(width, height, &ctx->fbo[0], &ctx->tex[0]);
-  create_fbo(width, height, &ctx->fbo[1], &ctx->tex[1]);
+  ctx->blur_w = new_bw;
+  ctx->blur_h = new_bh;
+  create_fbo(ctx->blur_w, ctx->blur_h, &ctx->fbo[0], &ctx->tex[0]);
+  create_fbo(ctx->blur_w, ctx->blur_h, &ctx->fbo[1], &ctx->tex[1]);
   egl_unset_current();
 
   if (ctx->mica_buf) {
     wlr_buffer_unlock(ctx->mica_buf);
     ctx->mica_buf = NULL;
+    ctx->mica_buf_fbo = 0;
   }
   if (ctx->blur_buf) {
     wlr_buffer_unlock(ctx->blur_buf);
     ctx->blur_buf = NULL;
+    ctx->blur_buf_fbo = 0;
   }
 
   ctx->mica_dirty = true;
@@ -652,7 +694,7 @@ static GLuint capture_bg_to_tex1(struct bwm_output *output, struct bwm_blur_outp
     wlr_output_commit_state(ctx->capture_output, &cap_state);
 
   egl_make_current();
-  glFinish();
+  glFlush();
 
   wl_list_for_each(tl, &server.toplevels, link)
     if (tl->blur_scene_hidden)
@@ -693,7 +735,7 @@ static GLuint capture_bg_to_tex1(struct bwm_output *output, struct bwm_blur_outp
       glDisable(GL_BLEND);
       glDisable(GL_SCISSOR_TEST);
       glBindFramebuffer(GL_FRAMEBUFFER, ctx->fbo[1]);
-      glViewport(0, 0, w, h);
+      glViewport(0, 0, ctx->blur_w, ctx->blur_h);
       glActiveTexture(GL_TEXTURE0);
       glBindTexture(GL_TEXTURE_2D, (GLuint)attach_name);
       glUseProgram(blur_ctx.prog_blit);
@@ -708,10 +750,26 @@ static GLuint capture_bg_to_tex1(struct bwm_output *output, struct bwm_blur_outp
         glBindFramebuffer(GL_FRAMEBUFFER, capture_fbo);
         glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glBindTexture(GL_TEXTURE_2D, ctx->tex[1]);
+
+        GLuint tmp_tex;
+        glGenTextures(1, &tmp_tex);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, tmp_tex);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-        glBindTexture(GL_TEXTURE_2D, 0);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         free(pixels);
+
+        glDisable(GL_BLEND);
+        glDisable(GL_SCISSOR_TEST);
+        glBindFramebuffer(GL_FRAMEBUFFER, ctx->fbo[1]);
+        glViewport(0, 0, ctx->blur_w, ctx->blur_h);
+        glUseProgram(blur_ctx.prog_blit);
+        glUniform1i(blur_ctx.u_blit.tex, 0);
+        draw_quad();
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteTextures(1, &tmp_tex);
         result = ctx->tex[1];
       }
     }
@@ -723,83 +781,32 @@ static GLuint capture_bg_to_tex1(struct bwm_output *output, struct bwm_blur_outp
   return result;
 }
 
-static struct wlr_buffer *make_mica_buf(GLuint blurred_tex, int w, int h) {
+// ensure buf/fbo are allocated; returns fbo or 0 on failure. Must be called
+// inside egl_make_current(). Allocates once; subsequent calls reuse the buffer.
+static GLuint ensure_output_buf(struct wlr_buffer **buf_out, GLuint *fbo_out,
+    int w, int h) {
+  if (*buf_out)
+    return *fbo_out;
+
   const struct wlr_drm_format_set *fmts = wlr_renderer_get_render_formats(server.renderer);
   const struct wlr_drm_format *fmt = fmts ? wlr_drm_format_set_get(fmts, DRM_FORMAT_ARGB8888) : NULL;
   if (!fmt) fmt = fmts ? wlr_drm_format_set_get(fmts, DRM_FORMAT_XRGB8888) : NULL;
-  if (!fmt) {
-    wlr_log(WLR_ERROR, "blur: no suitable buffer format for mica");
-    return NULL;
-  }
+  if (!fmt) return 0;
 
   struct wlr_buffer *buf = wlr_allocator_create_buffer(server.allocator, w, h, fmt);
-  if (!buf) return NULL;
+  if (!buf) return 0;
 
-  egl_make_current();
-  GLuint dest_fbo = wlr_gles2_renderer_get_buffer_fbo(server.renderer, buf);
-if (!dest_fbo) {
-    egl_unset_current();
+  GLuint fbo = wlr_gles2_renderer_get_buffer_fbo(server.renderer, buf);
+  if (!fbo) {
     wlr_buffer_drop(buf);
-    return NULL;
+    return 0;
   }
-
-  glDisable(GL_BLEND);
-  glDisable(GL_SCISSOR_TEST);
-  glBindFramebuffer(GL_FRAMEBUFFER, dest_fbo);
-  glViewport(0, 0, w, h);
-
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, blurred_tex);
-  glUseProgram(blur_ctx.prog_mica_tint);
-  glUniform1i(blur_ctx.u_mica.tex, 0);
-  glUniform4fv(blur_ctx.u_mica.tint, 1, mica_tint);
-  glUniform1f(blur_ctx.u_mica.tint_strength, mica_tint_strength);
-  draw_quad();
-
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glFinish();
-  egl_unset_current();
 
   wlr_buffer_lock(buf);
   wlr_buffer_drop(buf);
-  return buf;
-}
-
-static struct wlr_buffer *make_blur_buf(GLuint blurred_tex, int w, int h) {
-  const struct wlr_drm_format_set *fmts = wlr_renderer_get_render_formats(server.renderer);
-  const struct wlr_drm_format *fmt = fmts ? wlr_drm_format_set_get(fmts, DRM_FORMAT_ARGB8888) : NULL;
-  if (!fmt) fmt = fmts ? wlr_drm_format_set_get(fmts, DRM_FORMAT_XRGB8888) : NULL;
-  if (!fmt) return NULL;
-
-  struct wlr_buffer *buf = wlr_allocator_create_buffer(server.allocator, w, h, fmt);
-  if (!buf) return NULL;
-
-  egl_make_current();
-  GLuint dest_fbo = wlr_gles2_renderer_get_buffer_fbo(server.renderer, buf);
-  if (!dest_fbo) {
-    egl_unset_current();
-    wlr_buffer_drop(buf);
-    return NULL;
-  }
-
-  glDisable(GL_BLEND);
-  glDisable(GL_SCISSOR_TEST);
-  glBindFramebuffer(GL_FRAMEBUFFER, dest_fbo);
-  glViewport(0, 0, w, h);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, blurred_tex);
-  glUseProgram(blur_ctx.prog_blit);
-  glUniform1i(blur_ctx.u_blit.tex, 0);
-  draw_quad();
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glFinish();
-  egl_unset_current();
-
-  wlr_buffer_lock(buf);
-  wlr_buffer_drop(buf);
-  return buf;
+  *buf_out = buf;
+  *fbo_out = fbo;
+  return fbo;
 }
 
 static bool rebuild_live_blur(struct bwm_output *output,
@@ -811,14 +818,27 @@ static bool rebuild_live_blur(struct bwm_output *output,
   if (!src) return false;
 
   egl_make_current();
-  GLuint blurred = apply_blur(ctx, src, w, h);
+  GLuint blurred = apply_blur(ctx, src, ctx->blur_w, ctx->blur_h);
+
+  GLuint dest_fbo = ensure_output_buf(&ctx->blur_buf, &ctx->blur_buf_fbo, w, h);
+  if (!dest_fbo) {
+    egl_unset_current();
+    return false;
+  }
+
+  glDisable(GL_BLEND);
+  glDisable(GL_SCISSOR_TEST);
+  glBindFramebuffer(GL_FRAMEBUFFER, dest_fbo);
+  glViewport(0, 0, w, h);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, blurred);
+  glUseProgram(blur_ctx.prog_blit);
+  glUniform1i(blur_ctx.u_blit.tex, 0);
+  draw_quad();
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glFlush();
   egl_unset_current();
-
-  struct wlr_buffer *new_buf = make_blur_buf(blurred, w, h);
-  if (!new_buf) return false;
-
-  if (ctx->blur_buf) wlr_buffer_unlock(ctx->blur_buf);
-  ctx->blur_buf = new_buf;
   return true;
 }
 
@@ -861,14 +881,30 @@ static bool rebuild_mica(struct bwm_output *output, struct wlr_scene_output *sce
   if (!src) return false;
 
   egl_make_current();
-  GLuint blurred = apply_blur(ctx, src, w, h);
+  GLuint blurred = apply_blur(ctx, src, ctx->blur_w, ctx->blur_h);
+
+  GLuint dest_fbo = ensure_output_buf(&ctx->mica_buf, &ctx->mica_buf_fbo, w, h);
+  if (!dest_fbo) {
+    egl_unset_current();
+    return false;
+  }
+
+  glDisable(GL_BLEND);
+  glDisable(GL_SCISSOR_TEST);
+  glBindFramebuffer(GL_FRAMEBUFFER, dest_fbo);
+  glViewport(0, 0, w, h);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, blurred);
+  glUseProgram(blur_ctx.prog_mica_tint);
+  glUniform1i(blur_ctx.u_mica.tex, 0);
+  glUniform4fv(blur_ctx.u_mica.tint, 1, mica_tint);
+  glUniform1f(blur_ctx.u_mica.tint_strength, mica_tint_strength);
+  draw_quad();
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glFlush();
   egl_unset_current();
 
-  struct wlr_buffer *new_buf = make_mica_buf(blurred, w, h);
-  if (!new_buf) return false;
-
-  if (ctx->mica_buf) wlr_buffer_unlock(ctx->mica_buf);
-  ctx->mica_buf = new_buf;
   ctx->mica_dirty = false;
   return true;
 }
@@ -917,7 +953,8 @@ void blur_output_frame(struct bwm_output *output, struct wlr_scene_output *scene
     bool any_blur = false;
     struct bwm_toplevel *tl;
     wl_list_for_each(tl, &server.toplevels, link) {
-      if (tl->blur_node && tl->node && tl->node->monitor && tl->node->monitor->output == output) {
+      if (tl->blur_node && tl->node && tl->node->client && tl->node->client->shown &&
+          tl->node->monitor && tl->node->monitor->output == output) {
         any_blur = true;
         break;
       }

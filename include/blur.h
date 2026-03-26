@@ -21,19 +21,23 @@ extern bool blur_enabled;
 extern enum blur_algorithm blur_algorithm;
 extern int blur_passes;
 extern float blur_radius;
+extern int blur_downsample;
 extern bool mica_enabled;
 extern float mica_tint[4];
 extern float mica_tint_strength;
 
 struct bwm_blur_output_ctx {
   int width, height;
+  int blur_w, blur_h;
 
   GLuint fbo[2];
   GLuint tex[2];
 
   struct wlr_buffer *mica_buf;
+  GLuint mica_buf_fbo;
   bool mica_dirty;
   struct wlr_buffer *blur_buf;
+  GLuint blur_buf_fbo;
 
   struct wlr_backend *capture_backend;
   struct wlr_output *capture_output;
@@ -46,7 +50,8 @@ struct bwm_blur_ctx {
   GLuint prog_kawase;
   GLuint prog_gauss_h;
   GLuint prog_gauss_v;
-  GLuint prog_box;
+  GLuint prog_box_h;
+  GLuint prog_box_v;
   GLuint prog_blit;
   GLuint prog_mica_tint;
   GLuint prog_ext_blit;

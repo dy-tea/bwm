@@ -2937,6 +2937,24 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       snprintf(buf, sizeof(buf), "%.2f\n", blur_radius);
       send_success(client_fd, buf);
     }
+  } else if (streq("blur_downsample", *args)) {
+    if (num >= 2) {
+      int val = atoi(args[1]);
+      if (val >= 1 && val <= 8) {
+        blur_downsample = val;
+        for (monitor_t *m = mon_head; m; m = m->next) {
+          if (m->output && m->output->blur_ctx)
+            blur_output_resize(m->output->blur_ctx, m->output->width, m->output->height);
+        }
+        send_success(client_fd, "blur_downsample set\n");
+      } else {
+        send_failure(client_fd, "config blur_downsample: value must be 1-8\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d\n", blur_downsample);
+      send_success(client_fd, buf);
+    }
   } else if (streq("mica_enabled", *args)) {
     if (num >= 2) {
       mica_enabled = (strcmp(args[1], "true") == 0);
