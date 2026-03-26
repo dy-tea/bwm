@@ -36,8 +36,6 @@ struct bwm_blur_output_ctx {
   struct wlr_buffer *mica_buf;
   GLuint mica_buf_fbo;
   bool mica_dirty;
-  struct wlr_buffer *blur_buf;
-  GLuint blur_buf_fbo;
 
   struct wlr_backend *capture_backend;
   struct wlr_output *capture_output;

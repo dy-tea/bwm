@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.h"
+#include <GLES2/gl2.h>
 #include <wayland-server-core.h>
 #include <wayland-server.h>
 #include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
@@ -16,6 +17,8 @@ struct bwm_toplevel {
   struct wlr_scene_buffer *blur_node;
   struct wlr_scene_buffer *mica_node;
   bool blur_scene_hidden;
+  struct wlr_buffer *blur_buf;
+  GLuint blur_buf_fbo;
 
   struct wlr_ext_foreign_toplevel_handle_v1 *ext_foreign_toplevel;
   struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel;

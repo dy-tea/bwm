@@ -577,11 +577,6 @@ void blur_output_fini(struct bwm_blur_output_ctx *ctx) {
     ctx->mica_buf = NULL;
     ctx->mica_buf_fbo = 0;
   }
-  if (ctx->blur_buf) {
-    wlr_buffer_unlock(ctx->blur_buf);
-    ctx->blur_buf = NULL;
-    ctx->blur_buf_fbo = 0;
-  }
   destroy_capture_output(ctx);
   free(ctx);
 }
@@ -610,10 +605,15 @@ void blur_output_resize(struct bwm_blur_output_ctx *ctx, int width, int height) 
     ctx->mica_buf = NULL;
     ctx->mica_buf_fbo = 0;
   }
-  if (ctx->blur_buf) {
-    wlr_buffer_unlock(ctx->blur_buf);
-    ctx->blur_buf = NULL;
-    ctx->blur_buf_fbo = 0;
+
+  /* Free per-toplevel blur buffers since output dimensions changed */
+  struct bwm_toplevel *tl;
+  wl_list_for_each(tl, &server.toplevels, link) {
+    if (tl->blur_buf) {
+      wlr_buffer_unlock(tl->blur_buf);
+      tl->blur_buf = NULL;
+      tl->blur_buf_fbo = 0;
+    }
   }
 
   ctx->mica_dirty = true;
@@ -651,7 +651,8 @@ static bool compute_src_box(struct bwm_output *output, const struct wlr_box *r,
   return true;
 }
 static GLuint capture_bg_to_tex1(struct bwm_output *output, struct bwm_blur_output_ctx *ctx,
-   	struct wlr_scene_output *real_scene_output, bool mica_only) {
+    struct wlr_scene_output *real_scene_output, bool mica_only,
+    struct bwm_toplevel *target_tl) {
   int w = output->width, h = output->height;
 
   if (!ctx->capture_output || !ctx->capture_scene_output)
@@ -673,12 +674,22 @@ static GLuint capture_bg_to_tex1(struct bwm_output *output, struct bwm_blur_outp
   }
 
   struct bwm_toplevel *tl;
-  wl_list_for_each(tl, &server.toplevels, link) {
-    tl->blur_scene_hidden = false;
-    if ((tl->blur_node || tl->mica_node) && tl->scene_tree &&
-        tl->scene_tree->node.enabled) {
-      wlr_scene_node_set_enabled(&tl->scene_tree->node, false);
-      tl->blur_scene_hidden = true;
+  if (target_tl) {
+    /* Per-window blur capture: hide only this window so others show through */
+    target_tl->blur_scene_hidden = false;
+    if (target_tl->scene_tree && target_tl->scene_tree->node.enabled) {
+      wlr_scene_node_set_enabled(&target_tl->scene_tree->node, false);
+      target_tl->blur_scene_hidden = true;
+    }
+  } else {
+    /* Mica capture: hide all toplevels with blur/mica nodes */
+    wl_list_for_each(tl, &server.toplevels, link) {
+      tl->blur_scene_hidden = false;
+      if ((tl->blur_node || tl->mica_node) && tl->scene_tree &&
+          tl->scene_tree->node.enabled) {
+        wlr_scene_node_set_enabled(&tl->scene_tree->node, false);
+        tl->blur_scene_hidden = true;
+      }
     }
   }
 
@@ -698,9 +709,14 @@ static GLuint capture_bg_to_tex1(struct bwm_output *output, struct bwm_blur_outp
   egl_make_current();
   glFlush();
 
-  wl_list_for_each(tl, &server.toplevels, link)
-    if (tl->blur_scene_hidden)
-      wlr_scene_node_set_enabled(&tl->scene_tree->node, true);
+  if (target_tl) {
+    if (target_tl->blur_scene_hidden)
+      wlr_scene_node_set_enabled(&target_tl->scene_tree->node, true);
+  } else {
+    wl_list_for_each(tl, &server.toplevels, link)
+      if (tl->blur_scene_hidden)
+        wlr_scene_node_set_enabled(&tl->scene_tree->node, true);
+  }
 
   wlr_scene_node_set_enabled(&server.top_tree->node, true);
   wlr_scene_node_set_enabled(&server.full_tree->node, true);
@@ -831,46 +847,57 @@ static bool rebuild_live_blur(struct bwm_output *output,
 		struct wlr_scene_output *scene_output) {
   struct bwm_blur_output_ctx *ctx = output->blur_ctx;
   int w = output->width, h = output->height;
+  bool any = false;
 
-  GLuint src = capture_bg_to_tex1(output, ctx, scene_output, false);
-  if (!src) return false;
+  struct bwm_toplevel *tl;
+  wl_list_for_each(tl, &server.toplevels, link) {
+    if (!tl->blur_node || !tl->node || !tl->node->client) continue;
+    if (!tl->node->client->shown) continue;
+    if (!tl->node->monitor || tl->node->monitor->output != output) continue;
 
-  egl_make_current();
-  GLuint blurred = apply_blur(ctx, src, ctx->blur_w, ctx->blur_h);
+    GLuint src = capture_bg_to_tex1(output, ctx, scene_output, false, tl);
+    if (!src) continue;
 
-  GLuint dest_fbo = ensure_output_buf(&ctx->blur_buf, &ctx->blur_buf_fbo, w, h);
-  if (!dest_fbo) {
+    egl_make_current();
+    GLuint blurred = apply_blur(ctx, src, ctx->blur_w, ctx->blur_h);
+
+    GLuint dest_fbo = ensure_output_buf(&tl->blur_buf, &tl->blur_buf_fbo, w, h);
+    if (!dest_fbo) {
+      egl_unset_current();
+      continue;
+    }
+
+    glDisable(GL_BLEND);
+    glDisable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_FRAMEBUFFER, dest_fbo);
+    glViewport(0, 0, w, h);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, blurred);
+    glUseProgram(blur_ctx.prog_blit);
+    glUniform1i(blur_ctx.u_blit.tex, 0);
+    draw_quad();
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glFlush();
     egl_unset_current();
-    return false;
+    any = true;
   }
-
-  glDisable(GL_BLEND);
-  glDisable(GL_SCISSOR_TEST);
-  glBindFramebuffer(GL_FRAMEBUFFER, dest_fbo);
-  glViewport(0, 0, w, h);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, blurred);
-  glUseProgram(blur_ctx.prog_blit);
-  glUniform1i(blur_ctx.u_blit.tex, 0);
-  draw_quad();
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glFlush();
-  egl_unset_current();
-  return true;
+  return any;
 }
 
 static void push_blur_to_toplevels(struct bwm_output *output) {
-  struct wlr_buffer *buf = output->blur_ctx->blur_buf;
-  if (!buf) return;
-
   struct bwm_toplevel *tl;
   wl_list_for_each(tl, &server.toplevels, link) {
     if (!tl->blur_node || !tl->node) continue;
     monitor_t *m = tl->node->monitor;
     if (!m || m->output != output) continue;
 
-    wlr_scene_buffer_set_buffer(tl->blur_node, buf);
+    if (!tl->blur_buf) {
+      wlr_scene_buffer_set_buffer(tl->blur_node, NULL);
+      continue;
+    }
+
+    wlr_scene_buffer_set_buffer(tl->blur_node, tl->blur_buf);
 
     client_t *c = tl->node->client;
     struct wlr_box r;
@@ -895,7 +922,7 @@ static bool rebuild_mica(struct bwm_output *output, struct wlr_scene_output *sce
   struct bwm_blur_output_ctx *ctx = output->blur_ctx;
   int w = output->width, h = output->height;
 
-  GLuint src = capture_bg_to_tex1(output, ctx, scene_output, true);
+  GLuint src = capture_bg_to_tex1(output, ctx, scene_output, true, NULL);
   if (!src) return false;
 
   egl_make_current();
@@ -977,10 +1004,10 @@ void blur_output_frame(struct bwm_output *output, struct wlr_scene_output *scene
         break;
       }
     }
-    if (any_blur)
+    if (any_blur) {
       rebuild_live_blur(output, scene_output);
-    if (any_blur && ctx->blur_buf)
       push_blur_to_toplevels(output);
+    }
   }
 
   if (mica_enabled && ctx->mica_dirty)

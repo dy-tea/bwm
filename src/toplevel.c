@@ -20,6 +20,7 @@
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_ext_image_capture_source_v1.h>
+#include <wlr/types/wlr_buffer.h>
 #include <wlr/util/log.h>
 
 extern struct bwm_server server;
@@ -593,6 +594,11 @@ void toplevel_set_blur(struct bwm_toplevel *tl, bool enabled) {
   } else if (!enabled && tl->blur_node) {
     wlr_scene_node_destroy(&tl->blur_node->node);
     tl->blur_node = NULL;
+    if (tl->blur_buf) {
+      wlr_buffer_unlock(tl->blur_buf);
+      tl->blur_buf = NULL;
+      tl->blur_buf_fbo = 0;
+    }
   }
 }
 
@@ -639,6 +645,11 @@ void toplevel_destroy(struct wl_listener *listener, void *data) {
   if (toplevel->blur_node) {
     wlr_scene_node_destroy(&toplevel->blur_node->node);
     toplevel->blur_node = NULL;
+  }
+  if (toplevel->blur_buf) {
+    wlr_buffer_unlock(toplevel->blur_buf);
+    toplevel->blur_buf = NULL;
+    toplevel->blur_buf_fbo = 0;
   }
 
   if (toplevel->mica_node) {
