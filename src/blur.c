@@ -27,7 +27,7 @@
 bool blur_enabled = true;
 enum blur_algorithm blur_algorithm = BLUR_ALGORITHM_KAWASE;
 int blur_passes = 1;
-float blur_radius = 8.0f;
+float blur_radius = 5.0f;
 int blur_downsample = 4;
 bool mica_enabled = false;
 float mica_tint[4] = {0.12f, 0.12f, 0.14f, 1.0f};
@@ -213,7 +213,8 @@ static bool create_capture_output(struct bwm_blur_output_ctx *ctx, int width, in
 
   wlr_output_init_render(ctx->capture_output,  server.allocator, server.renderer);
 
-  // scene output
+  // scene output, parked off-screen so surfaces don't become associated with it
+  // while we're not actively capturing
   ctx->capture_scene_output = wlr_scene_output_create(server.scene, ctx->capture_output);
   if (!ctx->capture_scene_output) {
     wlr_output_finish(ctx->capture_output);
@@ -225,6 +226,7 @@ static bool create_capture_output(struct bwm_blur_output_ctx *ctx, int width, in
     return false;
   }
 
+  wlr_scene_output_set_position(ctx->capture_scene_output, -0x7fff, -0x7fff);
   wlr_log(WLR_INFO, "blur: created capture output %s", name);
   return true;
 }
@@ -666,7 +668,7 @@ static GLuint capture_bg_to_tex1(struct bwm_output *output, struct bwm_blur_outp
   wlr_scene_node_set_enabled(&server.lock_tree->node, false);
 
   if (mica_only) {
-    wlr_scene_node_set_enabled(&server.tile_tree->node,  false);
+    wlr_scene_node_set_enabled(&server.tile_tree->node, false);
     wlr_scene_node_set_enabled(&server.float_tree->node, false);
   }
 
@@ -700,14 +702,17 @@ static GLuint capture_bg_to_tex1(struct bwm_output *output, struct bwm_blur_outp
     if (tl->blur_scene_hidden)
       wlr_scene_node_set_enabled(&tl->scene_tree->node, true);
 
-  wlr_scene_node_set_enabled(&server.top_tree->node,   true);
-  wlr_scene_node_set_enabled(&server.full_tree->node,  true);
-  wlr_scene_node_set_enabled(&server.over_tree->node,  true);
-  wlr_scene_node_set_enabled(&server.lock_tree->node,  true);
+  wlr_scene_node_set_enabled(&server.top_tree->node, true);
+  wlr_scene_node_set_enabled(&server.full_tree->node, true);
+  wlr_scene_node_set_enabled(&server.over_tree->node, true);
+  wlr_scene_node_set_enabled(&server.lock_tree->node, true);
   if (mica_only) {
-    wlr_scene_node_set_enabled(&server.tile_tree->node,  true);
+    wlr_scene_node_set_enabled(&server.tile_tree->node,true);
     wlr_scene_node_set_enabled(&server.float_tree->node, true);
   }
+
+  // prevent output overlap by parking offscreen
+  wlr_scene_output_set_position(ctx->capture_scene_output, -0x7fff, -0x7fff);
 
   wlr_damage_ring_add_whole(&real_scene_output->damage_ring);
 
