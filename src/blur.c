@@ -736,7 +736,20 @@ static GLuint capture_bg_to_tex1(struct bwm_output *output, struct bwm_blur_outp
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    if (attach_type == GL_TEXTURE && attach_name > 0) {
+    if (attach_type == GL_TEXTURE && attach_name > 0 && blur_ctx.prog_ext_blit) {
+      glDisable(GL_BLEND);
+      glDisable(GL_SCISSOR_TEST);
+      glBindFramebuffer(GL_FRAMEBUFFER, ctx->fbo[1]);
+      glViewport(0, 0, ctx->blur_w, ctx->blur_h);
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_EXTERNAL_OES, (GLuint)attach_name);
+      glUseProgram(blur_ctx.prog_ext_blit);
+      glUniform1i(blur_ctx.u_ext_blit.tex, 0);
+      draw_quad();
+      glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0);
+      glBindFramebuffer(GL_FRAMEBUFFER, 0);
+      result = ctx->tex[1];
+    } else if (attach_type == GL_TEXTURE && attach_name > 0) {
       glDisable(GL_BLEND);
       glDisable(GL_SCISSOR_TEST);
       glBindFramebuffer(GL_FRAMEBUFFER, ctx->fbo[1]);
