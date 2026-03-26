@@ -2,6 +2,7 @@
 #include "server.h"
 #include "types.h"
 #include "toplevel.h"
+#include "blur.h"
 #include "transaction.h"
 #include "workspace.h"
 #include "tree.h"
@@ -782,6 +783,26 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     } else if (strcmp(key, "marked") == 0) {
       n->marked = has_value ? set_value : !n->marked;
       transaction_commit_dirty();
+      send_success(client_fd, "flag changed\n");
+    } else if (strcmp(key, "blur") == 0) {
+      if (!n->client) {
+        send_failure(client_fd, "node -g: no client\n");
+        return;
+      }
+      bool new_blur = has_value ? set_value : !n->client->blur;
+      n->client->blur = new_blur;
+      if (n->client->toplevel)
+        toplevel_set_blur(n->client->toplevel, new_blur);
+      send_success(client_fd, "flag changed\n");
+    } else if (strcmp(key, "mica") == 0) {
+      if (!n->client) {
+        send_failure(client_fd, "node -g: no client\n");
+        return;
+      }
+      bool new_val = has_value ? set_value : !n->client->mica;
+      n->client->mica = new_val;
+      if (n->client->toplevel)
+        toplevel_set_mica(n->client->toplevel, new_val);
       send_success(client_fd, "flag changed\n");
     } else {
       send_failure(client_fd, "node -g: unknown flag\n");
@@ -2867,7 +2888,94 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
     } else {
       send_success(client_fd, record_history ? "true\n" : "false\n");
     }
-  } else {
+  } else if (streq("blur_enabled", *args)) {
+    if (num >= 2) {
+      blur_enabled = (strcmp(args[1], "true") == 0);
+      send_success(client_fd, "blur_enabled set\n");
+    } else {
+      send_success(client_fd, blur_enabled ? "true\n" : "false\n");
+    }
+  } else if (streq("blur_algorithm", *args)) {
+    if (num >= 2) {
+      enum blur_algorithm algo = blur_algorithm_from_str(args[1]);
+      if (algo == BLUR_ALGORITHM_NONE && strcmp(args[1], "none") != 0) {
+        send_failure(client_fd, "config blur_algorithm: unknown algorithm\n");
+      } else {
+        blur_algorithm = algo;
+        send_success(client_fd, "blur_algorithm set\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%s\n", blur_algorithm_to_str(blur_algorithm));
+      send_success(client_fd, buf);
+    }
+  } else if (streq("blur_passes", *args)) {
+    if (num >= 2) {
+      int val = atoi(args[1]);
+      if (val >= 1 && val <= 10) {
+        blur_passes = val;
+        send_success(client_fd, "blur_passes set\n");
+      } else {
+        send_failure(client_fd, "config blur_passes: value must be 1-10\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d\n", blur_passes);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("blur_radius", *args)) {
+    if (num >= 2) {
+      float val = atof(args[1]);
+      if (val > 0.0f) {
+        blur_radius = val;
+        send_success(client_fd, "blur_radius set\n");
+      } else {
+        send_failure(client_fd, "config blur_radius: value must be > 0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.2f\n", blur_radius);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("mica_enabled", *args)) {
+    if (num >= 2) {
+      mica_enabled = (strcmp(args[1], "true") == 0);
+      send_success(client_fd, "mica_enabled set\n");
+    } else {
+      send_success(client_fd, mica_enabled ? "true\n" : "false\n");
+    }
+  } else if (streq("mica_tint_strength", *args)) {
+    if (num >= 2) {
+      float val = atof(args[1]);
+      if (val >= 0.0f && val <= 1.0f) {
+        mica_tint_strength = val;
+        send_success(client_fd, "mica_tint_strength set\n");
+      } else {
+        send_failure(client_fd, "config mica_tint_strength: value must be 0.0-1.0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.3f\n", mica_tint_strength);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("mica_tint", *args)) {
+    if (num >= 2) {
+      float r, g, b, a = 1.0f;
+      int n = sscanf(args[1], "%f %f %f %f", &r, &g, &b, &a);
+      if (n >= 3) {
+        mica_tint[0] = r; mica_tint[1] = g;
+        mica_tint[2] = b; mica_tint[3] = a;
+        send_success(client_fd, "mica_tint set\n");
+      } else {
+        send_failure(client_fd, "config mica_tint: expected \"R G B [A]\"\n");
+      }
+    } else {
+      char buf[128];
+      snprintf(buf, sizeof(buf), "%.3f %.3f %.3f %.3f\n",
+      	mica_tint[0], mica_tint[1], mica_tint[2], mica_tint[3]);
+    send_success(client_fd, buf);
+  }
+} else {
     send_failure(client_fd, "config: unknown setting\n");
   }
 }
@@ -3168,6 +3276,18 @@ static void ipc_cmd_rule(char **args, int num, int client_fd) {
           r->consequence.scroller_proportion_single = val;
           r->consequence.has_scroller_proportion_single = true;
         }
+      } else if (streq("blur=on", arg)) {
+        r->consequence.blur = true;
+        r->consequence.has_blur = true;
+      } else if (streq("blur=off", arg)) {
+        r->consequence.blur = false;
+        r->consequence.has_blur = true;
+      } else if (streq("mica=on", arg)) {
+        r->consequence.mica = true;
+        r->consequence.has_mica = true;
+      } else if (streq("mica=off", arg)) {
+        r->consequence.mica = false;
+        r->consequence.has_mica = true;
       }
 
       args++;

@@ -25,6 +25,8 @@ libs = [
 	dependency('pixman-1'),
 	dependency('xcb'),
 	dependency('xcb-icccm'),
+	dependency('glesv2'),
+	dependency('egl'),
 	wayland_protos,
 ]
 
@@ -93,6 +95,7 @@ executable(
 		'src' / 'scroller.c',
 		'src' / 'xwayland.c',
 		'src' / 'input_method.c',
+		'src' / 'blur.c',
 		wl_protos_src,
 	],
 	include_directories: inc,

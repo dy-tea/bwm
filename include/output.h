@@ -6,6 +6,7 @@
 #include <time.h>
 
 struct monitor_t;
+struct bwm_blur_output_ctx;
 
 enum scale_filter_mode {
 	SCALE_FILTER_AUTO,
@@ -44,6 +45,7 @@ struct bwm_output {
   enum wl_output_subpixel detected_subpixel;
 
   struct wlr_color_transform *color_transform;
+  struct bwm_blur_output_ctx *blur_ctx;
 };
 
 void handle_new_output(struct wl_listener *listener, void *data);

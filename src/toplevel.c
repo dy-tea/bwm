@@ -1,4 +1,5 @@
 #include "toplevel.h"
+#include "blur.h"
 #include "keyboard.h"
 #include "output.h"
 #include "popup.h"
@@ -271,6 +272,16 @@ void toplevel_map(struct wl_listener *listener, void *data) {
     scroller_apply_client_rules(n->client,
       rule->has_scroller_proportion ? rule->scroller_proportion : 0.0f,
       rule->has_scroller_proportion_single ? rule->scroller_proportion_single : 0.0f);
+  }
+
+  // Apply blur/mica rule properties
+  if (rule && rule->has_blur) {
+    n->client->blur = rule->blur;
+    toplevel_set_blur(toplevel, rule->blur);
+  }
+  if (rule && rule->has_mica) {
+    n->client->mica = rule->mica;
+    toplevel_set_mica(toplevel, rule->mica);
   }
 
   // create foreign toplevel handles
@@ -571,6 +582,34 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
   }
 }
 
+void toplevel_set_blur(struct bwm_toplevel *tl, bool enabled) {
+  if (!tl || !tl->scene_tree)
+    return;
+
+  if (enabled && !tl->blur_node) {
+    tl->blur_node = wlr_scene_buffer_create(tl->scene_tree, NULL);
+    if (tl->blur_node)
+      wlr_scene_node_lower_to_bottom(&tl->blur_node->node);
+  } else if (!enabled && tl->blur_node) {
+    wlr_scene_node_destroy(&tl->blur_node->node);
+    tl->blur_node = NULL;
+  }
+}
+
+void toplevel_set_mica(struct bwm_toplevel *tl, bool enabled) {
+  if (!tl || !tl->scene_tree)
+    return;
+
+  if (enabled && !tl->mica_node) {
+    tl->mica_node = wlr_scene_buffer_create(tl->scene_tree, NULL);
+    if (tl->mica_node)
+      wlr_scene_node_lower_to_bottom(&tl->mica_node->node);
+  } else if (!enabled && tl->mica_node) {
+    wlr_scene_node_destroy(&tl->mica_node->node);
+    tl->mica_node = NULL;
+  }
+}
+
 void toplevel_destroy(struct wl_listener *listener, void *data) {
   (void)data;
   struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, destroy);
@@ -595,6 +634,16 @@ void toplevel_destroy(struct wl_listener *listener, void *data) {
   if (toplevel->image_capture != NULL) {
 		wlr_scene_node_destroy(&toplevel->image_capture->tree.node);
    	toplevel->image_capture = NULL;
+  }
+
+  if (toplevel->blur_node) {
+    wlr_scene_node_destroy(&toplevel->blur_node->node);
+    toplevel->blur_node = NULL;
+  }
+
+  if (toplevel->mica_node) {
+    wlr_scene_node_destroy(&toplevel->mica_node->node);
+    toplevel->mica_node = NULL;
   }
 
   destroy_borders(&toplevel->border_tree, toplevel->border_rects);

@@ -86,6 +86,10 @@ typedef struct client_t {
   float old_stack_proportion;
   bool cursor_in_left_half;
   bool cursor_in_upper_half;
+
+  // Visual effects
+  bool blur;
+  bool mica;
 } client_t;
 
 typedef struct node_t {

@@ -6,6 +6,7 @@
 #include "output_config.h"
 #include "toplevel.h"
 #include "tree.h"
+#include "blur.h"
 #include <time.h>
 #include <stdlib.h>
 #include <wlr/types/wlr_buffer.h>
@@ -38,6 +39,8 @@ static enum wlr_scale_filter_mode get_scale_filter(struct bwm_output *output,
 
 static void output_configure_scene_iterator(struct wlr_scene_buffer *buffer,
 		int sx, int sy, void *data) {
+	(void)sx;
+	(void)sy;
 	struct bwm_output *output = data;
 	if (!output)
 		return;
@@ -87,6 +90,9 @@ void output_frame(struct wl_listener *listener, void *data) {
 
   output_configure_scene(output);
 
+  if (blur_ctx.available)
+    blur_output_frame(output, scene_output);
+
   struct wlr_scene_output_state_options opts = {
     .color_transform = output->color_transform,
   };
@@ -135,6 +141,7 @@ static void handle_output_destroy(struct wl_listener *listener, void *data) {
   wl_list_remove(&output->destroy.link);
   wl_list_remove(&output->link);
   wlr_color_transform_unref(output->color_transform);
+  blur_output_fini(output->blur_ctx);
   free(output);
 }
 
@@ -196,6 +203,7 @@ void handle_new_output(struct wl_listener *listener, void *data) {
   wlr_output_layout_get_box(server.output_layout, wlr_output, &layout_box);
   o->rectangle = layout_box;
   o->usable_area = layout_box;
+  o->blur_ctx = blur_output_init(o->rectangle.width, o->rectangle.height);
 
   // update monitor rectangle
   if (server.focused_monitor) {
@@ -365,6 +373,8 @@ void output_update_scale(struct bwm_output *output, float scale) {
       wlr_surface_set_preferred_buffer_scale(surface, ceil(scale));
     }
   }
+
+  blur_invalidate_mica(output->blur_ctx);
 
   // Rearrange all desktops on this monitor
   if (output->monitor) {

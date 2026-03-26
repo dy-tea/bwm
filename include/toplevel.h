@@ -13,6 +13,10 @@ struct bwm_toplevel {
   struct wlr_scene_tree *content_tree;    // XDG surface content
   struct wlr_scene_tree *saved_surface_tree;  // Saved buffer snapshot
 
+  struct wlr_scene_buffer *blur_node;
+  struct wlr_scene_buffer *mica_node;
+  bool blur_scene_hidden;
+
   struct wlr_ext_foreign_toplevel_handle_v1 *ext_foreign_toplevel;
   struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel;
 
@@ -72,3 +76,6 @@ void toplevel_send_frame_done(struct bwm_toplevel *toplevel);
 void toplevel_freeze_sibling_buffers(desktop_t *d, node_t *n);
 
 void handle_new_toplevel_capture_request(struct wl_listener *listener, void *data);
+
+void toplevel_set_blur(struct bwm_toplevel *tl, bool enabled);
+void toplevel_set_mica(struct bwm_toplevel *tl, bool enabled);

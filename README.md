@@ -14,6 +14,8 @@ Ensure you have the following dependencies installed:
 - pixman-1
 - xcb
 - xcb-icccm
+- glesv2
+- egl
 
 Build with meson:
 ```

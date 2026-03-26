@@ -15,6 +15,7 @@
 #include "rule.h"
 #include "keyboard.h"
 #include "xwayland.h"
+#include "blur.h"
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -116,6 +117,8 @@ void server_init(void) {
     wlr_log(WLR_ERROR, "Failed to create allocator");
     exit(EXIT_FAILURE);
   }
+
+  blur_init();
 
   server.compositor = wlr_compositor_create(server.wl_display, 6, server.renderer);
   wlr_subcompositor_create(server.wl_display);
@@ -688,6 +691,8 @@ void server_fini(void) {
 	if (server.drm_lease_manager)
 		wl_list_remove(&server.drm_lease_request.link);
 #endif
+
+  blur_fini();
 
   wlr_scene_node_destroy(&server.scene->tree.node);
   wlr_cursor_destroy(server.cursor);

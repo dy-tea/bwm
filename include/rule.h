@@ -33,6 +33,10 @@ typedef struct {
   bool has_scroller_proportion;
   float scroller_proportion_single;
   bool has_scroller_proportion_single;
+  bool blur;
+  bool has_blur;
+  bool mica;
+  bool has_mica;
 } rule_consequence_t;
 
 typedef struct rule_t {
