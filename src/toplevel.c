@@ -820,6 +820,25 @@ void focus_toplevel(struct bwm_toplevel *toplevel) {
 
   // Update input method focus
   input_method_relay_set_focus(server.input_method_relay, surface);
+
+  // update borders
+  if (toplevel->node) {
+    monitor_t *m = toplevel->node->monitor;
+    desktop_t *d = m ? m->desk : NULL;
+    if (d && d->root != NULL) {
+      for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root)) {
+        if (node->client == NULL)
+          continue;
+        if (node->client->toplevel) {
+          update_border_colors(node->client->toplevel->border_tree,
+                              node->client->toplevel->border_rects, node->client);
+        } else if (node->client->xwayland_view) {
+          update_border_colors(node->client->xwayland_view->border_tree,
+                              node->client->xwayland_view->border_rects, node->client);
+        }
+      }
+    }
+  }
 }
 
 void toplevel_apply_geometry(struct bwm_toplevel *toplevel) {
