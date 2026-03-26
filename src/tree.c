@@ -491,6 +491,8 @@ node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
   if (d == NULL || n == NULL)
     return NULL;
 
+  n->desktop = d;
+
   wlr_log(WLR_DEBUG, "insert_node: n=%u (state=%d hidden=%d parent=%u) f=%u root=%u focus=%u",
     n->id, n->client ? n->client->state : -1, n->hidden,
     n->parent ? n->parent->id : 0,

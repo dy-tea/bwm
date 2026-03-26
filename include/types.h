@@ -110,6 +110,7 @@ typedef struct node_t {
   struct node_t *parent;
   client_t *client;
   struct monitor_t *monitor;
+  struct desktop_t *desktop;
 
   // transaction support
   struct bwm_transaction_inst *instruction;

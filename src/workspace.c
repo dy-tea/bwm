@@ -205,8 +205,14 @@ static void update_window_visibility(node_t *node, monitor_t *m, desktop_t *curr
     d = d->next;
   }
 
-  if (!found)
-    should_show = false;
+  if (!found) {
+    if (node->client && node->client->state == STATE_FLOATING && node->desktop != NULL) {
+      should_show = (node->desktop == current_desktop);
+      found = true;
+    } else {
+      should_show = false;
+    }
+  }
 
 found_desktop:
   // in monocle layout, only the focused node should be visible
