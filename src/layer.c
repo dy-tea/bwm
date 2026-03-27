@@ -4,6 +4,7 @@
 #include "output.h"
 #include "tree.h"
 #include "input_method.h"
+#include "blur.h"
 #include <stdlib.h>
 #include <wayland-server-core.h>
 #include <wlr/util/log.h>
@@ -45,6 +46,9 @@ static void layer_surface_map(struct wl_listener *listener, void *data) {
 
 	if (layer->layer_surface->current.layer >= ZWLR_LAYER_SHELL_V1_LAYER_TOP)
 		focus_layer_surface(layer);
+
+	if (layer->layer_surface->current.layer <= ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM)
+		blur_invalidate_mica(layer->output->blur_ctx);
 }
 
 static void layer_surface_unmap(struct wl_listener *listener, void *data) {

@@ -632,7 +632,15 @@ static bool compute_src_box(struct bwm_output *output, const struct wlr_box *r,
   float sw = (float)r->width;
   float sh = (float)r->height;
 
-  if (sx < 0.0f || sy < 0.0f || sx >= bw || sy >= bh)
+  if (sx < 0.0f) {
+	  sw += sx;
+	  sx = 0.0f;
+  }
+  if (sy < 0.0f) {
+  	sh += sy;
+   	sy = 0.0f;
+  }
+  if (sx >= bw || sy >= bh || sw <= 0.0f || sh <= 0.0f)
     return false;
 
   if (sx + sw > bw) sw = bw - sx;
@@ -675,14 +683,14 @@ static GLuint capture_bg_to_tex1(struct bwm_output *output, struct bwm_blur_outp
 
   struct bwm_toplevel *tl;
   if (target_tl) {
-    /* Per-window blur capture: hide only this window so others show through */
+	  // per-window
     target_tl->blur_scene_hidden = false;
     if (target_tl->scene_tree && target_tl->scene_tree->node.enabled) {
       wlr_scene_node_set_enabled(&target_tl->scene_tree->node, false);
       target_tl->blur_scene_hidden = true;
     }
   } else {
-    /* Mica capture: hide all toplevels with blur/mica nodes */
+   	// hide everything with mica
     wl_list_for_each(tl, &server.toplevels, link) {
       tl->blur_scene_hidden = false;
       if ((tl->blur_node || tl->mica_node) && tl->scene_tree &&
@@ -723,7 +731,7 @@ static GLuint capture_bg_to_tex1(struct bwm_output *output, struct bwm_blur_outp
   wlr_scene_node_set_enabled(&server.over_tree->node, true);
   wlr_scene_node_set_enabled(&server.lock_tree->node, true);
   if (mica_only) {
-    wlr_scene_node_set_enabled(&server.tile_tree->node,true);
+    wlr_scene_node_set_enabled(&server.tile_tree->node, true);
     wlr_scene_node_set_enabled(&server.float_tree->node, true);
   }
 
@@ -911,8 +919,12 @@ static void push_blur_to_toplevels(struct bwm_output *output) {
     struct wlr_fbox src; int dw, dh;
     if (!compute_src_box(output, &r, &src, &dw, &dh)) {
       wlr_scene_buffer_set_buffer(tl->blur_node, NULL);
+      wlr_scene_node_set_position(&tl->blur_node->node, 0, 0);
       continue;
     }
+    int node_ox = (r.x < output->lx) ? (output->lx - r.x) : 0;
+    int node_oy = (r.y < output->ly) ? (output->ly - r.y) : 0;
+    wlr_scene_node_set_position(&tl->blur_node->node, node_ox, node_oy);
     wlr_scene_buffer_set_source_box(tl->blur_node, &src);
     wlr_scene_buffer_set_dest_size(tl->blur_node, dw, dh);
   }
@@ -979,8 +991,12 @@ static void push_mica_to_toplevels(struct bwm_output *output) {
     int dw, dh;
     if (!compute_src_box(output, &r, &src, &dw, &dh)) {
       wlr_scene_buffer_set_buffer(tl->mica_node, NULL);
+      wlr_scene_node_set_position(&tl->mica_node->node, 0, 0);
       continue;
     }
+    int node_ox = (r.x < output->lx) ? (output->lx - r.x) : 0;
+    int node_oy = (r.y < output->ly) ? (output->ly - r.y) : 0;
+    wlr_scene_node_set_position(&tl->mica_node->node, node_ox, node_oy);
     wlr_scene_buffer_set_source_box(tl->mica_node, &src);
     wlr_scene_buffer_set_dest_size(tl->mica_node, dw, dh);
   }

@@ -2958,6 +2958,9 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
   } else if (streq("mica_enabled", *args)) {
     if (num >= 2) {
       mica_enabled = (strcmp(args[1], "true") == 0);
+      struct bwm_output *output;
+      wl_list_for_each(output, &server.outputs, link)
+        blur_invalidate_mica(output->blur_ctx);
       send_success(client_fd, "mica_enabled set\n");
     } else {
       send_success(client_fd, mica_enabled ? "true\n" : "false\n");
@@ -2967,6 +2970,9 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       float val = atof(args[1]);
       if (val >= 0.0f && val <= 1.0f) {
         mica_tint_strength = val;
+        struct bwm_output *output;
+        wl_list_for_each(output, &server.outputs, link)
+          blur_invalidate_mica(output->blur_ctx);
         send_success(client_fd, "mica_tint_strength set\n");
       } else {
         send_failure(client_fd, "config mica_tint_strength: value must be 0.0-1.0\n");
@@ -2983,6 +2989,9 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       if (n >= 3) {
         mica_tint[0] = r; mica_tint[1] = g;
         mica_tint[2] = b; mica_tint[3] = a;
+        struct bwm_output *output;
+        wl_list_for_each(output, &server.outputs, link)
+          blur_invalidate_mica(output->blur_ctx);
         send_success(client_fd, "mica_tint set\n");
       } else {
         send_failure(client_fd, "config mica_tint: expected \"R G B [A]\"\n");
