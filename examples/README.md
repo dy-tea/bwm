@@ -278,6 +278,8 @@ bmsg rule -a vesktop desktop=III
 - `hidden=on|off` - Start window hidden
 - `sticky=on|off` - Make window sticky (visible on all desktops)
 - `one_shot` - Remove rule after first match
+- `blur=on|off` - Whether a window should have the blur effect set
+- `mica=on|off` - Whether a window should have the mica effect set
 
 
 **Matching by Title:**
@@ -504,6 +506,12 @@ bmsg config blur_radius <value>
 ```
 
 Sets the blur radius (default: 5.0). Higher values create stronger blur but may cause artifacts.
+
+```
+bmsg config blur_downsample 4
+```
+
+Sets the blur downsample, can be between 1-8 (default: 4).
 
 ### Mica Settings
 
