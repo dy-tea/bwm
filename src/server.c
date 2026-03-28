@@ -169,6 +169,7 @@ void server_init(void) {
 	server.top_tree = wlr_scene_tree_create(&server.scene->tree);
 	server.full_tree = wlr_scene_tree_create(&server.scene->tree);
 	server.over_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.shader_tree = wlr_scene_tree_create(&server.scene->tree);
 	server.drag_tree = wlr_scene_tree_create(&server.scene->tree);
 	server.lock_tree = wlr_scene_tree_create(&server.scene->tree);
 

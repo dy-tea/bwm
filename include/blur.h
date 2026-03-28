@@ -9,6 +9,7 @@ struct wlr_scene_output;
 struct wlr_buffer;
 struct wlr_backend;
 struct wlr_output;
+struct wlr_scene_buffer;
 
 enum blur_algorithm {
   BLUR_ALGORITHM_NONE,
@@ -25,6 +26,7 @@ extern int blur_downsample;
 extern bool mica_enabled;
 extern float mica_tint[4];
 extern float mica_tint_strength;
+extern bool screen_shader_enabled;
 
 struct bwm_blur_output_ctx {
   int width, height;
@@ -33,9 +35,16 @@ struct bwm_blur_output_ctx {
   GLuint fbo[2];
   GLuint tex[2];
 
+  GLuint screen_fbo;  /* full-res intermediate for screen shader */
+  GLuint screen_tex;
+
   struct wlr_buffer *mica_buf;
   GLuint mica_buf_fbo;
   bool mica_dirty;
+
+  struct wlr_buffer *screen_shader_buf;
+  GLuint screen_shader_buf_fbo;
+  struct wlr_scene_buffer *screen_shader_node;
 
   struct wlr_backend *capture_backend;
   struct wlr_output *capture_output;
@@ -92,3 +101,8 @@ void blur_output_frame(struct bwm_output *output, struct wlr_scene_output *scene
 
 enum blur_algorithm blur_algorithm_from_str(const char *str);
 const char *blur_algorithm_to_str(enum blur_algorithm algo);
+
+bool screen_shader_set(const char *name);
+bool screen_shader_load_file(const char *path);
+void screen_shader_clear(void);
+const char *screen_shader_get_name(void);

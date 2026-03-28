@@ -41,6 +41,7 @@ struct bwm_server {
   struct wlr_scene_tree *top_tree;
   struct wlr_scene_tree *full_tree;
   struct wlr_scene_tree *over_tree;
+  struct wlr_scene_tree *shader_tree;
   struct wlr_scene_tree *drag_tree;
   struct wlr_scene_tree *lock_tree;
 

@@ -535,6 +535,28 @@ bmsg config mica_tint <R> <G> <B> [A]
 
 Sets the tint color for mica effect (default: 0.12 0.12 0.14 1.0). RGBA values should be in the range 0.0-1.0.
 
+### Screen Shaders
+
+Screen shaders display as a filter above content. GLSL fragment shaders are supported.
+
+```
+bmsg config screen_shader grayscale|invert|sepia|nightlight|none
+```
+
+Enable one of the built-in shaders.
+
+```
+bmsg config screen_shader_file <path>
+```
+
+Load a screen shader from a file, full path must be specified.
+
+```
+bmsg config screen_shader_enabled true|false
+```
+
+Globally set if screen shaders should be enabled.
+
 ### WM Commands
 
 ```

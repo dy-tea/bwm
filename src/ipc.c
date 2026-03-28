@@ -3002,6 +3002,36 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       	mica_tint[0], mica_tint[1], mica_tint[2], mica_tint[3]);
     send_success(client_fd, buf);
   }
+  } else if (streq("screen_shader", *args)) {
+    if (num >= 2) {
+      if (!screen_shader_set(args[1])) {
+        send_failure(client_fd,
+          "config screen_shader: unknown shader (builtin: none grayscale invert sepia nightlight)\n");
+      } else {
+        send_success(client_fd, "screen_shader set\n");
+      }
+    } else {
+      char buf[256];
+      snprintf(buf, sizeof(buf), "%s\n", screen_shader_get_name());
+      send_success(client_fd, buf);
+    }
+  } else if (streq("screen_shader_file", *args)) {
+    if (num >= 2) {
+      if (!screen_shader_load_file(args[1])) {
+        send_failure(client_fd, "config screen_shader_file: failed to load shader\n");
+      } else {
+        send_success(client_fd, "screen_shader_file loaded\n");
+      }
+    } else {
+      send_failure(client_fd, "config screen_shader_file: missing path argument\n");
+    }
+  } else if (streq("screen_shader_enabled", *args)) {
+    if (num >= 2) {
+      screen_shader_enabled = (strcmp(args[1], "true") == 0);
+      send_success(client_fd, "screen_shader_enabled set\n");
+    } else {
+      send_success(client_fd, screen_shader_enabled ? "true\n" : "false\n");
+    }
 } else {
     send_failure(client_fd, "config: unknown setting\n");
   }

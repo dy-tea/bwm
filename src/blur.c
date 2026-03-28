@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <EGL/egl.h>
@@ -32,8 +33,16 @@ int blur_downsample = 4;
 bool mica_enabled = false;
 float mica_tint[4] = {0.12f, 0.12f, 0.14f, 1.0f};
 float mica_tint_strength = 0.35f;
+bool screen_shader_enabled = false;
 
 struct bwm_blur_ctx blur_ctx = {0};
+
+static GLuint screen_shader_prog = 0;
+static GLint screen_shader_u_tex = -1;
+static GLint screen_shader_u_resolution = -1;
+static GLint screen_shader_u_time = -1;
+static char screen_shader_name_str[256] = "none";
+static struct timespec screen_shader_start_time;
 
 static const char *vert_src =
   "attribute vec2 pos;\n"
@@ -147,6 +156,50 @@ static const char *frag_mica_tint_src =
   "void main() {\n"
   "  vec3 base = texture2D(tex, v_uv).rgb;\n"
   "  gl_FragColor = vec4(mix(base, tint.rgb, tint_strength), 1.0);\n"
+  "}\n";
+
+static const char *frag_grayscale_src =
+  "precision mediump float;\n"
+  "uniform sampler2D tex;\n"
+  "varying vec2 v_uv;\n"
+  "void main() {\n"
+  "    vec3 c = texture2D(tex, v_uv).rgb;\n"
+  "    float g = dot(c, vec3(0.2126, 0.7152, 0.0722));\n"
+  "    gl_FragColor = vec4(g, g, g, 1.0);\n"
+  "}\n";
+
+static const char *frag_invert_src =
+  "precision mediump float;\n"
+  "uniform sampler2D tex;\n"
+  "varying vec2 v_uv;\n"
+  "void main() {\n"
+  "    vec3 c = texture2D(tex, v_uv).rgb;\n"
+  "    gl_FragColor = vec4(1.0 - c, 1.0);\n"
+  "}\n";
+
+static const char *frag_sepia_src =
+  "precision mediump float;\n"
+  "uniform sampler2D tex;\n"
+  "varying vec2 v_uv;\n"
+  "void main() {\n"
+  "    vec3 c = texture2D(tex, v_uv).rgb;\n"
+  "    vec3 s;\n"
+  "    s.r = dot(c, vec3(0.393, 0.769, 0.189));\n"
+  "    s.g = dot(c, vec3(0.349, 0.686, 0.168));\n"
+  "    s.b = dot(c, vec3(0.272, 0.534, 0.131));\n"
+  "    gl_FragColor = vec4(clamp(s, 0.0, 1.0), 1.0);\n"
+  "}\n";
+
+static const char *frag_nightlight_src =
+  "precision mediump float;\n"
+  "uniform sampler2D tex;\n"
+  "varying vec2 v_uv;\n"
+  "void main() {\n"
+  "    vec3 c = texture2D(tex, v_uv).rgb;\n"
+  "    c.r = min(c.r * 1.05, 1.0);\n"
+  "    c.g = c.g * 0.92;\n"
+  "    c.b = c.b * 0.75;\n"
+  "    gl_FragColor = vec4(c, 1.0);\n"
   "}\n";
 
 static EGLDisplay s_egl_display = EGL_NO_DISPLAY;
@@ -524,8 +577,11 @@ void blur_fini(void) {
   glDeleteProgram(blur_ctx.prog_mica_tint);
   if (blur_ctx.prog_ext_blit)
     glDeleteProgram(blur_ctx.prog_ext_blit);
+  if (screen_shader_prog)
+    glDeleteProgram(screen_shader_prog);
   glDeleteBuffers(1, &blur_ctx.vbo);
   egl_unset_current();
+  screen_shader_prog = 0;
   blur_ctx = (struct bwm_blur_ctx){0};
 }
 
@@ -543,6 +599,8 @@ struct bwm_blur_output_ctx *blur_output_init(int width, int height) {
   egl_make_current();
   bool ok = create_fbo(ctx->blur_w, ctx->blur_h, &ctx->fbo[0], &ctx->tex[0]) &&
     create_fbo(ctx->blur_w, ctx->blur_h, &ctx->fbo[1], &ctx->tex[1]);
+  if (!create_fbo(width, height, &ctx->screen_fbo, &ctx->screen_tex))
+    wlr_log(WLR_ERROR, "blur: screen shader FBO creation failed (non-fatal)");
   egl_unset_current();
 
   if (!ok) {
@@ -555,9 +613,16 @@ struct bwm_blur_output_ctx *blur_output_init(int width, int height) {
     egl_make_current();
     destroy_fbo(&ctx->fbo[0], &ctx->tex[0]);
     destroy_fbo(&ctx->fbo[1], &ctx->tex[1]);
+    destroy_fbo(&ctx->screen_fbo, &ctx->screen_tex);
     egl_unset_current();
     free(ctx);
     return NULL;
+  }
+
+  if (server.shader_tree) {
+    ctx->screen_shader_node = wlr_scene_buffer_create(server.shader_tree, NULL);
+    if (ctx->screen_shader_node)
+      wlr_scene_node_set_enabled(&ctx->screen_shader_node->node, false);
   }
 
   ctx->mica_dirty = true;
@@ -570,12 +635,22 @@ void blur_output_fini(struct bwm_blur_output_ctx *ctx) {
     egl_make_current();
     destroy_fbo(&ctx->fbo[0], &ctx->tex[0]);
     destroy_fbo(&ctx->fbo[1], &ctx->tex[1]);
+    destroy_fbo(&ctx->screen_fbo, &ctx->screen_tex);
     egl_unset_current();
   }
   if (ctx->mica_buf) {
     wlr_buffer_unlock(ctx->mica_buf);
     ctx->mica_buf = NULL;
     ctx->mica_buf_fbo = 0;
+  }
+  if (ctx->screen_shader_buf) {
+    wlr_buffer_unlock(ctx->screen_shader_buf);
+    ctx->screen_shader_buf = NULL;
+    ctx->screen_shader_buf_fbo = 0;
+  }
+  if (ctx->screen_shader_node) {
+    wlr_scene_node_destroy(&ctx->screen_shader_node->node);
+    ctx->screen_shader_node = NULL;
   }
   destroy_capture_output(ctx);
   free(ctx);
@@ -592,18 +667,26 @@ void blur_output_resize(struct bwm_blur_output_ctx *ctx, int width, int height) 
   egl_make_current();
   destroy_fbo(&ctx->fbo[0], &ctx->tex[0]);
   destroy_fbo(&ctx->fbo[1], &ctx->tex[1]);
+  destroy_fbo(&ctx->screen_fbo, &ctx->screen_tex);
   ctx->width  = width;
   ctx->height = height;
   ctx->blur_w = new_bw;
   ctx->blur_h = new_bh;
   create_fbo(ctx->blur_w, ctx->blur_h, &ctx->fbo[0], &ctx->tex[0]);
   create_fbo(ctx->blur_w, ctx->blur_h, &ctx->fbo[1], &ctx->tex[1]);
+  if (!create_fbo(width, height, &ctx->screen_fbo, &ctx->screen_tex))
+    wlr_log(WLR_ERROR, "blur: screen shader FBO resize failed (non-fatal)");
   egl_unset_current();
 
   if (ctx->mica_buf) {
     wlr_buffer_unlock(ctx->mica_buf);
     ctx->mica_buf = NULL;
     ctx->mica_buf_fbo = 0;
+  }
+  if (ctx->screen_shader_buf) {
+    wlr_buffer_unlock(ctx->screen_shader_buf);
+    ctx->screen_shader_buf = NULL;
+    ctx->screen_shader_buf_fbo = 0;
   }
 
   /* Free per-toplevel blur buffers since output dimensions changed */
@@ -1002,6 +1085,185 @@ static void push_mica_to_toplevels(struct bwm_output *output) {
   }
 }
 
+static GLuint capture_full_scene_to_tex(struct bwm_output *output,
+    struct bwm_blur_output_ctx *ctx, struct wlr_scene_output *real_scene_output) {
+  int w = output->width, h = output->height;
+
+  if (!ctx->capture_output || !ctx->capture_scene_output || !ctx->screen_fbo)
+    return 0;
+
+  wlr_scene_output_set_position(ctx->capture_scene_output, output->lx, output->ly);
+
+  if (w <= 0 || h <= 0)
+    return 0;
+
+  // hide the shader overlay to avoid a feedback loop
+  if (server.shader_tree)
+    wlr_scene_node_set_enabled(&server.shader_tree->node, false);
+
+  wlr_damage_ring_add_whole(&ctx->capture_scene_output->damage_ring);
+
+  struct wlr_output_state cap_state;
+  wlr_output_state_init(&cap_state);
+  wlr_output_state_set_enabled(&cap_state, true);
+  wlr_output_state_set_custom_mode(&cap_state, w, h, 0);
+
+  bool ok = wlr_scene_output_build_state(ctx->capture_scene_output, &cap_state, NULL);
+  if (ok)
+    wlr_output_commit_state(ctx->capture_output, &cap_state);
+
+  egl_make_current();
+  glFlush();
+
+  if (server.shader_tree)
+    wlr_scene_node_set_enabled(&server.shader_tree->node, true);
+
+  wlr_scene_output_set_position(ctx->capture_scene_output, -0x7fff, -0x7fff);
+  wlr_damage_ring_add_whole(&real_scene_output->damage_ring);
+
+  if (!ok || !cap_state.buffer) {
+    egl_unset_current();
+    wlr_output_state_finish(&cap_state);
+    return 0;
+  }
+
+  GLuint capture_fbo = wlr_gles2_renderer_get_buffer_fbo(server.renderer, cap_state.buffer);
+  GLuint result = 0;
+
+  if (capture_fbo) {
+    glBindFramebuffer(GL_FRAMEBUFFER, capture_fbo);
+    GLint attach_type = 0, attach_name = 0;
+    glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+      GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &attach_type);
+    if (attach_type == GL_TEXTURE) {
+      glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+        GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &attach_name);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    if (attach_type == GL_TEXTURE && attach_name > 0 && blur_ctx.prog_ext_blit) {
+      glDisable(GL_BLEND);
+      glDisable(GL_SCISSOR_TEST);
+      glBindFramebuffer(GL_FRAMEBUFFER, ctx->screen_fbo);
+      glViewport(0, 0, w, h);
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_EXTERNAL_OES, (GLuint)attach_name);
+      glUseProgram(blur_ctx.prog_ext_blit);
+      glUniform1i(blur_ctx.u_ext_blit.tex, 0);
+      draw_quad();
+      glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0);
+      glBindFramebuffer(GL_FRAMEBUFFER, 0);
+      result = ctx->screen_tex;
+    } else if (attach_type == GL_TEXTURE && attach_name > 0) {
+      glDisable(GL_BLEND);
+      glDisable(GL_SCISSOR_TEST);
+      glBindFramebuffer(GL_FRAMEBUFFER, ctx->screen_fbo);
+      glViewport(0, 0, w, h);
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, (GLuint)attach_name);
+      glUseProgram(blur_ctx.prog_blit);
+      glUniform1i(blur_ctx.u_blit.tex, 0);
+      draw_quad();
+      glBindTexture(GL_TEXTURE_2D, 0);
+      glBindFramebuffer(GL_FRAMEBUFFER, 0);
+      result = ctx->screen_tex;
+    } else if (attach_type == GL_RENDERBUFFER) {
+      unsigned char *pixels = malloc((size_t)w * h * 4);
+      if (pixels) {
+        glBindFramebuffer(GL_FRAMEBUFFER, capture_fbo);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        GLuint tmp_tex;
+        glGenTextures(1, &tmp_tex);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, tmp_tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        free(pixels);
+
+        glDisable(GL_BLEND);
+        glDisable(GL_SCISSOR_TEST);
+        glBindFramebuffer(GL_FRAMEBUFFER, ctx->screen_fbo);
+        glViewport(0, 0, w, h);
+        glUseProgram(blur_ctx.prog_blit);
+        glUniform1i(blur_ctx.u_blit.tex, 0);
+        draw_quad();
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteTextures(1, &tmp_tex);
+        result = ctx->screen_tex;
+      }
+    }
+  }
+
+  egl_unset_current();
+  wlr_output_state_finish(&cap_state);
+  return result;
+}
+
+static void do_screen_shader_frame(struct bwm_output *output,
+    struct wlr_scene_output *scene_output) {
+  struct bwm_blur_output_ctx *ctx = output->blur_ctx;
+  if (!ctx || !ctx->screen_shader_node) return;
+
+  if (!screen_shader_enabled || !screen_shader_prog) {
+    wlr_scene_node_set_enabled(&ctx->screen_shader_node->node, false);
+    return;
+  }
+
+  int w = output->width, h = output->height;
+  if (w <= 0 || h <= 0) return;
+
+  GLuint src = capture_full_scene_to_tex(output, ctx, scene_output);
+  if (!src) {
+    wlr_scene_node_set_enabled(&ctx->screen_shader_node->node, false);
+    return;
+  }
+
+  egl_make_current();
+
+  GLuint dest_fbo = ensure_output_buf(&ctx->screen_shader_buf, &ctx->screen_shader_buf_fbo, w, h);
+  if (!dest_fbo) {
+    egl_unset_current();
+    wlr_scene_node_set_enabled(&ctx->screen_shader_node->node, false);
+    return;
+  }
+
+  glDisable(GL_BLEND);
+  glDisable(GL_SCISSOR_TEST);
+  glBindFramebuffer(GL_FRAMEBUFFER, dest_fbo);
+  glViewport(0, 0, w, h);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, src);
+  glUseProgram(screen_shader_prog);
+  if (screen_shader_u_tex >= 0)
+    glUniform1i(screen_shader_u_tex, 0);
+  if (screen_shader_u_resolution >= 0)
+    glUniform2f(screen_shader_u_resolution, (float)w, (float)h);
+  if (screen_shader_u_time >= 0) {
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    float t = (float)(now.tv_sec - screen_shader_start_time.tv_sec) +
+      (float)(now.tv_nsec - screen_shader_start_time.tv_nsec) * 1e-9f;
+    glUniform1f(screen_shader_u_time, t);
+  }
+  draw_quad();
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glFlush();
+
+  egl_unset_current();
+
+  wlr_scene_buffer_set_buffer(ctx->screen_shader_node, ctx->screen_shader_buf);
+  struct wlr_fbox src_box = {0, 0, (double)w, (double)h};
+  wlr_scene_buffer_set_source_box(ctx->screen_shader_node, &src_box);
+  wlr_scene_buffer_set_dest_size(ctx->screen_shader_node, w, h);
+  wlr_scene_node_set_position(&ctx->screen_shader_node->node, output->lx, output->ly);
+  wlr_scene_node_set_enabled(&ctx->screen_shader_node->node, true);
+}
+
 void blur_output_frame(struct bwm_output *output, struct wlr_scene_output *scene_output) {
   if (!blur_ctx.available) return;
   struct bwm_blur_output_ctx *ctx = output->blur_ctx;
@@ -1031,6 +1293,8 @@ void blur_output_frame(struct bwm_output *output, struct wlr_scene_output *scene
 
   if (mica_enabled && ctx->mica_buf)
     push_mica_to_toplevels(output);
+
+  do_screen_shader_frame(output, scene_output);
 }
 
 enum blur_algorithm blur_algorithm_from_str(const char *str) {
@@ -1050,4 +1314,103 @@ const char *blur_algorithm_to_str(enum blur_algorithm algo) {
   case BLUR_ALGORITHM_BOX:      return "box";
   default:                      return "none";
   }
+}
+
+static void screen_shader_set_prog(GLuint prog, const char *name) {
+  if (screen_shader_prog)
+    glDeleteProgram(screen_shader_prog);
+  screen_shader_prog = prog;
+  if (prog) {
+    screen_shader_u_tex        = glGetUniformLocation(prog, "tex");
+    screen_shader_u_resolution = glGetUniformLocation(prog, "resolution");
+    screen_shader_u_time       = glGetUniformLocation(prog, "time");
+    clock_gettime(CLOCK_MONOTONIC, &screen_shader_start_time);
+    snprintf(screen_shader_name_str, sizeof(screen_shader_name_str), "%s", name);
+    screen_shader_enabled = true;
+  } else {
+    screen_shader_u_tex = screen_shader_u_resolution = screen_shader_u_time = -1;
+    snprintf(screen_shader_name_str, sizeof(screen_shader_name_str), "none");
+  }
+}
+
+bool screen_shader_set(const char *name) {
+  if (!blur_ctx.available) return false;
+  if (!name || strcmp(name, "none") == 0) {
+    screen_shader_clear();
+    return true;
+  }
+
+  const char *frag = NULL;
+  if      (strcmp(name, "grayscale")  == 0) frag = frag_grayscale_src;
+  else if (strcmp(name, "invert")     == 0) frag = frag_invert_src;
+  else if (strcmp(name, "sepia")      == 0) frag = frag_sepia_src;
+  else if (strcmp(name, "nightlight") == 0) frag = frag_nightlight_src;
+  else return false;
+
+  egl_make_current();
+  GLuint prog = link_program(frag);
+  if (!prog) {
+    egl_unset_current();
+    return false;
+  }
+  screen_shader_set_prog(prog, name);
+  egl_unset_current();
+  return true;
+}
+
+bool screen_shader_load_file(const char *path) {
+  if (!blur_ctx.available || !path) return false;
+
+  FILE *f = fopen(path, "r");
+  if (!f) {
+    wlr_log(WLR_ERROR, "screen_shader: cannot open '%s'", path);
+    return false;
+  }
+
+  fseek(f, 0, SEEK_END);
+  long size = ftell(f);
+  rewind(f);
+
+  if (size <= 0 || size > 1024 * 1024) {
+    fclose(f);
+    wlr_log(WLR_ERROR, "screen_shader: file '%s' too large or empty", path);
+    return false;
+  }
+
+  char *src = malloc((size_t)size + 1);
+  if (!src) {
+  	fclose(f);
+   	return false;
+  }
+
+  size_t nread = fread(src, 1, (size_t)size, f);
+  fclose(f);
+  src[nread] = '\0';
+
+  egl_make_current();
+  GLuint prog = link_program(src);
+  free(src);
+  if (!prog) {
+    egl_unset_current();
+    return false;
+  }
+  screen_shader_set_prog(prog, path);
+  egl_unset_current();
+  return true;
+}
+
+void screen_shader_clear(void) {
+  if (screen_shader_prog && blur_ctx.available) {
+    egl_make_current();
+    glDeleteProgram(screen_shader_prog);
+    egl_unset_current();
+  }
+  screen_shader_prog = 0;
+  screen_shader_enabled = false;
+  screen_shader_u_tex = screen_shader_u_resolution = screen_shader_u_time = -1;
+  snprintf(screen_shader_name_str, sizeof(screen_shader_name_str), "none");
+}
+
+const char *screen_shader_get_name(void) {
+  return screen_shader_name_str;
 }
