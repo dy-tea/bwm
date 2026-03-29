@@ -4,6 +4,10 @@
 #include "types.h"
 #include "tree.h"
 #include "input_method.h"
+#include "rule.h"
+#include "workspace.h"
+#include "scroller.h"
+#include "keyboard.h"
 #include <float.h>
 #include <stdlib.h>
 #include <string.h>
@@ -553,6 +557,49 @@ static void handle_map(struct wl_listener *listener, void *data) {
 		client->title[MAXLEN - 1] = '\0';
 	}
 
+	rule_consequence_t *rule = find_matching_rule(app_id, title);
+
+	if (rule && rule->has_manage && !rule->manage) {
+		wlr_log(WLR_INFO, "XWayland window %s ignored by rule (manage=off)", app_id ? app_id : "?");
+		xwayland_view->node = NULL;
+		free_node(node);
+		return;
+	}
+
+	if (rule && rule->has_state)
+		client->state = rule->state;
+
+	bool should_focus = true;
+	if (rule && rule->has_focus && !rule->focus)
+		should_focus = false;
+
+	desktop_t *target_desktop = d;
+	if (rule && rule->has_desktop) {
+		desktop_t *new_desk = find_desktop_by_name(rule->desktop);
+		if (new_desk)
+			target_desktop = new_desk;
+		else
+			wlr_log(WLR_ERROR, "XWayland rule: desktop '%s' not found", rule->desktop);
+	}
+
+	monitor_t *target_monitor = target_desktop->monitor ? target_desktop->monitor : mon;
+	node->monitor = target_monitor;
+
+	if (rule && rule->has_hidden)
+		node->hidden = rule->hidden;
+
+	if (rule && rule->has_sticky)
+		node->sticky = rule->sticky;
+
+	if (rule && rule->has_locked)
+		node->locked = rule->locked;
+
+	if (rule && (rule->has_scroller_proportion || rule->has_scroller_proportion_single)) {
+		scroller_apply_client_rules(client,
+			rule->has_scroller_proportion ? rule->scroller_proportion : 0.0f,
+			rule->has_scroller_proportion_single ? rule->scroller_proportion_single : 0.0f);
+	}
+
 	wlr_log(WLR_INFO, "XWayland window mapped: %s (%s) wants_float=%d size=%dx%d",
 		title ? title : "untitled", app_id ? app_id : "unknown",
 		wants_float, xsurface->width, xsurface->height);
@@ -572,7 +619,8 @@ static void handle_map(struct wl_listener *listener, void *data) {
 	if (app_id)
 		wlr_foreign_toplevel_handle_v1_set_app_id(xwayland_view->foreign_toplevel, app_id);
 
-	if (wants_float) {
+	bool rule_forces_float = rule && rule->has_state && rule->state == STATE_FLOATING;
+	if (wants_float || rule_forces_float) {
 		wlr_scene_node_reparent(&xwayland_view->scene_tree->node, server.float_tree);
 		client->floating_rectangle.x = xsurface->x;
 		client->floating_rectangle.y = xsurface->y;
@@ -588,7 +636,8 @@ static void handle_map(struct wl_listener *listener, void *data) {
 		client->shown = true;
 		wlr_scene_node_set_enabled(&xwayland_view->scene_tree->node, true);
 	} else {
-		client->state = STATE_TILED;
+		if (client->state != STATE_PSEUDO_TILED)
+			client->state = STATE_TILED;
 		node->rectangle.width = xsurface->width;
 		node->rectangle.height = xsurface->height;
 		client->shown = true;
@@ -599,10 +648,24 @@ static void handle_map(struct wl_listener *listener, void *data) {
 			xwayland_view->scene_tree->node.enabled);
 	}
 
-	insert_node(mon, d, node, d->focus);
+	bool target_desktop_is_focused = (target_desktop == target_monitor->desk);
 
-	focus_node(mon, d, node);
-	arrange(mon, d, true);
+	insert_node(target_monitor, target_desktop, node, target_desktop->focus);
+
+	if (target_desktop != d && !target_desktop_is_focused) {
+		client->shown = false;
+		wlr_scene_node_set_enabled(&xwayland_view->scene_tree->node, false);
+	}
+
+	if (should_focus && target_desktop_is_focused)
+		focus_node(target_monitor, target_desktop, node);
+	else if (should_focus && !target_desktop_is_focused)
+		target_desktop->focus = node;
+
+	if (rule && rule->has_state && rule->state == STATE_FULLSCREEN)
+		toggle_fullscreen();
+
+	arrange(target_monitor, target_desktop, target_desktop_is_focused);
 
 	if (!wants_float && xwayland_view->node && xwayland_view->node->client) {
 		client_t *client = xwayland_view->node->client;
@@ -759,8 +822,13 @@ static void handle_request_configure(struct wl_listener *listener, void *data) {
 		}
 	} else {
 		if (xwayland_view->node && xwayland_view->node->client) {
-			struct wlr_box *rect = &xwayland_view->node->client->tiled_rectangle;
-			wlr_xwayland_surface_configure(xsurface, rect->x, rect->y, rect->width, rect->height);
+			client_t *client = xwayland_view->node->client;
+			struct wlr_box rect;
+			if (client->state == STATE_FULLSCREEN && xwayland_view->node->monitor)
+				rect = xwayland_view->node->monitor->rectangle;
+			else
+				rect = client->tiled_rectangle;
+			wlr_xwayland_surface_configure(xsurface, rect.x, rect.y, rect.width, rect.height);
 		}
 	}
 }
@@ -771,14 +839,39 @@ static void handle_request_fullscreen(struct wl_listener *listener, void *data) 
 		wl_container_of(listener, xwayland_view, request_fullscreen);
 	struct wlr_xwayland_surface *xsurface = xwayland_view->xwayland_surface;
 
-	if (xwayland_view->node && xwayland_view->node->client) {
-		if (xsurface->fullscreen)
-			xwayland_view->node->client->state = STATE_FULLSCREEN;
-		else if (xwayland_view->node->client->state == STATE_FULLSCREEN)
-			xwayland_view->node->client->state = xwayland_view->node->client->last_state;
+	node_t *node = xwayland_view->node;
+	if (!node || !node->client || !node->monitor || !node->desktop)
+		return;
+
+	client_t *client = node->client;
+	monitor_t *m = node->monitor;
+	desktop_t *d = node->desktop;
+
+	wlr_log(WLR_INFO, "handle_request_fullscreen: xwayland wants fullscreen=%d, current state=%d last_state=%d",
+		xsurface->fullscreen, client->state, client->last_state);
+
+	struct wlr_scene_tree *scene_tree = client_get_scene_tree(client);
+	if (!scene_tree) {
+		wlr_log(WLR_ERROR, "handle_request_fullscreen: no scene tree");
+		return;
 	}
 
-	xwayland_view_set_fullscreen(xwayland_view, xsurface->fullscreen);
+	if (xsurface->fullscreen) {
+		if (client->state == STATE_FULLSCREEN) {
+			wlr_xwayland_surface_set_fullscreen(xsurface, true);
+			return;
+		}
+		wlr_scene_node_reparent(&scene_tree->node, server.full_tree);
+		wlr_xwayland_surface_set_fullscreen(xsurface, true);
+		set_state(m, d, node, STATE_FULLSCREEN);
+	} else {
+		if (client->state != STATE_FULLSCREEN) {
+			wlr_xwayland_surface_set_fullscreen(xsurface, false);
+			return;
+		}
+		wlr_log(WLR_INFO, "handle_request_fullscreen: denying remove-fullscreen");
+		wlr_xwayland_surface_set_fullscreen(xsurface, true);
+	}
 }
 
 static void handle_request_minimize(struct wl_listener *listener, void *data) {

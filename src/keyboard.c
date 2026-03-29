@@ -483,7 +483,7 @@ void toggle_fullscreen(void) {
     return;
 
   node_t *n = mon->desk->focus;
-  if (n->client == NULL || n->client->toplevel == NULL)
+  if (n->client == NULL)
     return;
 
   struct wlr_scene_tree *scene_tree = client_get_scene_tree(n->client);
@@ -493,27 +493,39 @@ void toggle_fullscreen(void) {
   }
 
   if (n->client->state == STATE_FULLSCREEN) {
-    if (n->client->last_state == STATE_FLOATING)
+    client_state_t restore = n->client->last_state;
+    // fallback to tiled if node should probably be
+    if (restore == STATE_FULLSCREEN)
+      restore = STATE_TILED;
+    if (restore == STATE_FLOATING && n->parent != NULL)
+      restore = STATE_TILED;
+
+    if (restore == STATE_FLOATING)
       wlr_scene_node_reparent(&scene_tree->node, server.float_tree);
-    else if (n->client->last_state == STATE_TILED)
+    else
       wlr_scene_node_reparent(&scene_tree->node, server.tile_tree);
 
     if (n->client->toplevel && n->client->toplevel->xdg_toplevel)
       wlr_xdg_toplevel_set_fullscreen(n->client->toplevel->xdg_toplevel, false);
+    else if (n->client->xwayland_view)
+      wlr_xwayland_surface_set_fullscreen(n->client->xwayland_view->xwayland_surface, false);
 
-    set_state(mon, mon->desk, n, n->client->last_state);
+    set_state(mon, mon->desk, n, restore);
     wlr_log(WLR_INFO, "Fullscreen disabled");
   } else {
-  	wlr_scene_node_reparent(&scene_tree->node, server.full_tree);
+    wlr_scene_node_reparent(&scene_tree->node, server.full_tree);
 
     if (n->client->toplevel && n->client->toplevel->xdg_toplevel)
       wlr_xdg_toplevel_set_fullscreen(n->client->toplevel->xdg_toplevel, true);
+    else if (n->client->xwayland_view)
+      wlr_xwayland_surface_set_fullscreen(n->client->xwayland_view->xwayland_surface, true);
 
- 		set_state(mon, mon->desk, n, STATE_FULLSCREEN);
+    set_state(mon, mon->desk, n, STATE_FULLSCREEN);
     wlr_log(WLR_INFO, "Fullscreen enabled");
   }
 
-  update_foreign_toplevel_state(n->client->toplevel);
+  if (n->client->toplevel)
+    update_foreign_toplevel_state(n->client->toplevel);
 }
 
 void toggle_pseudo_tiled(void) {

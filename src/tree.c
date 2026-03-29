@@ -1,4 +1,5 @@
 #include "tree.h"
+#include "server.h"
 #include "toplevel.h"
 #include "types.h"
 #include "transaction.h"
@@ -515,6 +516,12 @@ node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
   if (f == NULL)
     f = d->root;
 
+  // fall back to the tree root to avoid corrupting the tree structure
+  if (f != NULL && f != d->root && f->parent == NULL) {
+    wlr_log(WLR_DEBUG, "insert_node: focus node %u is not in BSP tree (floating/orphaned), falling back to root", f->id);
+    f = d->root;
+  }
+
   if (f == NULL) {
     wlr_log(WLR_DEBUG, "insert_node: empty tree, node %u becomes root", n->id);
     d->root = n;
@@ -855,6 +862,7 @@ bool focus_node(monitor_t *m, desktop_t *d, node_t *n) {
 
   d->focus = n;
   mon = m;
+  server.focused_monitor = m;
 
   bool is_current_desktop = (m->desk == d);
   if (is_current_desktop && d->layout == LAYOUT_MONOCLE && d->root != NULL) {

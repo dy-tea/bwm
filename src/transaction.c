@@ -243,12 +243,17 @@ static void apply_node_state(node_t *node,
     // configure size for xwayland
     if (node->client->xwayland_view && node->client->xwayland_view->xwayland_surface) {
       struct wlr_xwayland_surface *xsurface = node->client->xwayland_view->xwayland_surface;
+      wlr_log(WLR_INFO, "Transaction xwayland node %u: target=(%d,%d %dx%d) current=(%dx%d) state=%d",
+        node->id, rect->x, rect->y, rect->width, rect->height,
+        xsurface->width, xsurface->height, node->client->state);
       if ((int)rect->width != xsurface->width || (int)rect->height != xsurface->height) {
         wlr_xwayland_surface_configure(xsurface, rect->x, rect->y, rect->width, rect->height);
         node->client->xwayland_view->geometry.width = rect->width;
         node->client->xwayland_view->geometry.height = rect->height;
-        wlr_log(WLR_DEBUG, "Transaction configured Xwayland: (%d,%d %dx%d)",
+        wlr_log(WLR_INFO, "Transaction configured Xwayland: (%d,%d %dx%d)",
           rect->x, rect->y, rect->width, rect->height);
+      } else {
+        wlr_log(WLR_INFO, "Transaction skipped Xwayland configure (size unchanged)");
       }
     }
 
