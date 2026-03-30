@@ -284,6 +284,10 @@ void toplevel_map(struct wl_listener *listener, void *data) {
     n->client->mica = rule->mica;
     toplevel_set_mica(toplevel, rule->mica);
   }
+  if (rule && rule->has_acrylic) {
+    n->client->acrylic = rule->acrylic;
+    toplevel_set_acrylic(toplevel, rule->acrylic);
+  }
 
   // create foreign toplevel handles
   struct wlr_ext_foreign_toplevel_handle_v1_state ext_state = {
@@ -616,6 +620,25 @@ void toplevel_set_mica(struct bwm_toplevel *tl, bool enabled) {
   }
 }
 
+void toplevel_set_acrylic(struct bwm_toplevel *tl, bool enabled) {
+  if (!tl || !tl->scene_tree)
+    return;
+
+  if (enabled && !tl->acrylic_node) {
+    tl->acrylic_node = wlr_scene_buffer_create(tl->scene_tree, NULL);
+    if (tl->acrylic_node)
+      wlr_scene_node_lower_to_bottom(&tl->acrylic_node->node);
+  } else if (!enabled && tl->acrylic_node) {
+    wlr_scene_node_destroy(&tl->acrylic_node->node);
+    tl->acrylic_node = NULL;
+    if (tl->acrylic_buf) {
+      wlr_buffer_unlock(tl->acrylic_buf);
+      tl->acrylic_buf = NULL;
+      tl->acrylic_buf_fbo = 0;
+    }
+  }
+}
+
 void toplevel_destroy(struct wl_listener *listener, void *data) {
   (void)data;
   struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, destroy);
@@ -655,6 +678,16 @@ void toplevel_destroy(struct wl_listener *listener, void *data) {
   if (toplevel->mica_node) {
     wlr_scene_node_destroy(&toplevel->mica_node->node);
     toplevel->mica_node = NULL;
+  }
+
+  if (toplevel->acrylic_node) {
+    wlr_scene_node_destroy(&toplevel->acrylic_node->node);
+    toplevel->acrylic_node = NULL;
+  }
+  if (toplevel->acrylic_buf) {
+    wlr_buffer_unlock(toplevel->acrylic_buf);
+    toplevel->acrylic_buf = NULL;
+    toplevel->acrylic_buf_fbo = 0;
   }
 
   destroy_borders(&toplevel->border_tree, toplevel->border_rects);

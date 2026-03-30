@@ -16,9 +16,12 @@ struct bwm_toplevel {
 
   struct wlr_scene_buffer *blur_node;
   struct wlr_scene_buffer *mica_node;
+  struct wlr_scene_buffer *acrylic_node;
   bool blur_scene_hidden;
   struct wlr_buffer *blur_buf;
   GLuint blur_buf_fbo;
+  struct wlr_buffer *acrylic_buf;
+  GLuint acrylic_buf_fbo;
 
   struct wlr_ext_foreign_toplevel_handle_v1 *ext_foreign_toplevel;
   struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel;
@@ -82,3 +85,4 @@ void handle_new_toplevel_capture_request(struct wl_listener *listener, void *dat
 
 void toplevel_set_blur(struct bwm_toplevel *tl, bool enabled);
 void toplevel_set_mica(struct bwm_toplevel *tl, bool enabled);
+void toplevel_set_acrylic(struct bwm_toplevel *tl, bool enabled);

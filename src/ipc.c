@@ -804,6 +804,16 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
       if (n->client->toplevel)
         toplevel_set_mica(n->client->toplevel, new_val);
       send_success(client_fd, "flag changed\n");
+    } else if (strcmp(key, "acrylic") == 0) {
+      if (!n->client) {
+        send_failure(client_fd, "node -g: no client\n");
+        return;
+      }
+      bool new_val = has_value ? set_value : !n->client->acrylic;
+      n->client->acrylic = new_val;
+      if (n->client->toplevel)
+        toplevel_set_acrylic(n->client->toplevel, new_val);
+      send_success(client_fd, "flag changed\n");
     } else {
       send_failure(client_fd, "node -g: unknown flag\n");
       return;
@@ -3002,6 +3012,81 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       	mica_tint[0], mica_tint[1], mica_tint[2], mica_tint[3]);
     send_success(client_fd, buf);
   }
+  } else if (streq("acrylic_tint", *args)) {
+    if (num >= 2) {
+      float r, g, b, a = 1.0f;
+      int n = sscanf(args[1], "%f %f %f %f", &r, &g, &b, &a);
+      if (n >= 3) {
+        acrylic_tint[0] = r; acrylic_tint[1] = g;
+        acrylic_tint[2] = b; acrylic_tint[3] = a;
+        send_success(client_fd, "acrylic_tint set\n");
+      } else {
+        send_failure(client_fd, "config acrylic_tint: expected \"R G B [A]\"\n");
+      }
+    } else {
+      char buf[128];
+      snprintf(buf, sizeof(buf), "%.3f %.3f %.3f %.3f\n",
+        acrylic_tint[0], acrylic_tint[1], acrylic_tint[2], acrylic_tint[3]);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("acrylic_tint_strength", *args)) {
+    if (num >= 2) {
+      float val = atof(args[1]);
+      if (val >= 0.0f && val <= 1.0f) {
+        acrylic_tint_strength = val;
+        send_success(client_fd, "acrylic_tint_strength set\n");
+      } else {
+        send_failure(client_fd, "config acrylic_tint_strength: value must be 0.0-1.0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.3f\n", acrylic_tint_strength);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("acrylic_noise_strength", *args)) {
+    if (num >= 2) {
+      float val = atof(args[1]);
+      if (val >= 0.0f && val <= 1.0f) {
+        acrylic_noise_strength = val;
+        send_success(client_fd, "acrylic_noise_strength set\n");
+      } else {
+        send_failure(client_fd, "config acrylic_noise_strength: value must be 0.0-1.0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.3f\n", acrylic_noise_strength);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("acrylic_light_anchor", *args)) {
+    if (num >= 2) {
+    	float a, b;
+     	int n = sscanf(args[1], "%f %f", &a, &b);
+      if (n == 2 && a >= -1.0f && a <= 1.0f && b >= -1.0f && b <= 1.0f) {
+        acrylic_light_anchor[0] = a;
+        acrylic_light_anchor[1] = b;
+        send_success(client_fd, "acrylic_light_anchor set\n");
+      } else {
+        send_failure(client_fd, "config acrylic_light_anchor: values must be -1.0 to 1.0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.3f\n", acrylic_light_anchor[0]);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("acrylic_blur_passes", *args)) {
+    if (num >= 2) {
+      int val = atoi(args[1]);
+      if (val >= 0 && val <= 10) {
+        acrylic_blur_passes = val;
+        send_success(client_fd, "acrylic_blur_passes set\n");
+      } else {
+        send_failure(client_fd, "config acrylic_blur_passes: value must be 0-10\n");
+      }
+    } else {
+      char buf[32];
+      snprintf(buf, sizeof(buf), "%d\n", acrylic_blur_passes);
+      send_success(client_fd, buf);
+    }
   } else if (streq("screen_shader", *args)) {
     if (num >= 2) {
       if (!screen_shader_set(args[1])) {
@@ -3345,6 +3430,12 @@ static void ipc_cmd_rule(char **args, int num, int client_fd) {
       } else if (streq("mica=off", arg)) {
         r->consequence.mica = false;
         r->consequence.has_mica = true;
+      } else if (streq("acrylic=on", arg)) {
+        r->consequence.acrylic = true;
+        r->consequence.has_acrylic = true;
+      } else if (streq("acrylic=off", arg)) {
+        r->consequence.acrylic = false;
+        r->consequence.has_acrylic = true;
       }
 
       args++;

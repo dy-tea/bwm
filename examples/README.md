@@ -280,6 +280,7 @@ bmsg rule -a vesktop desktop=III
 - `one_shot` - Remove rule after first match
 - `blur=on|off` - Whether a window should have the blur effect set
 - `mica=on|off` - Whether a window should have the mica effect set
+- `acrylic=on|off` - Whether a window should have the acrylic effect set
 
 
 **Matching by Title:**
@@ -534,6 +535,40 @@ bmsg config mica_tint <R> <G> <B> [A]
 ```
 
 Sets the tint color for mica effect (default: 0.12 0.12 0.14 1.0). RGBA values should be in the range 0.0-1.0.
+
+### Acrylic Settings
+
+Acrylic is a background effect that applies blur with a tinted overlay and subtle noise texture, simulating frosted glass.
+
+```
+bmsg config acrylic_tint <R> <G> <B> [A]
+```
+
+Sets the tint color for acrylic effect (default: 1.0 1.0 1.0 1.0). RGBA values should be in the range 0.0-1.0.
+
+```
+bmsg config acrylic_tint_strength <value>
+```
+
+Sets the tint strength for acrylic effect (0.0-1.0, default: 0.3).
+
+```
+bmsg config acrylic_noise_strength <value>
+```
+
+Sets the noise/grain strength for acrylic effect (0.0-1.0, default: 0.02).
+
+```
+bmsg config acrylic_light_anchor <A> <B>
+```
+
+Sets the light anchor pos, (default: 0.5 0.5). Values should be in range -1.0 to 1.0.
+
+```
+bmsg config acrylic_blur_passes <n>
+```
+
+Sets the number of blur passes for acrylic effect (0-10, default: 4). Higher values create stronger blur.
 
 ### Screen Shaders
 

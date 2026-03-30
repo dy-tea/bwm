@@ -90,6 +90,7 @@ typedef struct client_t {
   // Visual effects
   bool blur;
   bool mica;
+  bool acrylic;
 } client_t;
 
 typedef struct node_t {

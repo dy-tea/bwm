@@ -37,6 +37,8 @@ typedef struct {
   bool has_blur;
   bool mica;
   bool has_mica;
+  bool acrylic;
+  bool has_acrylic;
 } rule_consequence_t;
 
 typedef struct rule_t {

@@ -33,6 +33,11 @@ int blur_downsample = 4;
 bool mica_enabled = false;
 float mica_tint[4] = {0.12f, 0.12f, 0.14f, 1.0f};
 float mica_tint_strength = 0.35f;
+float acrylic_tint[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+float acrylic_tint_strength = 0.3f;
+float acrylic_noise_strength = 0.02f;
+float acrylic_light_anchor[2] = {0.5f, 0.5f};
+int acrylic_blur_passes = 4;
 bool screen_shader_enabled = false;
 
 struct bwm_blur_ctx blur_ctx = {0};
@@ -157,6 +162,33 @@ static const char *frag_mica_tint_src =
   "  vec3 base = texture2D(tex, v_uv).rgb;\n"
   "  gl_FragColor = vec4(mix(base, tint.rgb, tint_strength), 1.0);\n"
   "}\n";
+
+static const char *frag_acrylic_tint_src =
+	"precision mediump float;\n"
+	"uniform sampler2D tex;\n"
+	"uniform vec4  tint;\n"
+	"uniform float tint_strength;\n"
+	"uniform float noise_strength;\n"
+	"uniform vec2  resolution;\n"
+	"uniform vec2  light_anchor;\n"  // normalized 0–1 position of a fake light
+	"varying vec2 v_uv;\n"
+	"vec3 hash3(vec2 p) {\n"
+	"  vec3 q = vec3(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)), dot(p, vec2(419.2, 371.9)));\n"
+	"  return fract(sin(q) * 43758.5453);\n"
+	"}\n"
+	"void main() {\n"
+	"  vec3 base = texture2D(tex, v_uv).rgb;\n"
+	"  vec3 tinted = mix(base, tint.rgb, clamp(tint_strength, 0.0, 0.35));\n"
+	"  tinted = pow(tinted, vec3(0.92));\n"
+	"  vec2 px = floor(v_uv * resolution);\n"
+	"  vec3 grain = (hash3(px) * 2.0 - 1.0) * 0.5 + 0.5;\n"
+	"  float highlight = pow(max(0.0, 1.0 - length(v_uv - light_anchor)), 6.0);\n"
+	"  vec3 spec = vec3(1.0) * highlight * 0.15;\n"
+	"  vec3 rim = vec3(0.08) * smoothstep(0.75, 1.0, length(v_uv - 0.5));\n"
+	"  vec3 color = tinted + spec + rim;\n"
+	"  color += (grain - 0.5) * noise_strength * 0.25;\n"
+	"  gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);\n"
+	"}\n";
 
 static const char *frag_grayscale_src =
   "precision mediump float;\n"
@@ -510,18 +542,19 @@ bool blur_init(void) {
     return false;
   }
 
-  blur_ctx.prog_kawase    = link_program(frag_kawase_src);
-  blur_ctx.prog_gauss_h   = link_program(frag_gauss_h_src);
-  blur_ctx.prog_gauss_v   = link_program(frag_gauss_v_src);
-  blur_ctx.prog_box_h     = link_program(frag_box_h_src);
-  blur_ctx.prog_box_v     = link_program(frag_box_v_src);
-  blur_ctx.prog_blit      = link_program(frag_blit_src);
+  blur_ctx.prog_kawase = link_program(frag_kawase_src);
+  blur_ctx.prog_gauss_h = link_program(frag_gauss_h_src);
+  blur_ctx.prog_gauss_v = link_program(frag_gauss_v_src);
+  blur_ctx.prog_box_h = link_program(frag_box_h_src);
+  blur_ctx.prog_box_v = link_program(frag_box_v_src);
+  blur_ctx.prog_blit = link_program(frag_blit_src);
   blur_ctx.prog_mica_tint = link_program(frag_mica_tint_src);
-  blur_ctx.prog_ext_blit  = link_program(frag_ext_blit_src);
+  blur_ctx.prog_acrylic_tint = link_program(frag_acrylic_tint_src);
+  blur_ctx.prog_ext_blit = link_program(frag_ext_blit_src);
 
   if (!blur_ctx.prog_kawase || !blur_ctx.prog_gauss_h || !blur_ctx.prog_gauss_v ||
-      !blur_ctx.prog_box_h  || !blur_ctx.prog_box_v   ||
-      !blur_ctx.prog_blit   || !blur_ctx.prog_mica_tint) {
+      !blur_ctx.prog_box_h || !blur_ctx.prog_box_v || !blur_ctx.prog_blit ||
+      !blur_ctx.prog_mica_tint || !blur_ctx.prog_acrylic_tint) {
     wlr_log(WLR_ERROR, "blur: one or more required shaders failed to compile");
     egl_unset_current();
     return false;
@@ -547,6 +580,13 @@ bool blur_init(void) {
   blur_ctx.u_mica.tex = glGetUniformLocation(blur_ctx.prog_mica_tint, "tex");
   blur_ctx.u_mica.tint = glGetUniformLocation(blur_ctx.prog_mica_tint, "tint");
   blur_ctx.u_mica.tint_strength = glGetUniformLocation(blur_ctx.prog_mica_tint, "tint_strength");
+
+  blur_ctx.u_acrylic.tex = glGetUniformLocation(blur_ctx.prog_acrylic_tint, "tex");
+  blur_ctx.u_acrylic.tint = glGetUniformLocation(blur_ctx.prog_acrylic_tint, "tint");
+  blur_ctx.u_acrylic.tint_strength = glGetUniformLocation(blur_ctx.prog_acrylic_tint, "tint_strength");
+  blur_ctx.u_acrylic.noise_strength = glGetUniformLocation(blur_ctx.prog_acrylic_tint, "noise_strength");
+  blur_ctx.u_acrylic.resolution = glGetUniformLocation(blur_ctx.prog_acrylic_tint, "resolution");
+  blur_ctx.u_acrylic.light_anchor = glGetUniformLocation(blur_ctx.prog_acrylic_tint, "light_anchor");
 
   blur_ctx.attr_pos = 0;
 
@@ -575,6 +615,7 @@ void blur_fini(void) {
   glDeleteProgram(blur_ctx.prog_box_v);
   glDeleteProgram(blur_ctx.prog_blit);
   glDeleteProgram(blur_ctx.prog_mica_tint);
+  glDeleteProgram(blur_ctx.prog_acrylic_tint);
   if (blur_ctx.prog_ext_blit)
     glDeleteProgram(blur_ctx.prog_ext_blit);
   if (screen_shader_prog)
@@ -689,13 +730,18 @@ void blur_output_resize(struct bwm_blur_output_ctx *ctx, int width, int height) 
     ctx->screen_shader_buf_fbo = 0;
   }
 
-  /* Free per-toplevel blur buffers since output dimensions changed */
+  // Free per-toplevel blur/acrylic buffers since output dimensions changed
   struct bwm_toplevel *tl;
   wl_list_for_each(tl, &server.toplevels, link) {
     if (tl->blur_buf) {
       wlr_buffer_unlock(tl->blur_buf);
       tl->blur_buf = NULL;
       tl->blur_buf_fbo = 0;
+    }
+    if (tl->acrylic_buf) {
+      wlr_buffer_unlock(tl->acrylic_buf);
+      tl->acrylic_buf = NULL;
+      tl->acrylic_buf_fbo = 0;
     }
   }
 
@@ -1013,6 +1059,98 @@ static void push_blur_to_toplevels(struct bwm_output *output) {
   }
 }
 
+static bool rebuild_live_acrylic(struct bwm_output *output,
+    struct wlr_scene_output *scene_output) {
+  struct bwm_blur_output_ctx *ctx = output->blur_ctx;
+  int w = output->width, h = output->height;
+  bool any = false;
+
+  struct bwm_toplevel *tl;
+  wl_list_for_each(tl, &server.toplevels, link) {
+    if (!tl->acrylic_node || !tl->node || !tl->node->client) continue;
+    if (!tl->node->client->shown) continue;
+    if (!tl->node->monitor || tl->node->monitor->output != output) continue;
+
+    GLuint src = capture_bg_to_tex1(output, ctx, scene_output, false, tl);
+    if (!src) continue;
+
+    GLuint dest_fbo = ensure_output_buf(&tl->acrylic_buf, &tl->acrylic_buf_fbo, w, h);
+    if (!dest_fbo) continue;
+
+    egl_make_current();
+
+    glDisable(GL_BLEND);
+    glDisable(GL_SCISSOR_TEST);
+    GLuint blurred = src;
+    if (acrylic_blur_passes > 0) {
+      int ping = (src == ctx->tex[1]) ? 0 : 1;
+      GLuint current = src;
+      for (int i = 0; i < acrylic_blur_passes; i++) {
+        blur_pass(current, ctx->fbo[ping], ctx->blur_w, ctx->blur_h, i);
+        current = ctx->tex[ping];
+        ping ^= 1;
+      }
+      blurred = current;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, dest_fbo);
+    glViewport(0, 0, w, h);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, blurred);
+    glUseProgram(blur_ctx.prog_acrylic_tint);
+    glUniform1i(blur_ctx.u_acrylic.tex, 0);
+    glUniform4fv(blur_ctx.u_acrylic.tint, 1, acrylic_tint);
+    glUniform1f(blur_ctx.u_acrylic.tint_strength, acrylic_tint_strength);
+    glUniform1f(blur_ctx.u_acrylic.noise_strength, acrylic_noise_strength);
+    glUniform2f(blur_ctx.u_acrylic.resolution, (float)w, (float)h);
+    glUniform2f(blur_ctx.u_acrylic.light_anchor, acrylic_light_anchor[0], acrylic_light_anchor[1]);
+    draw_quad();
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glFlush();
+    egl_unset_current();
+    any = true;
+  }
+  return any;
+}
+
+static void push_acrylic_to_toplevels(struct bwm_output *output) {
+  struct bwm_toplevel *tl;
+  wl_list_for_each(tl, &server.toplevels, link) {
+    if (!tl->acrylic_node || !tl->node) continue;
+    monitor_t *m = tl->node->monitor;
+    if (!m || m->output != output) continue;
+
+    if (!tl->acrylic_buf) {
+      wlr_scene_buffer_set_buffer(tl->acrylic_node, NULL);
+      continue;
+    }
+
+    wlr_scene_buffer_set_buffer(tl->acrylic_node, tl->acrylic_buf);
+
+    client_t *c = tl->node->client;
+    struct wlr_box r;
+    if (c->state == STATE_FULLSCREEN && tl->node->monitor)
+      r = tl->node->monitor->rectangle;
+    else if (c->state == STATE_FLOATING)
+      r = c->floating_rectangle;
+    else
+      r = c->tiled_rectangle;
+
+    struct wlr_fbox src; int dw, dh;
+    if (!compute_src_box(output, &r, &src, &dw, &dh)) {
+      wlr_scene_buffer_set_buffer(tl->acrylic_node, NULL);
+      wlr_scene_node_set_position(&tl->acrylic_node->node, 0, 0);
+      continue;
+    }
+    int node_ox = (r.x < output->lx) ? (output->lx - r.x) : 0;
+    int node_oy = (r.y < output->ly) ? (output->ly - r.y) : 0;
+    wlr_scene_node_set_position(&tl->acrylic_node->node, node_ox, node_oy);
+    wlr_scene_buffer_set_source_box(tl->acrylic_node, &src);
+    wlr_scene_buffer_set_dest_size(tl->acrylic_node, dw, dh);
+  }
+}
+
 static bool rebuild_mica(struct bwm_output *output, struct wlr_scene_output *scene_output) {
   struct bwm_blur_output_ctx *ctx = output->blur_ctx;
   int w = output->width, h = output->height;
@@ -1285,6 +1423,22 @@ void blur_output_frame(struct bwm_output *output, struct wlr_scene_output *scene
     if (any_blur) {
       rebuild_live_blur(output, scene_output);
       push_blur_to_toplevels(output);
+    }
+  }
+
+  {
+    bool any_acrylic = false;
+    struct bwm_toplevel *tl;
+    wl_list_for_each(tl, &server.toplevels, link) {
+      if (tl->acrylic_node && tl->node && tl->node->client && tl->node->client->shown &&
+          tl->node->monitor && tl->node->monitor->output == output) {
+        any_acrylic = true;
+        break;
+      }
+    }
+    if (any_acrylic) {
+      rebuild_live_acrylic(output, scene_output);
+      push_acrylic_to_toplevels(output);
     }
   }
 

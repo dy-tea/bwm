@@ -26,6 +26,11 @@ extern int blur_downsample;
 extern bool mica_enabled;
 extern float mica_tint[4];
 extern float mica_tint_strength;
+extern float acrylic_tint[4];
+extern float acrylic_tint_strength;
+extern float acrylic_noise_strength;
+extern float acrylic_light_anchor[2];
+extern int acrylic_blur_passes;
 extern bool screen_shader_enabled;
 
 struct bwm_blur_output_ctx {
@@ -61,6 +66,7 @@ struct bwm_blur_ctx {
   GLuint prog_box_v;
   GLuint prog_blit;
   GLuint prog_mica_tint;
+  GLuint prog_acrylic_tint;
   GLuint prog_ext_blit;
 
   struct {
@@ -78,6 +84,9 @@ struct bwm_blur_ctx {
   struct {
     GLint tex, tint, tint_strength;
   } u_mica;
+  struct {
+    GLint tex, tint, tint_strength, noise_strength, resolution, light_anchor;
+  } u_acrylic;
   struct {
     GLint tex;
   } u_ext_blit;
