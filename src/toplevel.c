@@ -663,6 +663,7 @@ void toplevel_destroy(struct wl_listener *listener, void *data) {
   if (toplevel->image_capture != NULL) {
 		wlr_scene_node_destroy(&toplevel->image_capture->tree.node);
    	toplevel->image_capture = NULL;
+		toplevel->image_capture_source = NULL;
   }
 
   if (toplevel->blur_node) {
@@ -1132,20 +1133,22 @@ void handle_new_toplevel_capture_request(struct wl_listener *listener, void *dat
 	struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request *request = data;
 	void *handle_data = request->toplevel_handle->data;
 
-	struct bwm_toplevel *toplevel = handle_data;
-	struct bwm_xwayland_view *xwayland_view = handle_data;
-
 	struct wlr_ext_image_capture_source_v1 **image_capture_source_ptr = NULL;
 	struct wlr_scene *image_capture = NULL;
 
-	if (toplevel->node && toplevel->node->client) {
-		if (toplevel->node->client->toplevel != NULL) {
-			image_capture_source_ptr = &toplevel->image_capture_source;
-			image_capture = toplevel->image_capture;
-		} else if (toplevel->node->client->xwayland_view != NULL) {
-			image_capture_source_ptr = &xwayland_view->image_capture_source;
-			image_capture = xwayland_view->image_capture;
+	struct bwm_toplevel *tl;
+	wl_list_for_each(tl, &server.toplevels, link) {
+		if (tl == handle_data) {
+			image_capture_source_ptr = &tl->image_capture_source;
+			image_capture = tl->image_capture;
+			break;
 		}
+	}
+
+	if (image_capture_source_ptr == NULL) {
+		struct bwm_xwayland_view *xwayland_view = handle_data;
+		image_capture_source_ptr = &xwayland_view->image_capture_source;
+		image_capture = xwayland_view->image_capture;
 	}
 
 	if (image_capture_source_ptr == NULL || image_capture == NULL) {

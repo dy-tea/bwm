@@ -786,6 +786,7 @@ static void handle_destroy(struct wl_listener *listener, void *data) {
 	if (xwayland_view->image_capture != NULL) {
 		wlr_scene_node_destroy(&xwayland_view->image_capture->tree.node);
 		xwayland_view->image_capture = NULL;
+		xwayland_view->image_capture_source = NULL;
 	}
 
 	destroy_borders(&xwayland_view->border_tree, xwayland_view->border_rects);
