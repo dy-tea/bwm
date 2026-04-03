@@ -1,0 +1,6 @@
+* text=auto eol=lf
+
+*.vert linguist-language=GLSL
+*.frag linguist-language=GLSL
+
+*.pl linguist-language=Perl
