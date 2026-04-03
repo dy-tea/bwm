@@ -288,6 +288,9 @@ void toplevel_map(struct wl_listener *listener, void *data) {
     n->client->acrylic = rule->acrylic;
     toplevel_set_acrylic(toplevel, rule->acrylic);
   }
+  if (rule && rule->has_border_radius) {
+    toplevel_set_border_radius(toplevel, rule->border_radius);
+  }
 
   // create foreign toplevel handles
   struct wlr_ext_foreign_toplevel_handle_v1_state ext_state = {
@@ -450,10 +453,6 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
 
   node_t *n = toplevel->node;
 
-  // notify transaction system that this view is unmapped
-  // so it can mark any waiting instruction as ready
-  transaction_notify_view_unmapped(n);
-
   monitor_t *m = mon;
   desktop_t *d = NULL;
 
@@ -481,7 +480,8 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
     }
   }
 
-  // freeze resizing siblings
+  // Freeze sibling buffers before modifying the layout tree so they capture
+  // the current visual state.
   toplevel_freeze_sibling_buffers(d, n);
 
   if (m && d) {
@@ -509,6 +509,8 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
         focus_node(m, d, d->focus);
     }
   }
+
+  transaction_notify_view_unmapped(n);
 }
 
 void toplevel_commit(struct wl_listener *listener, void *data) {
@@ -639,6 +641,50 @@ void toplevel_set_acrylic(struct bwm_toplevel *tl, bool enabled) {
   }
 }
 
+void toplevel_set_border_radius(struct bwm_toplevel *tl, float radius) {
+  if (!tl || !tl->scene_tree || !tl->content_tree)
+    return;
+
+  if (tl->node && tl->node->client)
+    tl->node->client->border_radius = radius;
+
+  if (radius > 0.0f) {
+    if (!tl->corner_mask_node) {
+      tl->corner_mask_node = wlr_scene_buffer_create(tl->scene_tree, NULL);
+      if (tl->corner_mask_node) {
+        wlr_scene_node_place_above(&tl->corner_mask_node->node,
+            &tl->content_tree->node);
+        if (tl->border_tree)
+          wlr_scene_node_place_below(&tl->corner_mask_node->node,
+              &tl->border_tree->node);
+      }
+    }
+    tl->border_dirty = true;
+  } else {
+    if (tl->corner_mask_node) {
+      wlr_scene_node_destroy(&tl->corner_mask_node->node);
+      tl->corner_mask_node = NULL;
+      if (tl->corner_mask_buf) {
+        wlr_buffer_unlock(tl->corner_mask_buf);
+        tl->corner_mask_buf = NULL;
+        tl->corner_mask_buf_fbo = 0;
+      }
+    }
+    if (tl->border_shader_node) {
+      wlr_scene_node_destroy(&tl->border_shader_node->node);
+      tl->border_shader_node = NULL;
+      if (tl->border_shader_buf) {
+        wlr_buffer_unlock(tl->border_shader_buf);
+        tl->border_shader_buf = NULL;
+        tl->border_shader_buf_fbo = 0;
+        tl->border_shader_buf_w = 0;
+        tl->border_shader_buf_h = 0;
+      }
+    }
+    tl->border_dirty = false;
+  }
+}
+
 void toplevel_destroy(struct wl_listener *listener, void *data) {
   (void)data;
   struct bwm_toplevel *toplevel = wl_container_of(listener, toplevel, destroy);
@@ -689,6 +735,27 @@ void toplevel_destroy(struct wl_listener *listener, void *data) {
     wlr_buffer_unlock(toplevel->acrylic_buf);
     toplevel->acrylic_buf = NULL;
     toplevel->acrylic_buf_fbo = 0;
+  }
+
+  // border_shader_node lives inside border_tree which destroy_borders will free,
+  // but we still need to release the backing buffer.
+  if (toplevel->border_shader_buf) {
+    wlr_buffer_unlock(toplevel->border_shader_buf);
+    toplevel->border_shader_buf = NULL;
+    toplevel->border_shader_buf_fbo = 0;
+    toplevel->border_shader_buf_w = 0;
+    toplevel->border_shader_buf_h = 0;
+  }
+  toplevel->border_shader_node = NULL; // freed by destroy_borders below
+
+  if (toplevel->corner_mask_node) {
+    wlr_scene_node_destroy(&toplevel->corner_mask_node->node);
+    toplevel->corner_mask_node = NULL;
+  }
+  if (toplevel->corner_mask_buf) {
+    wlr_buffer_unlock(toplevel->corner_mask_buf);
+    toplevel->corner_mask_buf = NULL;
+    toplevel->corner_mask_buf_fbo = 0;
   }
 
   destroy_borders(&toplevel->border_tree, toplevel->border_rects);

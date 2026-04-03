@@ -39,6 +39,8 @@ typedef struct {
   bool has_mica;
   bool acrylic;
   bool has_acrylic;
+  float border_radius;
+  bool has_border_radius;
 } rule_consequence_t;
 
 typedef struct rule_t {

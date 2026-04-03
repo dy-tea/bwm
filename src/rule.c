@@ -136,6 +136,8 @@ void list_rules(char *buf, size_t buf_size) {
       offset += snprintf(buf + offset, buf_size - offset, "mica=%s ", r->consequence.mica ? "on" : "off");
     if (r->consequence.has_acrylic)
       offset += snprintf(buf + offset, buf_size - offset, "acrylic=%s ", r->consequence.acrylic ? "on" : "off");
+    if (r->consequence.has_border_radius)
+      offset += snprintf(buf + offset, buf_size - offset, "border_radius=%.1f ", r->consequence.border_radius);
 
     offset += snprintf(buf + offset, buf_size - offset, "\n");
 

@@ -3,8 +3,8 @@
 #include "types.h"
 #include <wlr/types/wlr_scene.h>
 
-#define MIN_WIDTH 32
-#define MIN_HEIGHT 32
+#define MIN_WIDTH 1
+#define MIN_HEIGHT 1
 
 // node creation and destruction
 node_t *make_node(uint32_t id);

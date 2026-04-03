@@ -281,6 +281,7 @@ bmsg rule -a vesktop desktop=III
 - `blur=on|off` - Whether a window should have the blur effect set
 - `mica=on|off` - Whether a window should have the mica effect set
 - `acrylic=on|off` - Whether a window should have the acrylic effect set
+- `border_radius=10.0` - Set the border radius to a given float value
 
 
 **Matching by Title:**

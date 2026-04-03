@@ -316,16 +316,16 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
       int bleed = wg + 2 * bw;
       r.x += bw;
       r.y += bw;
-      r.width = (bleed < r.width ? r.width - bleed : 1);
-      r.height = (bleed < r.height ? r.height - bleed : 1);
+      r.width = (bleed < r.width ? r.width - bleed : 0);
+      r.height = (bleed < r.height ? r.height - bleed : 0);
     } else {
       r = rect;
       int wg = (gapless_monocle && d->layout == LAYOUT_MONOCLE) ? 0 : d->window_gap;
       int bleed = wg + 2 * bw;
       r.x += bw;
       r.y += bw;
-      r.width = (bleed < r.width ? r.width - bleed : 1);
-      r.height = (bleed < r.height ? r.height - bleed : 1);
+      r.width = (bleed < r.width ? r.width - bleed : 0);
+      r.height = (bleed < r.height ? r.height - bleed : 0);
     }
 
     // pseudo tile
@@ -336,11 +336,10 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
         r.height = n->client->floating_rectangle.height;
     }
 
-    // Enforce minimum size constraints
-    if (r.width < MIN_WIDTH) r.width = MIN_WIDTH;
-    if (r.height < MIN_HEIGHT) r.height = MIN_HEIGHT;
-
     n->client->tiled_rectangle = r;
+    if (n->client->committed_tiled_rectangle.width == 0 &&
+        n->client->committed_tiled_rectangle.height == 0)
+      n->client->committed_tiled_rectangle = r;
 
     wlr_log(WLR_DEBUG, "apply_layout: node %u tiled_rect=(%d,%d %dx%d)",
             n->id, r.x, r.y, r.width, r.height);
@@ -1488,6 +1487,20 @@ void update_border_colors(struct wlr_scene_tree *border_tree, struct wlr_scene_r
 
   float color[4];
   get_border_color(client, color);
+
+  if (client->border_radius > 0.0f && client->toplevel) {
+    struct bwm_toplevel *tl = client->toplevel;
+    tl->border_color[0] = color[0];
+    tl->border_color[1] = color[1];
+    tl->border_color[2] = color[2];
+    tl->border_color[3] = color[3];
+    tl->border_dirty = true;
+    static const float transparent[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    for (int i = 0; i < 4; i++)
+      if (rects[i])
+        wlr_scene_rect_set_color(rects[i], transparent);
+    return;
+  }
 
   for (int i = 0; i < 4; i++)
     if (rects[i])

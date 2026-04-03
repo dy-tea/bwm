@@ -71,6 +71,7 @@ typedef struct client_t {
   stack_layer_t last_layer;
   struct wlr_box floating_rectangle;
   struct wlr_box tiled_rectangle;
+  struct wlr_box committed_tiled_rectangle;
   struct bwm_toplevel *toplevel;
   struct bwm_xwayland_view *xwayland_view;
 
@@ -91,6 +92,7 @@ typedef struct client_t {
   bool blur;
   bool mica;
   bool acrylic;
+  float border_radius;
 } client_t;
 
 typedef struct node_t {

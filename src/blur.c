@@ -234,6 +234,72 @@ static const char *frag_nightlight_src =
   "    gl_FragColor = vec4(c, 1.0);\n"
   "}\n";
 
+static const char *frag_border_src =
+  "#extension GL_OES_standard_derivatives : enable\n"
+  "precision highp float;\n"
+  "uniform vec2 resolution;\n"
+  "uniform float border_radius;\n"
+  "uniform float border_width_px;\n"
+  "uniform vec4 border_color;\n"
+  "varying vec2 v_uv;\n"
+  "\n"
+  "float sdRoundedBox(vec2 p, vec2 b, float r) {\n"
+  "    vec2 q = abs(p) - b + r;\n"
+  "    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;\n"
+  "}\n"
+  "\n"
+  "void main() {\n"
+  "    vec2 px = v_uv * resolution;\n"
+  "    vec2 center = resolution * 0.5;\n"
+  "    vec2 p = px - center;\n"
+  "    float d_outer = sdRoundedBox(p, center, border_radius);\n"
+  "    float inner_r = max(border_radius - border_width_px, 0.0);\n"
+  "    vec2 inner_half = center - vec2(border_width_px);\n"
+  "    float d_inner = sdRoundedBox(p, inner_half, inner_r);\n"
+  "    float fw_outer = max(length(vec2(dFdx(d_outer), dFdy(d_outer))), 0.5);\n"
+  "    float a_outer = smoothstep(fw_outer * 0.5, -fw_outer * 0.5, d_outer);\n"
+  "    float fw_inner = max(length(vec2(dFdx(d_inner), dFdy(d_inner))), 0.5);\n"
+  "    float a_inner = smoothstep(-fw_inner, fw_inner * 0.25, d_inner);\n"
+  "    float alpha = a_outer * a_inner * border_color.a;\n"
+  "    if (alpha < 0.001) discard;\n"
+  "    gl_FragColor = vec4(border_color.rgb * alpha, alpha);\n"
+  "}\n";
+
+static const char *frag_corner_mask_src =
+  "#extension GL_OES_standard_derivatives : enable\n"
+  "precision highp float;\n"
+  "uniform sampler2D tex;\n"
+  "uniform vec2 win_pos_uv;\n"
+  "uniform vec2 win_size_uv;\n"
+  "uniform vec2 win_size_px;\n"
+  "uniform float border_radius_px;\n"
+  "varying vec2 v_uv;\n"
+  "\n"
+  "float sdRoundedBox(vec2 p, vec2 b, float r) {\n"
+  "    vec2 q = abs(p) - b + r;\n"
+  "    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;\n"
+  "}\n"
+  "\n"
+  "void main() {\n"
+  "    vec2 win_local = (v_uv - win_pos_uv) / win_size_uv;\n"
+  "    if (win_local.x < 0.0 || win_local.x > 1.0 ||\n"
+  "        win_local.y < 0.0 || win_local.y > 1.0) {\n"
+  "        gl_FragColor = vec4(0.0);\n"
+  "        return;\n"
+  "    }\n"
+  "    vec2 p_px = (win_local - 0.5) * win_size_px;\n"
+  "    vec2 half_px = win_size_px * 0.5;\n"
+  "    float d = sdRoundedBox(p_px, half_px, border_radius_px);\n"
+  "    float fw = max(length(vec2(dFdx(d), dFdy(d))), 0.5);\n"
+  "    float alpha = smoothstep(-fw * 0.15, fw * 0.85, d);\n"
+  "    if (alpha < 0.001) {\n"
+  "        gl_FragColor = vec4(0.0);\n"
+  "        return;\n"
+  "    }\n"
+  "    vec4 bg = texture2D(tex, v_uv);\n"
+  "    gl_FragColor = vec4(bg.rgb * alpha, bg.a * alpha);\n"
+  "}\n";
+
 static EGLDisplay s_egl_display = EGL_NO_DISPLAY;
 static EGLContext s_egl_context = EGL_NO_CONTEXT;
 
@@ -551,6 +617,8 @@ bool blur_init(void) {
   blur_ctx.prog_mica_tint = link_program(frag_mica_tint_src);
   blur_ctx.prog_acrylic_tint = link_program(frag_acrylic_tint_src);
   blur_ctx.prog_ext_blit = link_program(frag_ext_blit_src);
+  blur_ctx.prog_border = link_program(frag_border_src);
+  blur_ctx.prog_corner_mask = link_program(frag_corner_mask_src);
 
   if (!blur_ctx.prog_kawase || !blur_ctx.prog_gauss_h || !blur_ctx.prog_gauss_v ||
       !blur_ctx.prog_box_h || !blur_ctx.prog_box_v || !blur_ctx.prog_blit ||
@@ -588,6 +656,20 @@ bool blur_init(void) {
   blur_ctx.u_acrylic.resolution = glGetUniformLocation(blur_ctx.prog_acrylic_tint, "resolution");
   blur_ctx.u_acrylic.light_anchor = glGetUniformLocation(blur_ctx.prog_acrylic_tint, "light_anchor");
 
+  if (blur_ctx.prog_border) {
+    blur_ctx.u_border.resolution = glGetUniformLocation(blur_ctx.prog_border, "resolution");
+    blur_ctx.u_border.border_radius = glGetUniformLocation(blur_ctx.prog_border, "border_radius");
+    blur_ctx.u_border.border_width_px = glGetUniformLocation(blur_ctx.prog_border, "border_width_px");
+    blur_ctx.u_border.border_color = glGetUniformLocation(blur_ctx.prog_border, "border_color");
+  }
+  if (blur_ctx.prog_corner_mask) {
+    blur_ctx.u_corner_mask.tex = glGetUniformLocation(blur_ctx.prog_corner_mask, "tex");
+    blur_ctx.u_corner_mask.win_pos_uv = glGetUniformLocation(blur_ctx.prog_corner_mask, "win_pos_uv");
+    blur_ctx.u_corner_mask.win_size_uv = glGetUniformLocation(blur_ctx.prog_corner_mask, "win_size_uv");
+    blur_ctx.u_corner_mask.win_size_px = glGetUniformLocation(blur_ctx.prog_corner_mask, "win_size_px");
+    blur_ctx.u_corner_mask.border_radius_px = glGetUniformLocation(blur_ctx.prog_corner_mask, "border_radius_px");
+  }
+
   blur_ctx.attr_pos = 0;
 
   static const float quad[] = {
@@ -618,6 +700,10 @@ void blur_fini(void) {
   glDeleteProgram(blur_ctx.prog_acrylic_tint);
   if (blur_ctx.prog_ext_blit)
     glDeleteProgram(blur_ctx.prog_ext_blit);
+  if (blur_ctx.prog_border)
+    glDeleteProgram(blur_ctx.prog_border);
+  if (blur_ctx.prog_corner_mask)
+    glDeleteProgram(blur_ctx.prog_corner_mask);
   if (screen_shader_prog)
     glDeleteProgram(screen_shader_prog);
   glDeleteBuffers(1, &blur_ctx.vbo);
@@ -743,6 +829,19 @@ void blur_output_resize(struct bwm_blur_output_ctx *ctx, int width, int height) 
       tl->acrylic_buf = NULL;
       tl->acrylic_buf_fbo = 0;
     }
+    if (tl->corner_mask_buf) {
+      wlr_buffer_unlock(tl->corner_mask_buf);
+      tl->corner_mask_buf = NULL;
+      tl->corner_mask_buf_fbo = 0;
+    }
+    if (tl->border_shader_buf) {
+      wlr_buffer_unlock(tl->border_shader_buf);
+      tl->border_shader_buf = NULL;
+      tl->border_shader_buf_fbo = 0;
+      tl->border_shader_buf_w = 0;
+      tl->border_shader_buf_h = 0;
+    }
+    tl->border_dirty = true;
   }
 
   ctx->mica_dirty = true;
@@ -977,6 +1076,40 @@ static GLuint ensure_output_buf(struct wlr_buffer **buf_out, GLuint *fbo_out,
   wlr_buffer_drop(buf);
   *buf_out = buf;
   *fbo_out = fbo;
+  return fbo;
+}
+
+static GLuint ensure_sized_buf(struct wlr_buffer **buf_out, GLuint *fbo_out,
+    int *w_stored, int *h_stored, int w, int h) {
+  if (*buf_out && *w_stored == w && *h_stored == h)
+    return *fbo_out;
+
+  if (*buf_out) {
+    wlr_buffer_unlock(*buf_out);
+    *buf_out = NULL;
+    *fbo_out = 0;
+  }
+
+  const struct wlr_drm_format_set *fmts = wlr_renderer_get_render_formats(server.renderer);
+  const struct wlr_drm_format *fmt = fmts ? wlr_drm_format_set_get(fmts, DRM_FORMAT_ARGB8888) : NULL;
+  if (!fmt) fmt = fmts ? wlr_drm_format_set_get(fmts, DRM_FORMAT_XRGB8888) : NULL;
+  if (!fmt) return 0;
+
+  struct wlr_buffer *buf = wlr_allocator_create_buffer(server.allocator, w, h, fmt);
+  if (!buf) return 0;
+
+  GLuint fbo = wlr_gles2_renderer_get_buffer_fbo(server.renderer, buf);
+  if (!fbo) {
+    wlr_buffer_drop(buf);
+    return 0;
+  }
+
+  wlr_buffer_lock(buf);
+  wlr_buffer_drop(buf);
+  *buf_out = buf;
+  *fbo_out = fbo;
+  *w_stored = w;
+  *h_stored = h;
   return fbo;
 }
 
@@ -1223,6 +1356,164 @@ static void push_mica_to_toplevels(struct bwm_output *output) {
   }
 }
 
+static struct wlr_box get_client_rect(struct bwm_toplevel *tl) {
+  client_t *c = tl->node->client;
+  if (c->state == STATE_FULLSCREEN && tl->node->monitor)
+    return tl->node->monitor->rectangle;
+  else if (c->state == STATE_FLOATING)
+    return c->floating_rectangle;
+  else
+    return c->committed_tiled_rectangle;
+}
+
+static bool blur_render_border(struct bwm_toplevel *tl, int content_w, int content_h) {
+  if (!blur_ctx.prog_border) return false;
+  if (!tl->border_tree) return false;
+
+  client_t *c = tl->node->client;
+  int bw_i = (int)c->border_width;
+  int fw = content_w + 2 * bw_i;
+  int fh = content_h + 2 * bw_i;
+  if (fw <= 0 || fh <= 0) return false;
+
+  if (!tl->border_shader_node) {
+    tl->border_shader_node = wlr_scene_buffer_create(tl->border_tree, NULL);
+    if (!tl->border_shader_node) return false;
+    wlr_scene_node_set_position(&tl->border_shader_node->node, 0, 0);
+  }
+
+  GLuint dest_fbo = ensure_sized_buf(&tl->border_shader_buf, &tl->border_shader_buf_fbo,
+    &tl->border_shader_buf_w, &tl->border_shader_buf_h, fw, fh);
+  if (!dest_fbo) return false;
+
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_ONE, GL_ZERO);
+  glDisable(GL_SCISSOR_TEST);
+  glBindFramebuffer(GL_FRAMEBUFFER, dest_fbo);
+  glViewport(0, 0, fw, fh);
+  glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+  glUseProgram(blur_ctx.prog_border);
+  glUniform2f(blur_ctx.u_border.resolution, (float)fw, (float)fh);
+  glUniform1f(blur_ctx.u_border.border_radius, c->border_radius);
+  glUniform1f(blur_ctx.u_border.border_width_px, (float)bw_i);
+  glUniform4fv(blur_ctx.u_border.border_color, 1, tl->border_color);
+  draw_quad();
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glDisable(GL_BLEND);
+  glFlush();
+
+  wlr_scene_buffer_set_buffer(tl->border_shader_node, tl->border_shader_buf);
+  struct wlr_fbox src_box = {0, 0, (double)fw, (double)fh};
+  wlr_scene_buffer_set_source_box(tl->border_shader_node, &src_box);
+  wlr_scene_buffer_set_dest_size(tl->border_shader_node, fw, fh);
+  wlr_scene_node_set_enabled(&tl->border_shader_node->node, true);
+
+  static const float transparent[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  for (int i = 0; i < 4; i++)
+    if (tl->border_rects[i])
+      wlr_scene_rect_set_color(tl->border_rects[i], transparent);
+
+  return true;
+}
+
+static bool rebuild_corner_masks(struct bwm_output *output,
+    struct wlr_scene_output *scene_output) {
+  if (!blur_ctx.prog_corner_mask) return false;
+  struct bwm_blur_output_ctx *ctx = output->blur_ctx;
+  int w = output->width, h = output->height;
+  bool any = false;
+
+  struct bwm_toplevel *tl;
+  wl_list_for_each(tl, &server.toplevels, link) {
+    if (!tl->corner_mask_node || !tl->node || !tl->node->client) continue;
+    if (!tl->node->client->shown) continue;
+    if (!tl->node->monitor || tl->node->monitor->output != output) continue;
+
+    client_t *c = tl->node->client;
+    if (c->border_radius <= 0.0f) continue;
+
+    struct wlr_box content_r = get_client_rect(tl);
+    if (content_r.width <= 0 || content_r.height <= 0) continue;
+
+    GLuint src = capture_bg_to_tex1(output, ctx, scene_output, false, tl);
+    if (!src) continue;
+
+    egl_make_current();
+
+    GLuint dest_fbo = ensure_output_buf(&tl->corner_mask_buf,
+      &tl->corner_mask_buf_fbo, w, h);
+    if (!dest_fbo) {
+    	egl_unset_current();
+    	continue;
+    }
+
+    float ow = (float)w, oh = (float)h;
+    float win_u  = (float)(content_r.x - output->lx) / ow;
+    float win_v  = (float)(content_r.y - output->ly) / oh;
+    float win_sw = (float)content_r.width  / ow;
+    float win_sh = (float)content_r.height / oh;
+    int bw_i = (c->state == STATE_FULLSCREEN) ? 0 : (int)c->border_width;
+    float inner_r = (c->border_radius > (float)bw_i) ? c->border_radius - (float)bw_i : 0.0f;
+
+    glDisable(GL_BLEND);
+    glDisable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_FRAMEBUFFER, dest_fbo);
+    glViewport(0, 0, w, h);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, src);
+    glUseProgram(blur_ctx.prog_corner_mask);
+    glUniform1i(blur_ctx.u_corner_mask.tex, 0);
+    glUniform2f(blur_ctx.u_corner_mask.win_pos_uv, win_u, win_v);
+    glUniform2f(blur_ctx.u_corner_mask.win_size_uv, win_sw, win_sh);
+    glUniform2f(blur_ctx.u_corner_mask.win_size_px,
+      (float)content_r.width, (float)content_r.height);
+    glUniform1f(blur_ctx.u_corner_mask.border_radius_px, inner_r);
+    draw_quad();
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glFlush();
+    egl_unset_current();
+    any = true;
+  }
+  return any;
+}
+
+static void push_corner_masks_to_toplevels(struct bwm_output *output) {
+  struct bwm_toplevel *tl;
+  wl_list_for_each(tl, &server.toplevels, link) {
+    if (!tl->corner_mask_node || !tl->node || !tl->node->client) continue;
+    monitor_t *m = tl->node->monitor;
+    if (!m || m->output != output) continue;
+
+    client_t *c = tl->node->client;
+    if (c->border_radius <= 0.0f) {
+      wlr_scene_buffer_set_buffer(tl->corner_mask_node, NULL);
+      continue;
+    }
+    if (!tl->corner_mask_buf) {
+      wlr_scene_node_set_enabled(&tl->corner_mask_node->node, false);
+      continue;
+    }
+
+    struct wlr_box content_r = get_client_rect(tl);
+    struct wlr_fbox src; int dw, dh;
+    if (!compute_src_box(output, &content_r, &src, &dw, &dh)) {
+      wlr_scene_node_set_enabled(&tl->corner_mask_node->node, false);
+      continue;
+    }
+    wlr_scene_node_set_enabled(&tl->corner_mask_node->node, true);
+    wlr_scene_buffer_set_buffer(tl->corner_mask_node, tl->corner_mask_buf);
+    int node_ox = (content_r.x < output->lx) ? (output->lx - content_r.x) : 0;
+    int node_oy = (content_r.y < output->ly) ? (output->ly - content_r.y) : 0;
+    wlr_scene_node_set_position(&tl->corner_mask_node->node, node_ox, node_oy);
+    wlr_scene_buffer_set_source_box(tl->corner_mask_node, &src);
+    wlr_scene_buffer_set_dest_size(tl->corner_mask_node, dw, dh);
+  }
+}
+
 static GLuint capture_full_scene_to_tex(struct bwm_output *output,
     struct bwm_blur_output_ctx *ctx, struct wlr_scene_output *real_scene_output) {
   int w = output->width, h = output->height;
@@ -1447,6 +1738,42 @@ void blur_output_frame(struct bwm_output *output, struct wlr_scene_output *scene
 
   if (mica_enabled && ctx->mica_buf)
     push_mica_to_toplevels(output);
+
+  // shader border
+  {
+    struct bwm_toplevel *tl;
+    wl_list_for_each(tl, &server.toplevels, link) {
+      if (!tl->border_dirty) continue;
+      if (!tl->node || !tl->node->client || !tl->node->client->shown) continue;
+      if (!tl->node->monitor || tl->node->monitor->output != output) continue;
+      client_t *c = tl->node->client;
+      if (c->border_radius <= 0.0f) { tl->border_dirty = false; continue; }
+
+      struct wlr_box content_r = get_client_rect(tl);
+      egl_make_current();
+      blur_render_border(tl, content_r.width, content_r.height);
+      egl_unset_current();
+      tl->border_dirty = false;
+    }
+  }
+
+  // corner mask render
+  {
+    bool any_cm = false;
+    struct bwm_toplevel *tl;
+    wl_list_for_each(tl, &server.toplevels, link) {
+      if (tl->corner_mask_node && tl->node && tl->node->client &&
+          tl->node->client->border_radius > 0.0f &&
+          tl->node->monitor && tl->node->monitor->output == output) {
+        any_cm = true;
+        break;
+      }
+    }
+    if (any_cm) {
+      rebuild_corner_masks(output, scene_output);
+      push_corner_masks_to_toplevels(output);
+    }
+  }
 
   do_screen_shader_frame(output, scene_output);
 }

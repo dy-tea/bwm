@@ -814,6 +814,17 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
       if (n->client->toplevel)
         toplevel_set_acrylic(n->client->toplevel, new_val);
       send_success(client_fd, "flag changed\n");
+    } else if (strncmp(key, "border_radius=", 14) == 0) {
+      if (!n->client) {
+        send_failure(client_fd, "node -g: no client\n");
+        return;
+      }
+      float r = atof(key + 14);
+      if (n->client->toplevel)
+        toplevel_set_border_radius(n->client->toplevel, r);
+      else if (n->client)
+        n->client->border_radius = r;
+      send_success(client_fd, "border_radius set\n");
     } else {
       send_failure(client_fd, "node -g: unknown flag\n");
       return;
@@ -3436,6 +3447,9 @@ static void ipc_cmd_rule(char **args, int num, int client_fd) {
       } else if (streq("acrylic=off", arg)) {
         r->consequence.acrylic = false;
         r->consequence.has_acrylic = true;
+      } else if (strncmp("border_radius=", arg, 14) == 0) {
+        r->consequence.border_radius = atof(arg + 14);
+        r->consequence.has_border_radius = true;
       }
 
       args++;

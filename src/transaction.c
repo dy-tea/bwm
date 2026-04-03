@@ -23,6 +23,7 @@ static struct {
 } txn_state = {0};
 
 static void transaction_commit(struct bwm_transaction *txn);
+static void _transaction_commit_dirty(bool server_request);
 
 static struct bwm_transaction *transaction_create(void) {
   struct bwm_transaction *txn = calloc(1, sizeof(*txn));
@@ -173,6 +174,7 @@ static void apply_node_state(node_t *node,
   // copy rectangles
   node->client->tiled_rectangle = instruction->tiled_rectangle;
   node->client->floating_rectangle = instruction->floating_rectangle;
+  node->client->committed_tiled_rectangle = instruction->tiled_rectangle;
 
   // apply geometry
   bool ready = node->client->toplevel ? toplevel_is_ready(node->client->toplevel) : true;
@@ -194,6 +196,19 @@ static void apply_node_state(node_t *node,
       rect = &instruction->floating_rectangle;
     else
       rect = &instruction->tiled_rectangle;
+
+    if (rect->width < 1 || rect->height < 1) {
+      wlr_log(WLR_DEBUG, "Node %u content area too small (%dx%d), hiding",
+              node->id, rect->width, rect->height);
+      if (node->client->toplevel) {
+        if (node->client->toplevel->saved_surface_tree)
+          toplevel_remove_saved_buffer(node->client->toplevel);
+        wlr_scene_node_set_enabled(&node->client->toplevel->scene_tree->node, false);
+      } else if (node->client->xwayland_view && node->client->xwayland_view->scene_tree) {
+        wlr_scene_node_set_enabled(&node->client->xwayland_view->scene_tree->node, false);
+      }
+      return;
+    }
 
     if (node->client->toplevel && node->client->toplevel->saved_surface_tree) {
       toplevel_remove_saved_buffer(node->client->toplevel);
@@ -230,6 +245,17 @@ static void apply_node_state(node_t *node,
 	        node->client->toplevel->border_rects, geo, bw);
 	      update_border_colors(node->client->toplevel->border_tree,
 	        node->client->toplevel->border_rects, node->client);
+	      if (node->client->border_radius > 0.0f) {
+	        node->client->toplevel->border_dirty = true;
+	        struct bwm_toplevel *tl = node->client->toplevel;
+	        if (tl->border_shader_node) {
+	          int new_fw = rect->width + 2 * (int)bw;
+	          int new_fh = rect->height + 2 * (int)bw;
+	          if (new_fw > 0 && new_fh > 0)
+	            wlr_scene_buffer_set_dest_size(tl->border_shader_node,
+	                                           new_fw, new_fh);
+	        }
+	      }
 	    } else if (node->client->xwayland_view) {
 	      unsigned int bw = node->client->border_width;
 	      const struct wlr_box geo = {0, 0, rect->width, rect->height};
@@ -299,17 +325,10 @@ static void transaction_apply(struct bwm_transaction *txn) {
       continue;
     }
 
-    // skip timed out apply
     if (txn_state.pending_transaction &&
         node_in_transaction(txn_state.pending_transaction, instruction->node)) {
-      wlr_log(WLR_DEBUG, "Skipping stale apply for node %u — superseded by pending transaction",
+      wlr_log(WLR_DEBUG, "Skipping apply for node %u — handled by pending transaction",
               instruction->node->id);
-      if (instruction->node->client &&
-          instruction->node->client->toplevel &&
-          instruction->node->client->toplevel->saved_surface_tree) {
-        toplevel_remove_saved_buffer(instruction->node->client->toplevel);
-        wlr_log(WLR_DEBUG, "Released saved buffer for superseded node %u", instruction->node->id);
-      }
       continue;
     }
 
@@ -350,6 +369,10 @@ static bool should_configure(node_t *node,
   else
     target_rect = instruction->tiled_rectangle;
 
+  // don't configure windows that are too small to show
+  if (target_rect.width < 1 || target_rect.height < 1)
+    return false;
+
   // compare target size against last configured size
   struct wlr_box *last_configured = &node->client->toplevel->last_configured_size;
   bool size_changed = last_configured->width != target_rect.width ||
@@ -372,6 +395,23 @@ static int handle_timeout(void *data) {
           wl_list_length(&txn->instructions) - txn->num_waiting,
           (size_t)wl_list_length(&txn->instructions));
 
+  struct bwm_transaction_inst *inst;
+  bool need_dirty_commit = false;
+  wl_list_for_each(inst, &txn->instructions, link) {
+    if (!inst->waiting || !inst->node->client || !inst->node->client->toplevel)
+      continue;
+    wlr_log(WLR_DEBUG, "Unresponsive node %u — keeping last_configured_size (%dx%d)",
+            inst->node->id,
+            inst->node->client->toplevel->last_configured_size.width,
+            inst->node->client->toplevel->last_configured_size.height);
+    if (!node_in_transaction(txn_state.pending_transaction, inst->node)) {
+      transaction_add_dirty_node(inst->node);
+      need_dirty_commit = true;
+      wlr_log(WLR_DEBUG, "Re-dirtied unresponsive node %u for re-configure",
+              inst->node->id);
+    }
+  }
+
   transaction_apply(txn);
 
   if (txn == txn_state.queued_transaction)
@@ -385,6 +425,10 @@ static int handle_timeout(void *data) {
     txn_state.pending_transaction = NULL;
     transaction_commit(pending);
   }
+
+  // commit any re-dirtied timed-out nodes that weren't in pending
+  if (need_dirty_commit)
+    _transaction_commit_dirty(true);
 
   return 0;
 }
@@ -444,6 +488,10 @@ static void transaction_commit(struct bwm_transaction *txn) {
           rect->width,
           rect->height);
 
+        bool has_stable_frame =
+          node->client->toplevel->last_configured_size.width > 0 ||
+          node->client->toplevel->last_configured_size.height > 0;
+
         // update last configured size to prevent feedback loops
         node->client->toplevel->last_configured_size.width = rect->width;
         node->client->toplevel->last_configured_size.height = rect->height;
@@ -451,11 +499,13 @@ static void transaction_commit(struct bwm_transaction *txn) {
         // wait for all mapped toplevels to respond
         instruction->waiting = true;
         txn->num_waiting++;
-
-        if (node->client->shown && !node->client->toplevel->saved_surface_tree
-            && node->client->toplevel->configured) {
+        if (has_stable_frame && node->client->shown &&
+            !node->client->toplevel->saved_surface_tree &&
+            node->client->toplevel->configured) {
           toplevel_save_buffer(node->client->toplevel);
           wlr_log(WLR_DEBUG, "Saved buffer for node %u (shown=true)", node->id);
+        } else if (!has_stable_frame) {
+          wlr_log(WLR_DEBUG, "Skipping buffer save for node %u — no stable prior frame", node->id);
         }
 
         num_configures++;

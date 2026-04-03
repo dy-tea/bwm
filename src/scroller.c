@@ -85,11 +85,8 @@ static void scroller_arrange_stack(node_t *head_node, struct wlr_box base_geom, 
     struct wlr_box r = base_geom;
     r.x += bw;
     r.y += bw;
-    r.width = (r.width > (int)(2 * bw)) ? r.width - 2 * bw : 1;
-    r.height = (r.height > (int)(2 * bw)) ? r.height - 2 * bw : 1;
-
-    if (r.width < MIN_WIDTH) r.width = MIN_WIDTH;
-    if (r.height < MIN_HEIGHT) r.height = MIN_HEIGHT;
+    r.width = (r.width > (int)(2 * bw)) ? r.width - 2 * bw : 0;
+    r.height = (r.height > (int)(2 * bw)) ? r.height - 2 * bw : 0;
 
     head->tiled_rectangle = r;
 
@@ -125,11 +122,8 @@ static void scroller_arrange_stack(node_t *head_node, struct wlr_box base_geom, 
     struct wlr_box r = geom;
     r.x += bw;
     r.y += bw;
-    r.width = (r.width > (int)(2 * bw)) ? r.width - 2 * bw : 1;
-    r.height = (r.height > (int)(2 * bw)) ? r.height - 2 * bw : 1;
-
-    if (r.width < MIN_WIDTH) r.width = MIN_WIDTH;
-    if (r.height < MIN_HEIGHT) r.height = MIN_HEIGHT;
+    r.width = (r.width > (int)(2 * bw)) ? r.width - 2 * bw : 0;
+    r.height = (r.height > (int)(2 * bw)) ? r.height - 2 * bw : 0;
 
     c->tiled_rectangle = r;
 

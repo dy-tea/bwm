@@ -189,6 +189,8 @@ static void process_cursor_resize(void) {
     const struct wlr_box geo = {0, 0, new_width, new_height};
     update_borders(toplevel->border_tree, toplevel->border_rects, geo, bw);
     update_border_colors(toplevel->border_tree, toplevel->border_rects, client);
+    if (client->border_radius > 0.0f)
+      toplevel->border_dirty = true;
   }
 }
 

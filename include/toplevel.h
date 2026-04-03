@@ -23,6 +23,20 @@ struct bwm_toplevel {
   struct wlr_buffer *acrylic_buf;
   GLuint acrylic_buf_fbo;
 
+  // rounded borders
+  struct wlr_scene_buffer *border_shader_node;
+  struct wlr_buffer *border_shader_buf;
+  GLuint border_shader_buf_fbo;
+  int border_shader_buf_w;
+  int border_shader_buf_h;
+  bool border_dirty;
+  float border_color[4];
+
+  // corner mask
+  struct wlr_scene_buffer *corner_mask_node;
+  struct wlr_buffer *corner_mask_buf;
+  GLuint corner_mask_buf_fbo;
+
   struct wlr_ext_foreign_toplevel_handle_v1 *ext_foreign_toplevel;
   struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel;
 
@@ -86,3 +100,4 @@ void handle_new_toplevel_capture_request(struct wl_listener *listener, void *dat
 void toplevel_set_blur(struct bwm_toplevel *tl, bool enabled);
 void toplevel_set_mica(struct bwm_toplevel *tl, bool enabled);
 void toplevel_set_acrylic(struct bwm_toplevel *tl, bool enabled);
+void toplevel_set_border_radius(struct bwm_toplevel *tl, float radius);

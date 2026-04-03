@@ -68,6 +68,8 @@ struct bwm_blur_ctx {
   GLuint prog_mica_tint;
   GLuint prog_acrylic_tint;
   GLuint prog_ext_blit;
+  GLuint prog_border;
+  GLuint prog_corner_mask;
 
   struct {
   	GLint tex, halfpixel, offset;
@@ -90,6 +92,12 @@ struct bwm_blur_ctx {
   struct {
     GLint tex;
   } u_ext_blit;
+  struct {
+    GLint resolution, border_radius, border_width_px, border_color;
+  } u_border;
+  struct {
+    GLint tex, win_pos_uv, win_size_uv, win_size_px, border_radius_px;
+  } u_corner_mask;
 
   GLuint vbo;
   GLint attr_pos;
