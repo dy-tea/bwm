@@ -25,6 +25,27 @@
 #include <wlr/types/wlr_damage_ring.h>
 #include <drm_fourcc.h>
 
+#include "effect_tex_vert_src.h"
+
+#include "blit_frag_src.h"
+#include "ext_blit_frag_src.h"
+
+#include "border_frag_src.h"
+#include "border_corner_mask_frag_src.h"
+
+#include "blur_kawase_frag_src.h"
+#include "blur_box_h_frag_src.h"
+#include "blur_box_v_frag_src.h"
+#include "blur_gauss_h_frag_src.h"
+#include "blur_gauss_v_frag_src.h"
+#include "blur_mica_frag_src.h"
+#include "blur_acrylic_frag_src.h"
+
+#include "grayscale_frag_src.h"
+#include "invert_frag_src.h"
+#include "nightlight_frag_src.h"
+#include "sepia_frag_src.h"
+
 bool blur_enabled = true;
 enum blur_algorithm blur_algorithm = BLUR_ALGORITHM_KAWASE;
 int blur_passes = 1;
@@ -48,257 +69,6 @@ static GLint screen_shader_u_resolution = -1;
 static GLint screen_shader_u_time = -1;
 static char screen_shader_name_str[256] = "none";
 static struct timespec screen_shader_start_time;
-
-static const char *vert_src =
-  "attribute vec2 pos;\n"
-  "varying vec2 v_uv;\n"
-  "void main() {\n"
-  "    v_uv = pos * 0.5 + 0.5;\n"
-  "    gl_Position = vec4(pos, 0.0, 1.0);\n"
-  "}\n";
-
-static const char *frag_kawase_src =
-  "precision mediump float;\n"
-  "uniform sampler2D tex;\n"
-  "uniform vec2 halfpixel;\n"
-  "uniform float offset;\n"
-  "varying vec2 v_uv;\n"
-  "void main() {\n"
-  "    vec2 uv = v_uv;\n"
-  "    vec4 s = texture2D(tex, uv) * 4.0;\n"
-  "    s += texture2D(tex, uv - halfpixel * offset);\n"
-  "    s += texture2D(tex, uv + halfpixel * offset);\n"
-  "    s += texture2D(tex, uv + vec2( halfpixel.x, -halfpixel.y) * offset);\n"
-  "    s += texture2D(tex, uv + vec2(-halfpixel.x,  halfpixel.y) * offset);\n"
-  "    gl_FragColor = s / 8.0;\n"
-  "}\n";
-
-static const char *frag_gauss_h_src =
-  "precision mediump float;\n"
-  "uniform sampler2D tex;\n"
-  "uniform vec2 texel_size;\n"
-  "uniform float radius;\n"
-  "varying vec2 v_uv;\n"
-  "float gauss(float x, float s) { return exp(-(x*x)/(2.0*s*s)); }\n"
-  "void main() {\n"
-  "    float sigma = max(radius / 3.0, 1.0);\n"
-  "    vec4  color = vec4(0.0); float total = 0.0;\n"
-  "    for (float i = -radius; i <= radius; i += 1.0) {\n"
-  "        float w = gauss(i, sigma);\n"
-  "        color += texture2D(tex, v_uv + vec2(i * texel_size.x, 0.0)) * w;\n"
-  "        total += w;\n"
-  "    }\n"
-  "    gl_FragColor = color / total;\n"
-  "}\n";
-
-static const char *frag_gauss_v_src =
-  "precision mediump float;\n"
-  "uniform sampler2D tex;\n"
-  "uniform vec2 texel_size;\n"
-  "uniform float radius;\n"
-  "varying vec2 v_uv;\n"
-  "float gauss(float x, float s) { return exp(-(x*x)/(2.0*s*s)); }\n"
-  "void main() {\n"
-  "    float sigma = max(radius / 3.0, 1.0);\n"
-  "    vec4  color = vec4(0.0); float total = 0.0;\n"
-  "    for (float i = -radius; i <= radius; i += 1.0) {\n"
-  "        float w = gauss(i, sigma);\n"
-  "        color += texture2D(tex, v_uv + vec2(0.0, i * texel_size.y)) * w;\n"
-  "        total += w;\n"
-  "    }\n"
-  "    gl_FragColor = color / total;\n"
-  "}\n";
-
-static const char *frag_box_h_src =
-  "precision mediump float;\n"
-  "uniform sampler2D tex;\n"
-  "uniform vec2 texel_size;\n"
-  "uniform float radius;\n"
-  "varying vec2 v_uv;\n"
-  "void main() {\n"
-  "    float r = floor(radius);\n"
-  "    float count = 2.0 * r + 1.0;\n"
-  "    vec4 color = vec4(0.0);\n"
-  "    for (float i = -r; i <= r; i += 1.0)\n"
-  "        color += texture2D(tex, v_uv + vec2(i * texel_size.x, 0.0));\n"
-  "    gl_FragColor = color / count;\n"
-  "}\n";
-
-static const char *frag_box_v_src =
-  "precision mediump float;\n"
-  "uniform sampler2D tex;\n"
-  "uniform vec2 texel_size;\n"
-  "uniform float radius;\n"
-  "varying vec2 v_uv;\n"
-  "void main() {\n"
-  "    float r = floor(radius);\n"
-  "    float count = 2.0 * r + 1.0;\n"
-  "    vec4 color = vec4(0.0);\n"
-  "    for (float i = -r; i <= r; i += 1.0)\n"
-  "        color += texture2D(tex, v_uv + vec2(0.0, i * texel_size.y));\n"
-  "    gl_FragColor = color / count;\n"
-  "}\n";
-
-static const char *frag_blit_src =
-  "precision mediump float;\n"
-  "uniform sampler2D tex;\n"
-  "varying vec2 v_uv;\n"
-  "void main() { gl_FragColor = vec4(texture2D(tex, v_uv).rgb, 1.0); }\n";
-
-static const char *frag_ext_blit_src =
-  "#extension GL_OES_EGL_image_external : require\n"
-  "precision mediump float;\n"
-  "uniform samplerExternalOES tex;\n"
-  "varying vec2 v_uv;\n"
-  "void main() { gl_FragColor = vec4(texture2D(tex, vec2(v_uv.x, 1.0 - v_uv.y)).rgb, 1.0); }\n";
-
-static const char *frag_mica_tint_src =
-  "precision mediump float;\n"
-  "uniform sampler2D tex;\n"
-  "uniform vec4  tint;\n"
-  "uniform float tint_strength;\n"
-  "varying vec2 v_uv;\n"
-  "void main() {\n"
-  "  vec3 base = texture2D(tex, v_uv).rgb;\n"
-  "  gl_FragColor = vec4(mix(base, tint.rgb, tint_strength), 1.0);\n"
-  "}\n";
-
-static const char *frag_acrylic_tint_src =
-	"precision mediump float;\n"
-	"uniform sampler2D tex;\n"
-	"uniform vec4  tint;\n"
-	"uniform float tint_strength;\n"
-	"uniform float noise_strength;\n"
-	"uniform vec2  resolution;\n"
-	"uniform vec2  light_anchor;\n"  // normalized 0–1 position of a fake light
-	"varying vec2 v_uv;\n"
-	"vec3 hash3(vec2 p) {\n"
-	"  vec3 q = vec3(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)), dot(p, vec2(419.2, 371.9)));\n"
-	"  return fract(sin(q) * 43758.5453);\n"
-	"}\n"
-	"void main() {\n"
-	"  vec3 base = texture2D(tex, v_uv).rgb;\n"
-	"  vec3 tinted = mix(base, tint.rgb, clamp(tint_strength, 0.0, 0.35));\n"
-	"  tinted = pow(tinted, vec3(0.92));\n"
-	"  vec2 px = floor(v_uv * resolution);\n"
-	"  vec3 grain = (hash3(px) * 2.0 - 1.0) * 0.5 + 0.5;\n"
-	"  float highlight = pow(max(0.0, 1.0 - length(v_uv - light_anchor)), 6.0);\n"
-	"  vec3 spec = vec3(1.0) * highlight * 0.15;\n"
-	"  vec3 rim = vec3(0.08) * smoothstep(0.75, 1.0, length(v_uv - 0.5));\n"
-	"  vec3 color = tinted + spec + rim;\n"
-	"  color += (grain - 0.5) * noise_strength * 0.25;\n"
-	"  gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);\n"
-	"}\n";
-
-static const char *frag_grayscale_src =
-  "precision mediump float;\n"
-  "uniform sampler2D tex;\n"
-  "varying vec2 v_uv;\n"
-  "void main() {\n"
-  "    vec3 c = texture2D(tex, v_uv).rgb;\n"
-  "    float g = dot(c, vec3(0.2126, 0.7152, 0.0722));\n"
-  "    gl_FragColor = vec4(g, g, g, 1.0);\n"
-  "}\n";
-
-static const char *frag_invert_src =
-  "precision mediump float;\n"
-  "uniform sampler2D tex;\n"
-  "varying vec2 v_uv;\n"
-  "void main() {\n"
-  "    vec3 c = texture2D(tex, v_uv).rgb;\n"
-  "    gl_FragColor = vec4(1.0 - c, 1.0);\n"
-  "}\n";
-
-static const char *frag_sepia_src =
-  "precision mediump float;\n"
-  "uniform sampler2D tex;\n"
-  "varying vec2 v_uv;\n"
-  "void main() {\n"
-  "    vec3 c = texture2D(tex, v_uv).rgb;\n"
-  "    vec3 s;\n"
-  "    s.r = dot(c, vec3(0.393, 0.769, 0.189));\n"
-  "    s.g = dot(c, vec3(0.349, 0.686, 0.168));\n"
-  "    s.b = dot(c, vec3(0.272, 0.534, 0.131));\n"
-  "    gl_FragColor = vec4(clamp(s, 0.0, 1.0), 1.0);\n"
-  "}\n";
-
-static const char *frag_nightlight_src =
-  "precision mediump float;\n"
-  "uniform sampler2D tex;\n"
-  "varying vec2 v_uv;\n"
-  "void main() {\n"
-  "    vec3 c = texture2D(tex, v_uv).rgb;\n"
-  "    c.r = min(c.r * 1.05, 1.0);\n"
-  "    c.g = c.g * 0.92;\n"
-  "    c.b = c.b * 0.75;\n"
-  "    gl_FragColor = vec4(c, 1.0);\n"
-  "}\n";
-
-static const char *frag_border_src =
-  "#extension GL_OES_standard_derivatives : enable\n"
-  "precision highp float;\n"
-  "uniform vec2 resolution;\n"
-  "uniform float border_radius;\n"
-  "uniform float border_width_px;\n"
-  "uniform vec4 border_color;\n"
-  "varying vec2 v_uv;\n"
-  "\n"
-  "float sdRoundedBox(vec2 p, vec2 b, float r) {\n"
-  "    vec2 q = abs(p) - b + r;\n"
-  "    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;\n"
-  "}\n"
-  "\n"
-  "void main() {\n"
-  "    vec2 px = v_uv * resolution;\n"
-  "    vec2 center = resolution * 0.5;\n"
-  "    vec2 p = px - center;\n"
-  "    float d_outer = sdRoundedBox(p, center, border_radius);\n"
-  "    float inner_r = max(border_radius - border_width_px, 0.0);\n"
-  "    vec2 inner_half = center - vec2(border_width_px);\n"
-  "    float d_inner = sdRoundedBox(p, inner_half, inner_r);\n"
-  "    float fw_outer = max(length(vec2(dFdx(d_outer), dFdy(d_outer))), 0.5);\n"
-  "    float a_outer = smoothstep(fw_outer * 0.5, -fw_outer * 0.5, d_outer);\n"
-  "    float fw_inner = max(length(vec2(dFdx(d_inner), dFdy(d_inner))), 0.5);\n"
-  "    float a_inner = smoothstep(-fw_inner, fw_inner * 0.25, d_inner);\n"
-  "    float alpha = a_outer * a_inner * border_color.a;\n"
-  "    if (alpha < 0.001) discard;\n"
-  "    gl_FragColor = vec4(border_color.rgb * alpha, alpha);\n"
-  "}\n";
-
-static const char *frag_corner_mask_src =
-  "#extension GL_OES_standard_derivatives : enable\n"
-  "precision highp float;\n"
-  "uniform sampler2D tex;\n"
-  "uniform vec2 win_pos_uv;\n"
-  "uniform vec2 win_size_uv;\n"
-  "uniform vec2 win_size_px;\n"
-  "uniform float border_radius_px;\n"
-  "varying vec2 v_uv;\n"
-  "\n"
-  "float sdRoundedBox(vec2 p, vec2 b, float r) {\n"
-  "    vec2 q = abs(p) - b + r;\n"
-  "    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;\n"
-  "}\n"
-  "\n"
-  "void main() {\n"
-  "    vec2 win_local = (v_uv - win_pos_uv) / win_size_uv;\n"
-  "    if (win_local.x < 0.0 || win_local.x > 1.0 ||\n"
-  "        win_local.y < 0.0 || win_local.y > 1.0) {\n"
-  "        gl_FragColor = vec4(0.0);\n"
-  "        return;\n"
-  "    }\n"
-  "    vec2 p_px = (win_local - 0.5) * win_size_px;\n"
-  "    vec2 half_px = win_size_px * 0.5;\n"
-  "    float d = sdRoundedBox(p_px, half_px, border_radius_px);\n"
-  "    float fw = max(length(vec2(dFdx(d), dFdy(d))), 0.5);\n"
-  "    float alpha = smoothstep(-fw * 0.15, fw * 0.85, d);\n"
-  "    if (alpha < 0.001) {\n"
-  "        gl_FragColor = vec4(0.0);\n"
-  "        return;\n"
-  "    }\n"
-  "    vec4 bg = texture2D(tex, v_uv);\n"
-  "    gl_FragColor = vec4(bg.rgb * alpha, bg.a * alpha);\n"
-  "}\n";
 
 static EGLDisplay s_egl_display = EGL_NO_DISPLAY;
 static EGLContext s_egl_context = EGL_NO_CONTEXT;
@@ -416,7 +186,7 @@ static GLuint compile_shader(GLenum type, const char *src) {
 }
 
 static GLuint link_program(const char *frag_src) {
-  GLuint vert = compile_shader(GL_VERTEX_SHADER,   vert_src);
+  GLuint vert = compile_shader(GL_VERTEX_SHADER, effect_tex_vert_src);
   GLuint frag = compile_shader(GL_FRAGMENT_SHADER, frag_src);
   if (!vert || !frag) {
     glDeleteShader(vert);
@@ -608,17 +378,17 @@ bool blur_init(void) {
     return false;
   }
 
-  blur_ctx.prog_kawase = link_program(frag_kawase_src);
-  blur_ctx.prog_gauss_h = link_program(frag_gauss_h_src);
-  blur_ctx.prog_gauss_v = link_program(frag_gauss_v_src);
-  blur_ctx.prog_box_h = link_program(frag_box_h_src);
-  blur_ctx.prog_box_v = link_program(frag_box_v_src);
-  blur_ctx.prog_blit = link_program(frag_blit_src);
-  blur_ctx.prog_mica_tint = link_program(frag_mica_tint_src);
-  blur_ctx.prog_acrylic_tint = link_program(frag_acrylic_tint_src);
-  blur_ctx.prog_ext_blit = link_program(frag_ext_blit_src);
-  blur_ctx.prog_border = link_program(frag_border_src);
-  blur_ctx.prog_corner_mask = link_program(frag_corner_mask_src);
+  blur_ctx.prog_kawase = link_program(blur_kawase_frag_src);
+  blur_ctx.prog_gauss_h = link_program(blur_gauss_h_frag_src);
+  blur_ctx.prog_gauss_v = link_program(blur_gauss_v_frag_src);
+  blur_ctx.prog_box_h = link_program(blur_box_h_frag_src);
+  blur_ctx.prog_box_v = link_program(blur_box_v_frag_src);
+  blur_ctx.prog_blit = link_program(blit_frag_src);
+  blur_ctx.prog_mica_tint = link_program(blur_mica_frag_src);
+  blur_ctx.prog_acrylic_tint = link_program(blur_acrylic_frag_src);
+  blur_ctx.prog_ext_blit = link_program(ext_blit_frag_src);
+  blur_ctx.prog_border = link_program(border_frag_src);
+  blur_ctx.prog_corner_mask = link_program(border_corner_mask_frag_src);
 
   if (!blur_ctx.prog_kawase || !blur_ctx.prog_gauss_h || !blur_ctx.prog_gauss_v ||
       !blur_ctx.prog_box_h || !blur_ctx.prog_box_v || !blur_ctx.prog_blit ||
@@ -1822,10 +1592,10 @@ bool screen_shader_set(const char *name) {
   }
 
   const char *frag = NULL;
-  if      (strcmp(name, "grayscale")  == 0) frag = frag_grayscale_src;
-  else if (strcmp(name, "invert")     == 0) frag = frag_invert_src;
-  else if (strcmp(name, "sepia")      == 0) frag = frag_sepia_src;
-  else if (strcmp(name, "nightlight") == 0) frag = frag_nightlight_src;
+  if      (strcmp(name, "grayscale")  == 0) frag = grayscale_frag_src;
+  else if (strcmp(name, "invert")     == 0) frag = invert_frag_src;
+  else if (strcmp(name, "sepia")      == 0) frag = sepia_frag_src;
+  else if (strcmp(name, "nightlight") == 0) frag = nightlight_frag_src;
   else return false;
 
   egl_make_current();

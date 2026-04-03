@@ -68,6 +68,9 @@ foreach xml : protocols
 	)
 endforeach
 
+shader_headers = []
+subdir('src' / 'shaders')
+
 inc = include_directories(['include'])
 
 executable(
@@ -97,6 +100,7 @@ executable(
 		'src' / 'input_method.c',
 		'src' / 'blur.c',
 		wl_protos_src,
+		shader_headers,
 	],
 	include_directories: inc,
 	dependencies: libs,
