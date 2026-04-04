@@ -847,18 +847,18 @@ void resize_left(void) {
     return;
   }
 
+  // walk up to find nearest ancestor with VERTICAL split
+  node_t *child = n;
   node_t *p = n->parent;
-  wlr_log(WLR_INFO, "resize_left: node=%u parent=%u split_type=%d is_first=%d ratio_before=%f",
-          n->id, p->id, p->split_type, is_first_child(n), p->split_ratio);
+  for (child = p; p != NULL && p->split_type != TYPE_VERTICAL; p = p->parent)
+    ;
 
-  if (p->split_type == TYPE_VERTICAL) {
-    if (is_first_child(n)) {
-      p->split_ratio -= RESIZE_AMOUNT;
-      if (p->split_ratio < 0.1) p->split_ratio = 0.1;
-    } else {
-      p->split_ratio += RESIZE_AMOUNT;
-      if (p->split_ratio > 0.9) p->split_ratio = 0.9;
-    }
+  wlr_log(WLR_INFO, "resize_left: node=%u ancestor=%u split_type=%d is_first=%d ratio_before=%f",
+          n->id, p ? p->id : 0, p ? p->split_type : -1, p ? is_first_child(child) : -1, p ? p->split_ratio : 0.0f);
+
+  if (p != NULL) {
+    p->split_ratio -= RESIZE_AMOUNT;
+    if (p->split_ratio < 0.1) p->split_ratio = 0.1;
     // sync with pending and current state
     p->pending.split_ratio = p->split_ratio;
     p->current.split_ratio = p->split_ratio;
@@ -866,7 +866,7 @@ void resize_left(void) {
     arrange(mon, mon->desk, true);
     wlr_log(WLR_INFO, "Resized left");
   } else {
-    wlr_log(WLR_ERROR, "resize_left: parent split_type is not VERTICAL (%d)", p->split_type);
+    wlr_log(WLR_ERROR, "resize_left: no VERTICAL ancestor found");
   }
 }
 
@@ -882,18 +882,18 @@ void resize_right(void) {
     return;
   }
 
+  // walk up to find earest ancestor with VERTICAL split
+  node_t *child = n;
   node_t *p = n->parent;
-  wlr_log(WLR_INFO, "resize_right: node=%u parent=%u split_type=%d is_first=%d ratio_before=%f",
-          n->id, p->id, p->split_type, is_first_child(n), p->split_ratio);
+  for (child = p; p != NULL && p->split_type != TYPE_VERTICAL; p = p->parent)
+  	;
 
-  if (p->split_type == TYPE_VERTICAL) {
-    if (is_first_child(n)) {
-      p->split_ratio += RESIZE_AMOUNT;
-      if (p->split_ratio > 0.9) p->split_ratio = 0.9;
-    } else {
-      p->split_ratio -= RESIZE_AMOUNT;
-      if (p->split_ratio < 0.1) p->split_ratio = 0.1;
-    }
+  wlr_log(WLR_INFO, "resize_right: node=%u ancestor=%u split_type=%d is_first=%d ratio_before=%f",
+          n->id, p ? p->id : 0, p ? p->split_type : -1, p ? is_first_child(child) : -1, p ? p->split_ratio : 0.0f);
+
+  if (p != NULL) {
+    p->split_ratio += RESIZE_AMOUNT;
+    if (p->split_ratio > 0.9) p->split_ratio = 0.9;
     // sync with pending and current state
     p->pending.split_ratio = p->split_ratio;
     p->current.split_ratio = p->split_ratio;
@@ -901,7 +901,7 @@ void resize_right(void) {
     arrange(mon, mon->desk, true);
     wlr_log(WLR_INFO, "Resized right");
   } else {
-    wlr_log(WLR_ERROR, "resize_right: parent split_type is not VERTICAL (%d)", p->split_type);
+    wlr_log(WLR_ERROR, "resize_right: no VERTICAL ancestor found");
   }
 }
 
@@ -917,18 +917,18 @@ void resize_up(void) {
     return;
   }
 
+  // walk up to find nearest ancestor with HORIZONTAL split
+  node_t *child = n;
   node_t *p = n->parent;
-  wlr_log(WLR_INFO, "resize_up: node=%u parent=%u split_type=%d is_first=%d ratio_before=%f",
-          n->id, p->id, p->split_type, is_first_child(n), p->split_ratio);
+  for (child = p; p != NULL && p->split_type != TYPE_HORIZONTAL; p = p->parent)
+    ;
 
-  if (p->split_type == TYPE_HORIZONTAL) {
-    if (is_first_child(n)) {
-      p->split_ratio -= RESIZE_AMOUNT;
-      if (p->split_ratio < 0.1) p->split_ratio = 0.1;
-    } else {
-      p->split_ratio += RESIZE_AMOUNT;
-      if (p->split_ratio > 0.9) p->split_ratio = 0.9;
-    }
+  wlr_log(WLR_INFO, "resize_up: node=%u ancestor=%u split_type=%d is_first=%d ratio_before=%f",
+          n->id, p ? p->id : 0, p ? p->split_type : -1, p ? is_first_child(child) : -1, p ? p->split_ratio : 0.0f);
+
+  if (p != NULL) {
+    p->split_ratio -= RESIZE_AMOUNT;
+    if (p->split_ratio < 0.1) p->split_ratio = 0.1;
     // sync with pending and current state
     p->pending.split_ratio = p->split_ratio;
     p->current.split_ratio = p->split_ratio;
@@ -936,7 +936,7 @@ void resize_up(void) {
     arrange(mon, mon->desk, true);
     wlr_log(WLR_INFO, "Resized up");
   } else {
-    wlr_log(WLR_ERROR, "resize_up: parent split_type is not HORIZONTAL (%d)", p->split_type);
+    wlr_log(WLR_ERROR, "resize_up: no HORIZONTAL ancestor found");
   }
 }
 
@@ -952,18 +952,18 @@ void resize_down(void) {
     return;
   }
 
+  // walk up to find nearest ancestor with HORIZONTAL split
+  node_t *child = n;
   node_t *p = n->parent;
-  wlr_log(WLR_INFO, "resize_down: node=%u parent=%u split_type=%d is_first=%d ratio_before=%f",
-          n->id, p->id, p->split_type, is_first_child(n), p->split_ratio);
+  for (child = p; p != NULL && p->split_type != TYPE_HORIZONTAL; p = p->parent)
+    ;
 
-  if (p->split_type == TYPE_HORIZONTAL) {
-    if (is_first_child(n)) {
-      p->split_ratio += RESIZE_AMOUNT;
-      if (p->split_ratio > 0.9) p->split_ratio = 0.9;
-    } else {
-      p->split_ratio -= RESIZE_AMOUNT;
-      if (p->split_ratio < 0.1) p->split_ratio = 0.1;
-    }
+  wlr_log(WLR_INFO, "resize_down: node=%u ancestor=%u split_type=%d is_first=%d ratio_before=%f",
+          n->id, p ? p->id : 0, p ? p->split_type : -1, p ? is_first_child(child) : -1, p ? p->split_ratio : 0.0f);
+
+  if (p != NULL) {
+    p->split_ratio += RESIZE_AMOUNT;
+    if (p->split_ratio > 0.9) p->split_ratio = 0.9;
     // sync with pending and current state
     p->pending.split_ratio = p->split_ratio;
     p->current.split_ratio = p->split_ratio;
@@ -971,7 +971,7 @@ void resize_down(void) {
     arrange(mon, mon->desk, true);
     wlr_log(WLR_INFO, "Resized down");
   } else {
-    wlr_log(WLR_ERROR, "resize_down: parent split_type is not HORIZONTAL (%d)", p->split_type);
+    wlr_log(WLR_ERROR, "resize_down: no HORIZONTAL ancestor found");
   }
 }
 
