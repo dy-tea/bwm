@@ -13,6 +13,8 @@
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
+#include <wlr/types/wlr_ext_background_effect_v1.h>
+#include <wlr/types/wlr_buffer.h>
 
 extern struct bwm_server server;
 
@@ -22,6 +24,25 @@ static void layer_surface_unmap(struct wl_listener *listener, void *data);
 static void layer_surface_commit(struct wl_listener *listener, void *data);
 
 struct wlr_scene_tree *output_shell_layer(struct bwm_output *output, enum zwlr_layer_shell_v1_layer layer);
+
+void layer_surface_set_blur(struct bwm_layer_surface *ls, bool enabled) {
+  if (!ls || !ls->scene_tree)
+    return;
+
+  if (enabled && !ls->blur_node) {
+    ls->blur_node = wlr_scene_buffer_create(ls->scene_tree, NULL);
+    if (ls->blur_node)
+      wlr_scene_node_lower_to_bottom(&ls->blur_node->node);
+  } else if (!enabled && ls->blur_node) {
+    wlr_scene_node_destroy(&ls->blur_node->node);
+    ls->blur_node = NULL;
+    if (ls->blur_buf) {
+      wlr_buffer_unlock(ls->blur_buf);
+      ls->blur_buf = NULL;
+      ls->blur_buf_fbo = 0;
+    }
+  }
+}
 
 static void layer_surface_destroy(struct wl_listener *listener, void *data) {
   (void)data;
@@ -34,6 +55,11 @@ static void layer_surface_destroy(struct wl_listener *listener, void *data) {
   wl_list_remove(&layer->surface_commit.link);
   wl_list_remove(&layer->link);
 
+  if (layer->blur_buf) {
+    wlr_buffer_unlock(layer->blur_buf);
+    layer->blur_buf = NULL;
+  }
+
   arrange_layers(layer->output);
   free(layer);
 }
@@ -42,6 +68,7 @@ static void layer_surface_map(struct wl_listener *listener, void *data) {
 	(void)data;
 	struct bwm_layer_surface *layer = wl_container_of(listener, layer, map);
 
+	layer->mapped = true;
 	arrange_layers(layer->output);
 
 	if (layer->layer_surface->current.layer >= ZWLR_LAYER_SHELL_V1_LAYER_TOP)
@@ -79,6 +106,14 @@ static void layer_surface_commit(struct wl_listener *listener, void *data) {
     layer->mapped = layer_surface->surface->mapped;
     arrange_layers(layer->output);
   }
+
+  // check ext_background_effect_v1 state
+  const struct wlr_ext_background_effect_surface_v1_state *fx =
+      wlr_ext_background_effect_v1_get_surface_state(layer_surface->surface);
+  bool wants_blur = fx && !pixman_region32_empty(&fx->blur_region);
+  bool has_blur = layer->blur_node != NULL;
+  if (wants_blur != has_blur)
+    layer_surface_set_blur(layer, wants_blur);
 }
 
 void handle_new_layer_surface(struct wl_listener *listener, void *data) {

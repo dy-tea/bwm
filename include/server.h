@@ -15,6 +15,7 @@
 #include <wlr/types/wlr_output_management_v1.h>
 #include <wlr/types/wlr_xdg_activation_v1.h>
 #include <wlr/types/wlr_pointer_gestures_v1.h>
+#include <wlr/types/wlr_ext_background_effect_v1.h>
 
 enum cursor_mode {
   CURSOR_PASSTHROUGH,
@@ -157,6 +158,8 @@ struct bwm_server {
   // workspace tracking
   struct wlr_ext_workspace_manager_v1 *workspace_manager;
   struct wl_listener workspace_commit;
+
+  struct wlr_ext_background_effect_manager_v1 *bg_effect_manager;
 
   // xwayland
   struct bwm_xwayland xwayland;

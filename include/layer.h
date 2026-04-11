@@ -3,6 +3,7 @@
 #include <wayland-server.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_scene.h>
+#include <GLES2/gl2.h>
 
 struct bwm_layer_surface {
   struct wl_list link;
@@ -11,6 +12,11 @@ struct bwm_layer_surface {
   struct wlr_scene_layer_surface_v1 *scene_layer;
   struct bwm_output *output;
   bool mapped;
+
+  struct wlr_scene_buffer *blur_node;
+  struct wlr_buffer *blur_buf;
+  GLuint blur_buf_fbo;
+  bool blur_scene_hidden;
 
   struct wl_listener new_popup;
   struct wl_listener destroy;
@@ -22,3 +28,4 @@ struct bwm_layer_surface {
 void handle_new_layer_surface(struct wl_listener *listener, void *data);
 void arrange_layers(struct bwm_output *output);
 void focus_layer_surface(struct bwm_layer_surface *layer_surface);
+void layer_surface_set_blur(struct bwm_layer_surface *ls, bool enabled);

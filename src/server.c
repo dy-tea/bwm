@@ -120,6 +120,9 @@ void server_init(void) {
 
   blur_init();
 
+  server.bg_effect_manager = wlr_ext_background_effect_manager_v1_create(server.wl_display, 1,
+    EXT_BACKGROUND_EFFECT_MANAGER_V1_CAPABILITY_BLUR);
+
   server.compositor = wlr_compositor_create(server.wl_display, 6, server.renderer);
   wlr_subcompositor_create(server.wl_display);
 

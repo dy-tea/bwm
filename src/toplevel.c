@@ -21,7 +21,9 @@
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_ext_image_capture_source_v1.h>
 #include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_ext_background_effect_v1.h>
 #include <wlr/util/log.h>
+#include <pixman.h>
 
 extern struct bwm_server server;
 
@@ -587,6 +589,14 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
 
     toplevel_center_and_clip_surface(toplevel);
   }
+
+  // check ext_background_effect_v1 state
+  const struct wlr_ext_background_effect_surface_v1_state *fx =
+      wlr_ext_background_effect_v1_get_surface_state(xdg_surface->surface);
+  bool wants_blur = fx && !pixman_region32_empty(&fx->blur_region);
+  bool has_blur = toplevel->blur_node != NULL;
+  if (wants_blur != has_blur)
+    toplevel_set_blur(toplevel, wants_blur);
 }
 
 void toplevel_set_blur(struct bwm_toplevel *tl, bool enabled) {

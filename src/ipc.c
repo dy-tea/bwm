@@ -2965,7 +2965,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
         blur_downsample = val;
         for (monitor_t *m = mon_head; m; m = m->next) {
           if (m->output && m->output->blur_ctx)
-            blur_output_resize(m->output->blur_ctx, m->output->width, m->output->height);
+            blur_output_resize(m->output->blur_ctx, m->output->width, m->output->height, m->output);
         }
         send_success(client_fd, "blur_downsample set\n");
       } else {

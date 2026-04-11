@@ -110,7 +110,7 @@ void blur_fini(void);
 
 struct bwm_blur_output_ctx *blur_output_init(int width, int height);
 void blur_output_fini(struct bwm_blur_output_ctx *ctx);
-void blur_output_resize(struct bwm_blur_output_ctx *ctx, int width, int height);
+void blur_output_resize(struct bwm_blur_output_ctx *ctx, int width, int height, struct bwm_output *output);
 
 void blur_invalidate_mica(struct bwm_blur_output_ctx *ctx);
 
