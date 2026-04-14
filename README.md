@@ -1,6 +1,6 @@
 # bwm
 
-_Wayland compositor based on bswpm_
+_Wayland compositor based on bspwm_
 
 ### Building
 
