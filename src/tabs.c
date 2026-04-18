@@ -16,12 +16,12 @@
 
 extern struct bwm_server server;
 
-static const float color_bar_bg[4] = {0.10f, 0.10f, 0.12f, 1.0f};
-static const float color_tab_bg[4] = {0.18f, 0.18f, 0.20f, 1.0f};
-static const float color_tab_bg_active[4] = {0.09f, 0.58f, 0.87f, 1.0f};
-static const float color_tab_text[4] = {0.85f, 0.85f, 0.88f, 1.0f};
-static const float color_tab_text_active[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-static const float color_tab_sep[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+float color_bar_bg[4] = {0.10f, 0.10f, 0.12f, 1.0f};
+float color_tab_bg[4] = {0.18f, 0.18f, 0.20f, 1.0f};
+float color_tab_bg_active[4] = {0.09f, 0.58f, 0.87f, 1.0f};
+float color_tab_text[4] = {0.85f, 0.85f, 0.88f, 1.0f};
+float color_tab_text_active[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+float color_tab_sep[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 
 int tab_bar_height(void) {
 	return TAB_BAR_HEIGHT;

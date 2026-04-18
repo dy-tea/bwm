@@ -2,7 +2,6 @@
 #include "config.h"
 #include <wlr/util/log.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 struct bwm_server server = {0};

@@ -26,6 +26,13 @@ struct bwm_tab_bar {
   struct wlr_box rect;
 };
 
+extern float color_bar_bg[4];
+extern float color_tab_bg[4];
+extern float color_tab_bg_active[4];
+extern float color_tab_text[4];
+extern float color_tab_text_active[4];
+extern float color_tab_sep[4];
+
 int tab_bar_height(void);
 
 void tabs_create(node_t *n);

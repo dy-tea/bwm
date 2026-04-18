@@ -14,6 +14,7 @@
 #include "rule.h"
 #include "config.h"
 #include "scroller.h"
+#include "text.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2671,6 +2672,163 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       send_success(client_fd, "edge_scroller_pointer_focus set\n");
     } else {
       send_success(client_fd, edge_scroller_pointer_focus ? "true\n" : "false\n");
+    }
+  } else if (streq("tab_color_bar_bg", *args)) {
+    if (num >= 2) {
+      float r, g, b, a = 1.0f;
+      int n = sscanf(args[1], "%f %f %f %f", &r, &g, &b, &a);
+      if (n >= 3) {
+        color_bar_bg[0] = r; color_bar_bg[1] = g;
+        color_bar_bg[2] = b; color_bar_bg[3] = a;
+        for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+          for (desktop_t *d = m->desk; d != NULL; d = d->next)
+            if (d->root != NULL)
+              tabs_rebuild(d->root);
+        send_success(client_fd, "tab_color_bar_bg set\n");
+      } else {
+        send_failure(client_fd, "config tab_color_bar_bg: expected \"R G B [A]\"\n");
+      }
+    } else {
+      char buf[128];
+      snprintf(buf, sizeof(buf), "%.3f %.3f %.3f %.3f\n",
+        color_bar_bg[0], color_bar_bg[1], color_bar_bg[2], color_bar_bg[3]);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("tab_color_bg", *args)) {
+    if (num >= 2) {
+      float r, g, b, a = 1.0f;
+      int n = sscanf(args[1], "%f %f %f %f", &r, &g, &b, &a);
+      if (n >= 3) {
+        color_tab_bg[0] = r; color_tab_bg[1] = g;
+        color_tab_bg[2] = b; color_tab_bg[3] = a;
+        for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+          for (desktop_t *d = m->desk; d != NULL; d = d->next)
+            if (d->root != NULL)
+              tabs_rebuild(d->root);
+        send_success(client_fd, "tab_color_bg set\n");
+      } else {
+        send_failure(client_fd, "config tab_color_bg: expected \"R G B [A]\"\n");
+      }
+    } else {
+      char buf[128];
+      snprintf(buf, sizeof(buf), "%.3f %.3f %.3f %.3f\n",
+        color_tab_bg[0], color_tab_bg[1], color_tab_bg[2], color_tab_bg[3]);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("tab_color_bg_active", *args)) {
+    if (num >= 2) {
+      float r, g, b, a = 1.0f;
+      int n = sscanf(args[1], "%f %f %f %f", &r, &g, &b, &a);
+      if (n >= 3) {
+        color_tab_bg_active[0] = r; color_tab_bg_active[1] = g;
+        color_tab_bg_active[2] = b; color_tab_bg_active[3] = a;
+        for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+          for (desktop_t *d = m->desk; d != NULL; d = d->next)
+            if (d->root != NULL)
+              tabs_rebuild(d->root);
+        send_success(client_fd, "tab_color_bg_active set\n");
+      } else {
+        send_failure(client_fd, "config tab_color_bg_active: expected \"R G B [A]\"\n");
+      }
+    } else {
+      char buf[128];
+      snprintf(buf, sizeof(buf), "%.3f %.3f %.3f %.3f\n",
+        color_tab_bg_active[0], color_tab_bg_active[1], color_tab_bg_active[2], color_tab_bg_active[3]);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("tab_color_text", *args)) {
+    if (num >= 2) {
+      float r, g, b, a = 1.0f;
+      int n = sscanf(args[1], "%f %f %f %f", &r, &g, &b, &a);
+      if (n >= 3) {
+        color_tab_text[0] = r; color_tab_text[1] = g;
+        color_tab_text[2] = b; color_tab_text[3] = a;
+        for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+          for (desktop_t *d = m->desk; d != NULL; d = d->next)
+            if (d->root != NULL)
+              tabs_rebuild(d->root);
+        send_success(client_fd, "tab_color_text set\n");
+      } else {
+        send_failure(client_fd, "config tab_color_text: expected \"R G B [A]\"\n");
+      }
+    } else {
+      char buf[128];
+      snprintf(buf, sizeof(buf), "%.3f %.3f %.3f %.3f\n",
+        color_tab_text[0], color_tab_text[1], color_tab_text[2], color_tab_text[3]);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("tab_color_text_active", *args)) {
+    if (num >= 2) {
+      float r, g, b, a = 1.0f;
+      int n = sscanf(args[1], "%f %f %f %f", &r, &g, &b, &a);
+      if (n >= 3) {
+        color_tab_text_active[0] = r; color_tab_text_active[1] = g;
+        color_tab_text_active[2] = b; color_tab_text_active[3] = a;
+        for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+          for (desktop_t *d = m->desk; d != NULL; d = d->next)
+            if (d->root != NULL)
+              tabs_rebuild(d->root);
+        send_success(client_fd, "tab_color_text_active set\n");
+      } else {
+        send_failure(client_fd, "config tab_color_text_active: expected \"R G B [A]\"\n");
+      }
+    } else {
+      char buf[128];
+      snprintf(buf, sizeof(buf), "%.3f %.3f %.3f %.3f\n",
+        color_tab_text_active[0], color_tab_text_active[1], color_tab_text_active[2], color_tab_text_active[3]);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("tab_color_sep", *args)) {
+    if (num >= 2) {
+      float r, g, b, a = 1.0f;
+      int n = sscanf(args[1], "%f %f %f %f", &r, &g, &b, &a);
+      if (n >= 3) {
+        color_tab_sep[0] = r; color_tab_sep[1] = g;
+        color_tab_sep[2] = b; color_tab_sep[3] = a;
+        for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+          for (desktop_t *d = m->desk; d != NULL; d = d->next)
+            if (d->root != NULL)
+              tabs_rebuild(d->root);
+        send_success(client_fd, "tab_color_sep set\n");
+      } else {
+        send_failure(client_fd, "config tab_color_sep: expected \"R G B [A]\"\n");
+      }
+    } else {
+      char buf[128];
+      snprintf(buf, sizeof(buf), "%.3f %.3f %.3f %.3f\n",
+        color_tab_sep[0], color_tab_sep[1], color_tab_sep[2], color_tab_sep[3]);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("text_font", *args)) {
+    if (num >= 2) {
+      snprintf(text_font, sizeof(text_font), "%s", args[1]);
+      for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+        for (desktop_t *d = m->desk; d != NULL; d = d->next)
+          if (d->root != NULL)
+            tabs_rebuild(d->root);
+      send_success(client_fd, "text_font set\n");
+    } else {
+      char buf[256];
+      snprintf(buf, sizeof(buf), "%s\n", text_font);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("text_height", *args)) {
+    if (num >= 2) {
+      int val = atoi(args[1]);
+      if (val > 0) {
+        text_height = val;
+        for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+          for (desktop_t *d = m->desk; d != NULL; d = d->next)
+            if (d->root != NULL)
+              tabs_rebuild(d->root);
+        send_success(client_fd, "text_height set\n");
+      } else {
+        send_failure(client_fd, "config text_height: value must be > 0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%d\n", text_height);
+      send_success(client_fd, buf);
     }
   } else if (streq("scroller_default_proportion", *args)) {
     if (num >= 2) {

@@ -69,6 +69,56 @@ bmsg config scroller_proportion_preset [<values>]
 
 Sets preset proportions for scroller layout (comma-separated).
 
+```
+bmsg config tab_color_bar_bg "R G B A"
+```
+
+Sets tab bar background color for tabbed layout.
+
+```
+bmsg config tab_color_bg "R G B A"
+```
+
+Sets inactive tab background color.
+
+```
+bmsg config tab_color_bg_active "R G B A"
+```
+
+Sets active tab background color.
+
+```
+bmsg config tab_color_text "R G B A"
+```
+
+Sets inactive tab text color.
+
+```
+bmsg config tab_color_text_active "R G B A"
+```
+
+Sets active tab text color.
+
+```
+bmsg config tab_color_sep "R G B A"
+```
+
+Sets tab separator color.
+
+Each tab color value is four space-separated floats in the range `0.0-1.0` (`R G B A`).
+
+```
+bmsg config text_font "<font description>"
+```
+
+Sets the default Pango font description used for compositor-rendered text (for example: `"Sans 10"` or `"JetBrains Mono 11"`).
+
+```
+bmsg config text_height <pixels>
+```
+
+Sets the default text height in pixels used for compositor-rendered text.
+
 ### Monitor/Desktop Setup
 
 ```
