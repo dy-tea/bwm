@@ -8,6 +8,7 @@
 #include "workspace.h"
 #include "scroller.h"
 #include "keyboard.h"
+#include "tabs.h"
 #include <float.h>
 #include <stdlib.h>
 #include <string.h>
@@ -948,6 +949,7 @@ static void handle_set_title(struct wl_listener *listener, void *data) {
 	if (xwayland_view->node && xwayland_view->node->client && xsurface->title) {
 		strncpy(xwayland_view->node->client->title, xsurface->title, MAXLEN - 1);
 		xwayland_view->node->client->title[MAXLEN - 1] = '\0';
+		tabs_update_label_for_leaf(xwayland_view->node);
 	}
 }
 
@@ -960,6 +962,7 @@ static void handle_set_class(struct wl_listener *listener, void *data) {
 	if (xwayland_view->node && xwayland_view->node->client && xsurface->class) {
 		strncpy(xwayland_view->node->client->app_id, xsurface->class, MAXLEN - 1);
 		xwayland_view->node->client->app_id[MAXLEN - 1] = '\0';
+		tabs_update_label_for_leaf(xwayland_view->node);
 	}
 }
 

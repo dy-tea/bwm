@@ -54,6 +54,9 @@ struct bwm_server {
   struct wl_listener new_xdg_toplevel;
   struct wl_list toplevels;
 
+  struct wlr_xdg_decoration_manager_v1 *xdg_decoration_manager;
+  struct wl_listener new_xdg_decoration;
+
   struct wlr_cursor *cursor;
   struct wlr_xcursor_manager *cursor_mgr;
   struct wl_listener cursor_motion;

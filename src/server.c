@@ -40,6 +40,7 @@
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/types/wlr_xdg_activation_v1.h>
+#include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
@@ -182,6 +183,11 @@ void server_init(void) {
 
   server.new_xdg_toplevel.notify = handle_new_xdg_toplevel;
   wl_signal_add(&server.xdg_shell->events.new_toplevel, &server.new_xdg_toplevel);
+
+  // xdg decoration
+  server.xdg_decoration_manager = wlr_xdg_decoration_manager_v1_create(server.wl_display);
+  server.new_xdg_decoration.notify = handle_new_xdg_decoration;
+  wl_signal_add(&server.xdg_decoration_manager->events.new_toplevel_decoration, &server.new_xdg_decoration);
 
   // xdg activation
   server.xdg_activation_v1 = wlr_xdg_activation_v1_create(server.wl_display);
@@ -647,6 +653,7 @@ void server_fini(void) {
   wl_list_remove(&server.new_output.link);
 
   wl_list_remove(&server.new_xdg_toplevel.link);
+  wl_list_remove(&server.new_xdg_decoration.link);
 
   wl_list_remove(&server.new_layer_surface.link);
 

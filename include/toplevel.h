@@ -59,6 +59,11 @@ struct bwm_toplevel {
   bool configured;
   bool client_maximized;
 
+  // xdg-decoration
+  struct wlr_xdg_toplevel_decoration_v1 *xdg_decoration;
+  struct wl_listener decoration_destroy;
+  struct wl_listener decoration_request_mode;
+
   // listeners
   struct wl_listener map;
   struct wl_listener unmap;
@@ -80,6 +85,7 @@ struct bwm_toplevel {
 };
 
 void handle_new_xdg_toplevel(struct wl_listener *listener, void *data);
+void handle_new_xdg_decoration(struct wl_listener *listener, void *data);
 
 // helper functions
 void focus_toplevel(struct bwm_toplevel *toplevel);
@@ -101,3 +107,4 @@ void toplevel_set_blur(struct bwm_toplevel *tl, bool enabled);
 void toplevel_set_mica(struct bwm_toplevel *tl, bool enabled);
 void toplevel_set_acrylic(struct bwm_toplevel *tl, bool enabled);
 void toplevel_set_border_radius(struct bwm_toplevel *tl, float radius);
+void toplevel_apply_decoration_mode(struct bwm_toplevel *tl);

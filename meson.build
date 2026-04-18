@@ -27,6 +27,8 @@ libs = [
 	dependency('xcb-icccm'),
 	dependency('glesv2'),
 	dependency('egl'),
+	dependency('cairo'),
+	dependency('pangocairo'),
 	wayland_protos,
 ]
 
@@ -99,6 +101,8 @@ executable(
 		'src' / 'xwayland.c',
 		'src' / 'input_method.c',
 		'src' / 'blur.c',
+		'src' / 'text.c',
+		'src' / 'tabs.c',
 		wl_protos_src,
 		shader_headers,
 	],

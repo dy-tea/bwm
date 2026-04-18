@@ -4,6 +4,7 @@
 #include "output.h"
 #include "popup.h"
 #include "server.h"
+#include "tabs.h"
 #include "tree.h"
 #include "transaction.h"
 #include "types.h"
@@ -18,6 +19,7 @@
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_ext_image_capture_source_v1.h>
 #include <wlr/types/wlr_buffer.h>
@@ -31,6 +33,27 @@ static void handle_foreign_activate_request(struct wl_listener *listener, void *
 static void handle_foreign_fullscreen_request(struct wl_listener *listener, void *data);
 static void handle_foreign_close_request(struct wl_listener *listener, void *data);
 static void handle_foreign_destroy(struct wl_listener *listener, void *data);
+
+static bool toplevel_should_use_server_decorations(struct bwm_toplevel *tl) {
+  if (!tl || !tl->node)
+    return false;
+  return tabbed_ancestor(tl->node) != NULL;
+}
+
+void toplevel_apply_decoration_mode(struct bwm_toplevel *tl) {
+  if (!tl || !tl->xdg_decoration || !tl->xdg_toplevel || !tl->xdg_toplevel->base)
+    return;
+
+  if (!tl->xdg_toplevel->base->initialized)
+    return;
+
+  enum wlr_xdg_toplevel_decoration_v1_mode mode =
+      toplevel_should_use_server_decorations(tl)
+          ? WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE
+          : WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE;
+
+  wlr_xdg_toplevel_decoration_v1_set_mode(tl->xdg_decoration, mode);
+}
 
 static void update_ext_foreign_toplevel(struct bwm_toplevel *toplevel) {
   if (!toplevel->ext_foreign_toplevel || !toplevel->node || !toplevel->node->client)
@@ -398,6 +421,9 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   // only use transaction for focused desktop
   arrange(target_monitor, target_desktop, target_desktop_is_focused);
 
+  // Tabbed ancestors force server-side decorations; otherwise allow CSD.
+  toplevel_apply_decoration_mode(toplevel);
+
   toplevel->image_capture_surface = wlr_scene_surface_create(
   	&toplevel->image_capture->tree, toplevel->xdg_toplevel->base->surface);
 
@@ -525,7 +551,12 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
     toplevel->last_configured_size.width = 0;
     toplevel->last_configured_size.height = 0;
 
-    wlr_xdg_surface_schedule_configure(xdg_surface);
+    // On some wlroots versions, initial commit can happen before the
+    // xdg_surface is marked initialized. Scheduling configure too early
+    // triggers an assertion in wlr_xdg_surface_schedule_configure.
+    if (xdg_surface->initialized)
+      wlr_xdg_surface_schedule_configure(xdg_surface);
+
     wlr_xdg_toplevel_set_wm_capabilities(toplevel->xdg_toplevel,
         WLR_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN |
         WLR_XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE);
@@ -882,6 +913,8 @@ void toplevel_set_title(struct wl_listener *listener, void *data) {
 
     if (toplevel->ext_foreign_toplevel)
       update_ext_foreign_toplevel(toplevel);
+
+    tabs_update_label_for_leaf(toplevel->node);
   }
 }
 
@@ -902,6 +935,8 @@ void toplevel_set_app_id(struct wl_listener *listener, void *data) {
 
     if (toplevel->ext_foreign_toplevel)
       update_ext_foreign_toplevel(toplevel);
+
+    tabs_update_label_for_leaf(toplevel->node);
   }
 }
 
@@ -1244,4 +1279,60 @@ void handle_new_toplevel_capture_request(struct wl_listener *listener, void *dat
 
 	wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request_accept(
 		request, *image_capture_source_ptr);
+}
+
+static struct bwm_toplevel *toplevel_for_xdg_surface(
+    struct wlr_xdg_surface *surface) {
+  struct bwm_toplevel *tl;
+  wl_list_for_each(tl, &server.toplevels, link) {
+    if (tl->xdg_toplevel && tl->xdg_toplevel->base == surface)
+      return tl;
+  }
+  return NULL;
+}
+
+static void handle_decoration_destroy(struct wl_listener *listener, void *data) {
+  (void)data;
+  struct bwm_toplevel *tl = wl_container_of(listener, tl, decoration_destroy);
+  wl_list_remove(&tl->decoration_destroy.link);
+  wl_list_remove(&tl->decoration_request_mode.link);
+  tl->xdg_decoration = NULL;
+}
+
+static void handle_decoration_request_mode(struct wl_listener *listener, void *data) {
+  (void)data;
+  struct bwm_toplevel *tl = wl_container_of(listener, tl, decoration_request_mode);
+  if (!tl || !tl->xdg_decoration || !tl->xdg_toplevel || !tl->xdg_toplevel->base ||
+    !tl->xdg_toplevel->base->initialized || !tl->node) return;
+
+  enum wlr_xdg_toplevel_decoration_v1_mode mode = tabbed_ancestor(tl->node) != NULL
+    ? WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE
+    : WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE;
+
+  wlr_xdg_toplevel_decoration_v1_set_mode(tl->xdg_decoration, mode);
+}
+
+void handle_new_xdg_decoration(struct wl_listener *listener, void *data) {
+  (void)listener;
+  struct wlr_xdg_toplevel_decoration_v1 *deco = data;
+  struct wlr_xdg_surface *xdg_surface = deco->toplevel->base;
+  struct bwm_toplevel *tl = toplevel_for_xdg_surface(xdg_surface);
+
+  if (tl == NULL)
+    return;
+
+  tl->xdg_decoration = deco;
+
+  tl->decoration_destroy.notify = handle_decoration_destroy;
+  wl_signal_add(&deco->events.destroy, &tl->decoration_destroy);
+
+  tl->decoration_request_mode.notify = handle_decoration_request_mode;
+  wl_signal_add(&deco->events.request_mode, &tl->decoration_request_mode);
+
+  if (xdg_surface->initialized && tl->node) {
+    enum wlr_xdg_toplevel_decoration_v1_mode mode = tabbed_ancestor(tl->node) != NULL
+      ? WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE
+      : WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE;
+    wlr_xdg_toplevel_decoration_v1_set_mode(deco, mode);
+  }
 }

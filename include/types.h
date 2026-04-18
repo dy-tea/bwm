@@ -14,9 +14,10 @@ struct monitor_t;
 struct client_t;
 struct bwm_toplevel;
 struct bwm_xwayland_view;
+struct bwm_tab_bar;
 
 // enums
-typedef enum { TYPE_HORIZONTAL, TYPE_VERTICAL } split_type_t;
+typedef enum { TYPE_HORIZONTAL, TYPE_VERTICAL, TYPE_TABBED } split_type_t;
 
 typedef enum {
   SCHEME_LONGEST_SIDE,
@@ -136,6 +137,8 @@ typedef struct node_t {
     split_type_t split_type;
     bool hidden;
   } pending;
+
+  struct bwm_tab_bar *tab_bar;
 } node_t;
 
 typedef struct desktop_t {

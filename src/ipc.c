@@ -5,6 +5,7 @@
 #include "blur.h"
 #include "transaction.h"
 #include "workspace.h"
+#include "tabs.h"
 #include "tree.h"
 #include "output_config.h"
 #include "output.h"
@@ -1230,13 +1231,83 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
       return;
     }
 
-    if (streq("horizontal", *args) || streq("horizontal", *args)) {
-      n->split_type = TYPE_HORIZONTAL;
-    } else if (streq("vertical", *args) || streq("vertical", *args)) {
-      n->split_type = TYPE_VERTICAL;
-    } else {
-      n->split_type = (n->split_type + 1) % 2;
+    if (streq("next_tab", *args) || streq("next.tab", *args)) {
+      node_t *t = tabbed_ancestor(n);
+      if (t == NULL) {
+        send_failure(client_fd, "node -y: focused node not in tab group\n");
+        return;
+      }
+      node_t *next = tab_next_leaf(t, n);
+      if (next != NULL) {
+        focus_node(m, m->desk, next);
+        arrange(m, m->desk, true);
+      }
+      send_success(client_fd, "next tab\n");
+      return;
     }
+    if (streq("prev_tab", *args) || streq("prev.tab", *args)) {
+      node_t *t = tabbed_ancestor(n);
+      if (t == NULL) {
+        send_failure(client_fd, "node -y: focused node not in tab group\n");
+        return;
+      }
+      node_t *prev = tab_prev_leaf(t, n);
+      if (prev != NULL) {
+        focus_node(m, m->desk, prev);
+        arrange(m, m->desk, true);
+      }
+      send_success(client_fd, "prev tab\n");
+      return;
+    }
+    if (streq("tabbed", *args) || streq("horizontal", *args) ||
+        streq("vertical", *args)) {
+      node_t *target = n->parent;
+      if (target == NULL) {
+        send_failure(client_fd, "node -y: focused node has no parent\n");
+        return;
+      }
+      split_type_t prev_st = target->split_type;
+      split_type_t st = TYPE_HORIZONTAL;
+      if (streq("tabbed", *args))
+        st = TYPE_TABBED;
+      else if (streq("vertical", *args))
+        st = TYPE_VERTICAL;
+      target->split_type = st;
+      target->pending.split_type = st;
+      target->current.split_type = st;
+
+      if (prev_st == TYPE_TABBED && st != TYPE_TABBED) {
+        tabs_destroy(target);
+        for (node_t *leaf = first_extrema(target);
+             leaf != NULL && leaf != target;
+             leaf = next_leaf(leaf, target)) {
+          if (leaf->client == NULL)
+            continue;
+          if (leaf->client->state == STATE_FLOATING)
+            continue;
+          leaf->client->shown = true;
+          struct wlr_scene_tree *stree = client_get_scene_tree(leaf->client);
+          if (stree)
+            wlr_scene_node_set_enabled(&stree->node, true);
+        }
+      }
+
+      arrange(m, m->desk, true);
+
+      // reapply decoration mode for all leaves
+      for (node_t *leaf = first_extrema(target);
+           leaf != NULL && leaf != target;
+           leaf = next_leaf(leaf, target)) {
+        if (leaf->client && leaf->client->toplevel)
+          toplevel_apply_decoration_mode(leaf->client->toplevel);
+      }
+
+      if (m->desk->focus != NULL)
+        focus_node(m, m->desk, m->desk->focus);
+      send_success(client_fd, "type changed\n");
+      return;
+    }
+    n->split_type = (n->split_type + 1) % 2;
 
     transaction_commit_dirty();
     send_success(client_fd, "type changed\n");
@@ -3128,7 +3199,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
     } else {
       send_success(client_fd, screen_shader_enabled ? "true\n" : "false\n");
     }
-} else {
+  } else {
     send_failure(client_fd, "config: unknown setting\n");
   }
 }

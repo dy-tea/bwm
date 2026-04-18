@@ -162,7 +162,8 @@ bmsg node --kill                   						# Kill focused window
 bmsg node --to-monitor <name>      						# Send window to monitor
 bmsg node --to-node <id>           						# Send window to node with id
 bmsg node --layer below|normal|above  				# Set window layer
-bmsg node --type horizontal|vertical  				# Set split type for container
+bmsg node --type horizontal|vertical|tabbed  	# Set split type for container
+bmsg node --type next_tab|prev_tab            # Navigate tabs in current tabbed container
 bmsg node --ratio <value>          						# Set split ratio for container
 bmsg node --circulate forward|backward  			# Circulate focus in tree
 bmsg node --insert-receptacle      						# Insert receptacle at focused node

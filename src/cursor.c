@@ -4,12 +4,14 @@
 #include "keyboard.h"
 #include "layer.h"
 #include "server.h"
+#include "tabs.h"
 #include "toplevel.h"
 #include "tree.h"
 #include "types.h"
 #include "input.h"
 #include "config.h"
 #include "xwayland.h"
+#include <linux/input-event-codes.h>
 #include <stdlib.h>
 #include <wlr/xwayland.h>
 #include <wayland-server-core.h>
@@ -320,10 +322,25 @@ void cursor_button(struct wl_listener *listener, void *data) {
     reset_cursor_mode();
     server.cursor_buttons &= ~(1 << (event->button - 272));
   } else {
+  	// tab bar click
+    if (event->button == BTN_LEFT) {
+      for (monitor_t *m = mon_head; m != NULL; m = m->next) {
+        desktop_t *d = m->desk;
+        if (d == NULL)
+          continue;
+        node_t *tab_leaf = tabs_hit_test_desktop(d, server.cursor->x, server.cursor->y);
+        if (tab_leaf != NULL) {
+          focus_node(m, d, tab_leaf);
+          arrange(m, d, true);
+          server.cursor_buttons |= 1 << (event->button - 272);
+          return;
+        }
+      }
+    }
+
     double sx, sy;
     struct wlr_surface *surface = NULL;
-    void *type = desktop_type_at(
-            server.cursor->x, server.cursor->y, &surface, &sx, &sy);
+    void *type = desktop_type_at(server.cursor->x, server.cursor->y, &surface, &sx, &sy);
     if (type == NULL)
     	return;
 

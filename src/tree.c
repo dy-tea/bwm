@@ -1,5 +1,6 @@
 #include "tree.h"
 #include "server.h"
+#include "tabs.h"
 #include "toplevel.h"
 #include "types.h"
 #include "transaction.h"
@@ -121,6 +122,9 @@ void free_node(node_t *n) {
     wlr_log(WLR_ERROR, "free_node: double-free detected!");
     return;
   }
+
+  if (n->tab_bar != NULL)
+    tabs_destroy(n);
 
   if (n->client != NULL) {
     free(n->client);
@@ -271,6 +275,74 @@ void arrange(monitor_t *m, desktop_t *d, bool use_transaction) {
     transaction_commit_dirty();
 }
 
+static void render_leaf(monitor_t *m, desktop_t *d, node_t *n,
+  	struct wlr_box rect, struct wlr_box root_rect, bool omit_window_gap) {
+  if (n == NULL || n->client == NULL)
+    return;
+
+  unsigned int bw = n->client->border_width;
+
+  struct wlr_box r;
+  if (IS_FLOATING(n->client)) {
+    r = n->client->floating_rectangle;
+  } else if (n->client->state == STATE_FULLSCREEN) {
+    r = m->rectangle;
+  } else if (d->layout == LAYOUT_MONOCLE && IS_TILED(n->client) && !omit_window_gap) {
+    r = root_rect;
+    int wg = gapless_monocle ? 0 : d->window_gap;
+    int bleed = wg + 2 * bw;
+    r.x += bw;
+    r.y += bw;
+    r.width = (bleed < r.width ? r.width - bleed : 0);
+    r.height = (bleed < r.height ? r.height - bleed : 0);
+  } else {
+    r = rect;
+    int wg;
+    if (omit_window_gap)
+      wg = 0;
+    else
+      wg = (gapless_monocle && d->layout == LAYOUT_MONOCLE) ? 0 : d->window_gap;
+    int bleed = wg + 2 * bw;
+    r.x += bw;
+    r.y += bw;
+    r.width = (bleed < r.width ? r.width - bleed : 0);
+    r.height = (bleed < r.height ? r.height - bleed : 0);
+  }
+
+  // pseudo tile
+  if (n->client->state == STATE_PSEUDO_TILED) {
+    if (r.width > n->client->floating_rectangle.width)
+      r.width = n->client->floating_rectangle.width;
+    if (r.height > n->client->floating_rectangle.height)
+      r.height = n->client->floating_rectangle.height;
+  }
+
+  n->client->tiled_rectangle = r;
+  if (n->client->committed_tiled_rectangle.width == 0 &&
+      n->client->committed_tiled_rectangle.height == 0)
+    n->client->committed_tiled_rectangle = r;
+}
+
+static void apply_layout_tabbed_subtree(monitor_t *m, desktop_t *d, node_t *n,
+    struct wlr_box content_rect, struct wlr_box root_rect) {
+  if (n == NULL)
+    return;
+  if (n->client && n->client->state == STATE_FLOATING)
+    return;
+
+  n->pending.rectangle = content_rect;
+  n->monitor = m;
+  node_set_dirty(n);
+
+  if (is_leaf(n)) {
+    render_leaf(m, d, n, content_rect, root_rect, false);
+    return;
+  }
+
+  apply_layout_tabbed_subtree(m, d, n->first_child, content_rect, root_rect);
+  apply_layout_tabbed_subtree(m, d, n->second_child, content_rect, root_rect);
+}
+
 void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
                   struct wlr_box root_rect) {
   if (n == NULL)
@@ -297,53 +369,56 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
       return;
     }
 
-    bool the_only_window = (mon_head == mon_tail) && d->root && d->root->client;
-    unsigned int bw = (
-        (borderless_monocle && d->layout == LAYOUT_MONOCLE && IS_TILED(n->client))
-        || (borderless_singleton && the_only_window)
-        || n->client->state == STATE_FULLSCREEN)
-                          ? 0
-                          : n->client->border_width;
-
-    struct wlr_box r;
-    if (IS_FLOATING(n->client)) {
-      r = n->client->floating_rectangle;
-    } else if (n->client->state == STATE_FULLSCREEN) {
-      r = m->rectangle;
-    } else if (d->layout == LAYOUT_MONOCLE && IS_TILED(n->client)) {
-      r = root_rect;
-      int wg = gapless_monocle ? 0 : d->window_gap;
-      int bleed = wg + 2 * bw;
-      r.x += bw;
-      r.y += bw;
-      r.width = (bleed < r.width ? r.width - bleed : 0);
-      r.height = (bleed < r.height ? r.height - bleed : 0);
-    } else {
-      r = rect;
-      int wg = (gapless_monocle && d->layout == LAYOUT_MONOCLE) ? 0 : d->window_gap;
-      int bleed = wg + 2 * bw;
-      r.x += bw;
-      r.y += bw;
-      r.width = (bleed < r.width ? r.width - bleed : 0);
-      r.height = (bleed < r.height ? r.height - bleed : 0);
-    }
-
-    // pseudo tile
-    if (n->client->state == STATE_PSEUDO_TILED) {
-      if (r.width > n->client->floating_rectangle.width)
-        r.width = n->client->floating_rectangle.width;
-      if (r.height > n->client->floating_rectangle.height)
-        r.height = n->client->floating_rectangle.height;
-    }
-
-    n->client->tiled_rectangle = r;
-    if (n->client->committed_tiled_rectangle.width == 0 &&
-        n->client->committed_tiled_rectangle.height == 0)
-      n->client->committed_tiled_rectangle = r;
+    render_leaf(m, d, n, rect, root_rect, false);
 
     wlr_log(WLR_DEBUG, "apply_layout: node %u tiled_rect=(%d,%d %dx%d)",
-            n->id, r.x, r.y, r.width, r.height);
+      n->id, n->client->tiled_rectangle.x, n->client->tiled_rectangle.y,
+      n->client->tiled_rectangle.width, n->client->tiled_rectangle.height);
+  } else if (n->split_type == TYPE_TABBED && d->layout != LAYOUT_MONOCLE) {
+    int bar_h = tab_bar_height();
 
+    int wg = d->window_gap;
+    struct wlr_box bar_rect = {
+      .x = rect.x,
+      .y = rect.y,
+      .width = (wg < rect.width) ? rect.width - wg : 0,
+      .height = bar_h,
+    };
+
+    if (n->tab_bar == NULL)
+      tabs_create(n);
+    tabs_arrange(n, bar_rect);
+    tabs_show(n, true);
+    tabs_update_focus(n, d->focus);
+
+    struct wlr_box content_rect = rect;
+    content_rect.y += bar_h;
+    content_rect.height = (bar_h < content_rect.height) ? content_rect.height - bar_h : 0;
+
+    apply_layout_tabbed_subtree(m, d, n->first_child, content_rect, root_rect);
+    apply_layout_tabbed_subtree(m, d, n->second_child, content_rect, root_rect);
+
+    // show only active tab leaf, hide the rest
+    node_t *active = tab_focus_leaf(n, d->focus);
+    for (node_t *leaf = first_extrema(n); leaf != NULL && leaf != n;
+         leaf = next_leaf(leaf, n)) {
+      if (leaf->client == NULL)
+        continue;
+      if (leaf->client->state == STATE_FLOATING)
+        continue;
+      bool show = (leaf == active);
+      leaf->client->shown = show;
+      struct wlr_scene_tree *st = client_get_scene_tree(leaf->client);
+      if (st)
+        wlr_scene_node_set_enabled(&st->node, show);
+      if (show && leaf->client->toplevel) {
+        wlr_scene_node_set_position(&st->node, leaf->client->tiled_rectangle.x,
+          leaf->client->tiled_rectangle.y);
+        toplevel_center_and_clip_surface(leaf->client->toplevel);
+        toplevel_send_frame_done(leaf->client->toplevel);
+      }
+    }
+    return;
   } else {
     struct wlr_box first_rect;
     struct wlr_box second_rect;
@@ -494,7 +569,7 @@ node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
   n->desktop = d;
 
   wlr_log(WLR_DEBUG, "insert_node: n=%u (state=%d hidden=%d parent=%u) f=%u root=%u focus=%u",
-    n->id, n->client ? n->client->state : -1, n->hidden,
+    n->id, n->client ? (int)n->client->state : -1, n->hidden,
     n->parent ? n->parent->id : 0,
     f ? f->id : 0,
     d->root ? d->root->id : 0,
@@ -559,7 +634,8 @@ node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
   if (f->presel == NULL) {
     bool single_tiled = f->client != NULL && IS_TILED(f->client) && tiled_count(d->root, true) == 1;
 
-    if (p == NULL || automatic_scheme != SCHEME_SPIRAL || single_tiled) {
+    if (p == NULL || automatic_scheme != SCHEME_SPIRAL || single_tiled ||
+        (p != NULL && p->split_type == TYPE_TABBED)) {
       // normal insertion
       if (p != NULL) {
         if (is_first_child(f))
@@ -700,6 +776,11 @@ node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
     wlr_log(WLR_ERROR, "insert_node: post-insert root %u has non-NULL parent %u, tree split detected",
       d->root->id, d->root->parent->id);
 
+  // if new node landed inside tab group, refresh its tab bar
+  node_t *t = tabbed_ancestor(n);
+  if (t != NULL)
+    tabs_rebuild(t);
+
   return f;
 }
 
@@ -708,10 +789,17 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
     return;
 
   wlr_log(WLR_DEBUG, "remove_node: node=%u state=%d parent=%u root=%u focus=%u",
-    n->id, n->client ? n->client->state : -1,
+    n->id, n->client ? (int)n->client->state : -1,
     n->parent ? n->parent->id : 0,
     d->root ? d->root->id : 0,
     d->focus ? d->focus->id : 0);
+
+  // rebuild tab bar for each tabbed ancestor
+  node_t *tabbed_chain[64];
+  int tabbed_chain_count = 0;
+  for (node_t *q = n->parent; q != NULL && tabbed_chain_count < 64; q = q->parent)
+    if (q->split_type == TYPE_TABBED)
+      tabbed_chain[tabbed_chain_count++] = q;
 
   node_t *p = n->parent;
   bool n_is_first = is_first_child(n);
@@ -778,6 +866,13 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
     n->first_child = NULL;
     n->second_child = NULL;
 
+    // propagate TYPE_TABBED so remaining leaves stay tabbed
+    if (p->split_type == TYPE_TABBED && !is_leaf(b)) {
+      b->split_type = TYPE_TABBED;
+      b->pending.split_type = TYPE_TABBED;
+      b->current.split_type = TYPE_TABBED;
+    }
+
     // adjust tree structure
     if (!n->vacant && removal_adjustment && (n->client == NULL || IS_TILED(n->client))) {
       if (automatic_scheme == SCHEME_SPIRAL) {
@@ -833,6 +928,21 @@ void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
   if (d->root && d->root->parent != NULL)
     wlr_log(WLR_ERROR, "remove_node: post-remove root %u has non-NULL parent %u, tree split detected",
       d->root->id, d->root->parent->id);
+
+  // cleanup tabs
+  for (int i = 0; i < tabbed_chain_count; i++) {
+    node_t *t = tabbed_chain[i];
+    bool still_in_tree = false;
+    if (d->root != NULL) {
+      for (node_t *q = t; q != NULL; q = q->parent) {
+        if (q == d->root) { still_in_tree = true; break; }
+      }
+    }
+    if (!still_in_tree || is_leaf(t))
+      tabs_destroy(t);
+    else
+      tabs_rebuild(t);
+  }
 }
 
 void close_node(node_t *n) {
@@ -892,6 +1002,24 @@ bool focus_node(monitor_t *m, desktop_t *d, node_t *n) {
       for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
         if (node->client != NULL)
           node->client->shown = true;
+
+    // for tabbed groups, hide non-focused tab leaves and refresh tab colors
+    node_t *t = tabbed_ancestor(n);
+    if (t != NULL) {
+      tabs_update_focus(t, n);
+      for (node_t *leaf = first_extrema(t); leaf != NULL && leaf != t;
+           leaf = next_leaf(leaf, t)) {
+        if (leaf->client == NULL)
+          continue;
+        if (leaf->client->state == STATE_FLOATING)
+          continue;
+        bool show = (leaf == n);
+        leaf->client->shown = show;
+        struct wlr_scene_tree *st = client_get_scene_tree(leaf->client);
+        if (st)
+          wlr_scene_node_set_enabled(&st->node, show);
+      }
+    }
   }
 
   if (n != NULL && n->client != NULL) {
