@@ -16,6 +16,8 @@ Ensure you have the following dependencies installed:
 - xcb-icccm
 - glesv2
 - egl
+- cairo
+- pangocairo
 
 Build with meson:
 ```
