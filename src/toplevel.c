@@ -159,12 +159,36 @@ void toplevel_center_and_clip_surface(struct bwm_toplevel *toplevel) {
 
   client_t *c = toplevel->node->client;
   bool floating = (c->state == STATE_FLOATING);
+  bool fullscreen = (c->state == STATE_FULLSCREEN);
   int x = 0, y = 0;
+
+  // center floating and fullscreen surfaces
+  if (floating || fullscreen) {
+    struct wlr_box *container_rect = NULL;
+
+    if (floating) {
+      container_rect = &c->floating_rectangle;
+    } else if (fullscreen) {
+      monitor_t *m = toplevel->node->monitor;
+      container_rect = m ? &m->rectangle : &c->tiled_rectangle;
+    }
+
+    if (container_rect && toplevel->geometry.width > 0 && toplevel->geometry.height > 0) {
+      int center_x = (container_rect->width - toplevel->geometry.width) / 2;
+      int center_y = (container_rect->height - toplevel->geometry.height) / 2;
+
+      x = center_x > 0 ? center_x : 0;
+      y = center_y > 0 ? center_y : 0;
+
+      wlr_log(WLR_DEBUG, "Centering surface: %dx%d at offset (%d,%d)",
+        toplevel->geometry.width, toplevel->geometry.height, x, y);
+    }
+  }
 
   wlr_scene_node_set_position(&toplevel->content_tree->node, x, y);
 
   bool clip_to_geometry = true;
-  if (floating && (toplevel->geometry.x != 0 || toplevel->geometry.y != 0))
+  if ((floating || fullscreen) && (toplevel->geometry.x != 0 || toplevel->geometry.y != 0))
     clip_to_geometry = false;
 
   if (!wl_list_empty(&toplevel->content_tree->children)) {
