@@ -399,7 +399,7 @@ void close_focused(void) {
   if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
     return;
 
-  kill_node(mon, mon->desk, mon->desk->focus);
+  kill_node(mon->desk, mon->desk->focus);
 
   wlr_log(WLR_INFO, "Closing focused window");
 }
@@ -436,7 +436,7 @@ void toggle_floating(void) {
     n->client->state = STATE_TILED;
 
     node_t *ref = mon->desk->focus != n ? mon->desk->focus : NULL;
-    insert_node(mon, mon->desk, n, ref);
+    insert_node(mon->desk, n, ref);
 
     arrange(mon, mon->desk, true);
 
@@ -450,7 +450,7 @@ void toggle_floating(void) {
 
     n->client->floating_rectangle = n->client->tiled_rectangle;
 
-    remove_node(mon, mon->desk, n);
+    remove_node(mon->desk, n);
     n->hidden = true;
 
     if (n->client->toplevel) {
@@ -617,7 +617,7 @@ void send_to_desktop(int desktop_index) {
     wlr_scene_node_set_enabled(&scene_tree->node, false);
 
   // remove from source desktop
-  remove_node(mon, src_desk, n);
+  remove_node(src_desk, n);
 
   // update focus on source desktop
   if (src_desk->focus == n) {
@@ -640,7 +640,7 @@ void send_to_desktop(int desktop_index) {
     return;
   }
 
-  insert_node(target_mon, target, n, find_public(target));
+  insert_node(target, n, find_public(target));
   target->focus = n;
 
   arrange(mon, src_desk, true);
@@ -685,7 +685,7 @@ void send_to_desktop_by_name(const char *name) {
   if (scene_tree)
     wlr_scene_node_set_enabled(&scene_tree->node, false);
 
-  remove_node(mon, src_desk, n);
+  remove_node(src_desk, n);
 
   if (src_desk->focus == n) {
     if (src_desk->root != NULL) {
@@ -702,7 +702,7 @@ void send_to_desktop_by_name(const char *name) {
   }
 
   // add to target desktop
-  insert_node(target_mon, target, n, find_public(target));
+  insert_node(target, n, find_public(target));
   target->focus = n;
 
   // Ensure the moved node respects initial_polarity
@@ -854,7 +854,7 @@ void resize_left(void) {
     ;
 
   wlr_log(WLR_INFO, "resize_left: node=%u ancestor=%u split_type=%d is_first=%d ratio_before=%f",
-          n->id, p ? p->id : 0, p ? p->split_type : -1, p ? is_first_child(child) : -1, p ? p->split_ratio : 0.0f);
+          n->id, p ? p->id : 0, p ? (int)p->split_type : -1, p ? is_first_child(child) : -1, p ? p->split_ratio : 0.0f);
 
   if (p != NULL) {
     p->split_ratio -= RESIZE_AMOUNT;
@@ -889,7 +889,7 @@ void resize_right(void) {
   	;
 
   wlr_log(WLR_INFO, "resize_right: node=%u ancestor=%u split_type=%d is_first=%d ratio_before=%f",
-          n->id, p ? p->id : 0, p ? p->split_type : -1, p ? is_first_child(child) : -1, p ? p->split_ratio : 0.0f);
+          n->id, p ? p->id : 0, p ? (int)p->split_type : -1, p ? is_first_child(child) : -1, p ? p->split_ratio : 0.0f);
 
   if (p != NULL) {
     p->split_ratio += RESIZE_AMOUNT;
@@ -924,7 +924,7 @@ void resize_up(void) {
     ;
 
   wlr_log(WLR_INFO, "resize_up: node=%u ancestor=%u split_type=%d is_first=%d ratio_before=%f",
-          n->id, p ? p->id : 0, p ? p->split_type : -1, p ? is_first_child(child) : -1, p ? p->split_ratio : 0.0f);
+          n->id, p ? p->id : 0, p ? (int)p->split_type : -1, p ? is_first_child(child) : -1, p ? p->split_ratio : 0.0f);
 
   if (p != NULL) {
     p->split_ratio -= RESIZE_AMOUNT;
@@ -959,7 +959,7 @@ void resize_down(void) {
     ;
 
   wlr_log(WLR_INFO, "resize_down: node=%u ancestor=%u split_type=%d is_first=%d ratio_before=%f",
-          n->id, p ? p->id : 0, p ? p->split_type : -1, p ? is_first_child(child) : -1, p ? p->split_ratio : 0.0f);
+          n->id, p ? p->id : 0, p ? (int)p->split_type : -1, p ? is_first_child(child) : -1, p ? p->split_ratio : 0.0f);
 
   if (p != NULL) {
     p->split_ratio += RESIZE_AMOUNT;
@@ -979,7 +979,7 @@ void presel_west(void) {
   if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
     return;
 
-  presel_dir(mon, mon->desk, mon->desk->focus, DIR_WEST);
+  presel_dir(mon->desk->focus, DIR_WEST);
   wlr_log(WLR_INFO, "Preselected west");
 }
 
@@ -987,7 +987,7 @@ void presel_east(void) {
   if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
     return;
 
-  presel_dir(mon, mon->desk, mon->desk->focus, DIR_EAST);
+  presel_dir(mon->desk->focus, DIR_EAST);
   wlr_log(WLR_INFO, "Preselected east");
 }
 
@@ -995,7 +995,7 @@ void presel_north(void) {
   if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
     return;
 
-  presel_dir(mon, mon->desk, mon->desk->focus, DIR_NORTH);
+  presel_dir(mon->desk->focus, DIR_NORTH);
   wlr_log(WLR_INFO, "Preselected north");
 }
 
@@ -1003,7 +1003,7 @@ void presel_south(void) {
   if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
     return;
 
-  presel_dir(mon, mon->desk, mon->desk->focus, DIR_SOUTH);
+  presel_dir(mon->desk->focus, DIR_SOUTH);
   wlr_log(WLR_INFO, "Preselected south");
 }
 
@@ -1011,7 +1011,7 @@ void cancel_presel(void) {
   if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
     return;
 
-  presel_cancel(mon, mon->desk, mon->desk->focus);
+  presel_cancel(mon->desk->focus);
   wlr_log(WLR_INFO, "Cancelled preselection");
 }
 

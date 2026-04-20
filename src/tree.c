@@ -538,7 +538,7 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
   }
 }
 
-unsigned int node_area(desktop_t *d, node_t *n) {
+unsigned int node_area(node_t *n) {
   if (n == NULL)
     return 0;
   return n->rectangle.width * n->rectangle.height;
@@ -552,7 +552,7 @@ node_t *find_public(desktop_t *d) {
        n = next_leaf(n, d->root)) {
     if (n->vacant)
       continue;
-    unsigned int n_area = node_area(d, n);
+    unsigned int n_area = node_area(n);
     if (n_area > b_area && (n->presel != NULL || !n->private_node)) {
       b = n;
       b_area = n_area;
@@ -562,7 +562,7 @@ node_t *find_public(desktop_t *d) {
   return b;
 }
 
-node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
+node_t *insert_node(desktop_t *d, node_t *n, node_t *f) {
   if (d == NULL || n == NULL)
     return NULL;
 
@@ -766,7 +766,7 @@ node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
     if (d->root == f)
       d->root = c;
 
-    presel_cancel(m, d, f);
+    presel_cancel(f);
   }
 
   wlr_log(WLR_DEBUG, "insert_node: done, n=%u parent=%u root=%u",
@@ -784,7 +784,7 @@ node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f) {
   return f;
 }
 
-void remove_node(monitor_t *m, desktop_t *d, node_t *n) {
+void remove_node(desktop_t *d, node_t *n) {
   if (n == NULL || d == NULL)
     return;
 
@@ -955,7 +955,7 @@ void close_node(node_t *n) {
   	xwayland_view_close(n->client->xwayland_view);
 }
 
-void kill_node(monitor_t *m, desktop_t *d, node_t *n) {
+void kill_node(desktop_t *d, node_t *n) {
   if (n == NULL)
     return;
 
@@ -1184,7 +1184,7 @@ presel_t *make_presel(void) {
   return p;
 }
 
-void presel_dir(monitor_t *m, desktop_t *d, node_t *n, direction_t dir) {
+void presel_dir(node_t *n, direction_t dir) {
   if (n == NULL || !is_leaf(n))
     return;
 
@@ -1203,7 +1203,7 @@ void presel_dir(monitor_t *m, desktop_t *d, node_t *n, direction_t dir) {
   }
 }
 
-void presel_cancel(monitor_t *m, desktop_t *d, node_t *n) {
+void presel_cancel(node_t *n) {
   if (n == NULL || n->presel == NULL)
     return;
 
@@ -1313,7 +1313,7 @@ void balance_tree(node_t *n) {
   balance_rec(n);
 }
 
-struct wlr_box get_rectangle(monitor_t *m, desktop_t *d, node_t *n) {
+struct wlr_box get_rectangle(monitor_t *m, node_t *n) {
   if (n != NULL)
     return n->rectangle;
   return m->rectangle;

@@ -13,6 +13,9 @@
 
 extern struct bwm_server server;
 
+input_config_t *input_configs[MAX_INPUT_CONFIGS];
+size_t num_input_configs = 0;
+
 static int parse_bool(const char *value, int default_val);
 static int parse_scancode(const char *value);
 

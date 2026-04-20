@@ -651,7 +651,7 @@ static void handle_map(struct wl_listener *listener, void *data) {
 
 	bool target_desktop_is_focused = (target_desktop == target_monitor->desk);
 
-	insert_node(target_monitor, target_desktop, node, target_desktop->focus);
+	insert_node(target_desktop, node, target_desktop->focus);
 
 	if (target_desktop != d && !target_desktop_is_focused) {
 		client->shown = false;
@@ -731,7 +731,7 @@ static void handle_unmap(struct wl_listener *listener, void *data) {
 			xwayland_view->node->client->xwayland_view = NULL;
 
 		if (desk) {
-			remove_node(mon, desk, xwayland_view->node);
+			remove_node(desk, xwayland_view->node);
 			if (mon && desk) {
 				arrange(mon, desk, true);
 				if (desk->focus != NULL && desk->focus->client != NULL)

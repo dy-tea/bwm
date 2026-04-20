@@ -644,7 +644,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     if (scene_tree)
       wlr_scene_node_set_enabled(&scene_tree->node, false);
 
-    remove_node(m, src_desk, n);
+    remove_node(src_desk, n);
 
     if (src_desk != target && src_desk->root != NULL) {
       node_t *new_focus = first_extrema(src_desk->root);
@@ -661,7 +661,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     n->destroying = false;
     n->ntxnrefs = 0;
 
-    insert_node(m, target, n, find_public(target));
+    insert_node(target, n, find_public(target));
 
     target->focus = n;
     if (target == m->desk && target->focus == n) {
@@ -998,7 +998,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
       send_failure(client_fd, "node -k: no focused node\n");
       return;
     }
-    kill_node(m, m->desk, n);
+    kill_node(m->desk, n);
     transaction_commit_dirty();
     send_success(client_fd, "killed\n");
   } else if (streq("-m", *args) || streq("--to-monitor", *args)) {
@@ -1042,7 +1042,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     if (scene_tree)
       wlr_scene_node_set_enabled(&scene_tree->node, false);
 
-    remove_node(m, src_desk, n);
+    remove_node(src_desk, n);
 
     if (src_desk->root) {
       node_t *new_focus = first_extrema(src_desk->root);
@@ -1059,7 +1059,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     n->destroying = false;
     n->ntxnrefs = 0;
 
-    insert_node(target, target_desk, n, find_public(target_desk));
+    insert_node(target_desk, n, find_public(target_desk));
     target_desk->focus = n;
 
     for (node_t *n_iter = first_extrema(target_desk->root); n_iter != NULL; n_iter = next_leaf(n_iter, target_desk->root)) {
@@ -1131,7 +1131,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     if (scene_tree)
       wlr_scene_node_set_enabled(&scene_tree->node, false);
 
-    remove_node(m, src_desk, n1);
+    remove_node(src_desk, n1);
 
     if (src_desk->root) {
       node_t *new_focus = first_extrema(src_desk->root);
@@ -1491,7 +1491,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
       return;
     }
 
-    presel_dir(m, m->desk, n, dir);
+    presel_dir(n, dir);
     transaction_commit_dirty();
     send_success(client_fd, "presel set\n");
   } else if (streq("-o", *args) || streq("--presel-ratio", *args)) {

@@ -394,7 +394,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
 
   // insert node into tree
   node_t *focus = target_desktop->focus;
-  insert_node(target_monitor, target_desktop, n, focus);
+  insert_node(target_desktop, n, focus);
 
   // notify client of scale
   if (target_monitor->output) {
@@ -516,7 +516,7 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
     if (n)
       node_set_dirty(n);
 
-    remove_node(m, d, n);
+    remove_node(d, n);
 
     if (n)
       n->destroying = true;
@@ -1219,7 +1219,9 @@ void toplevel_remove_saved_buffer(struct bwm_toplevel *toplevel) {
 }
 
 static void send_frame_done_iterator(struct wlr_scene_buffer *scene_buffer,
-                                     int x, int y, void *data) {
+    int x, int y, void *data) {
+  (void)x;
+  (void)y;
   struct timespec *when = data;
   struct wlr_scene_surface *scene_surface =
       wlr_scene_surface_try_from_buffer(scene_buffer);

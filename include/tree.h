@@ -18,9 +18,9 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
 
 // node insertion and removal
 node_t *find_public(desktop_t *d);
-node_t *insert_node(monitor_t *m, desktop_t *d, node_t *n, node_t *f);
-void remove_node(monitor_t *m, desktop_t *d, node_t *n);
-void kill_node(monitor_t *m, desktop_t *d, node_t *n);
+node_t *insert_node(desktop_t *d, node_t *n, node_t *f);
+void remove_node(desktop_t *d, node_t *n);
+void kill_node(desktop_t *d, node_t *n);
 
 // node queries
 bool is_leaf(node_t *n);
@@ -51,8 +51,8 @@ void close_node(node_t *n);
 
 // preselection
 presel_t *make_presel(void);
-void presel_dir(monitor_t *m, desktop_t *d, node_t *n, direction_t dir);
-void presel_cancel(monitor_t *m, desktop_t *d, node_t *n);
+void presel_dir(node_t *n, direction_t dir);
+void presel_cancel(node_t *n);
 
 // tree transformations
 void rotate_tree(node_t *n, int deg);
@@ -61,8 +61,8 @@ void equalize_tree(node_t *n);
 void balance_tree(node_t *n);
 
 // geometry
-struct wlr_box get_rectangle(monitor_t *m, desktop_t *d, node_t *n);
-unsigned int node_area(desktop_t *d, node_t *n);
+struct wlr_box get_rectangle(monitor_t *m, node_t *n);
+unsigned int node_area(node_t *n);
 
 // Transaction helpers
 void node_set_dirty(node_t *n);
