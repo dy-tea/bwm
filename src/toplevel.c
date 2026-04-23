@@ -1268,7 +1268,7 @@ void toplevel_send_frame_done(struct bwm_toplevel *toplevel) {
 
 void handle_new_toplevel_capture_request(struct wl_listener *listener, void *data) {
 	(void)listener;
-	struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request *request = data;
+	struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request_event *request = data;
 	void *handle_data = request->toplevel_handle->data;
 
 	struct wlr_ext_image_capture_source_v1 **image_capture_source_ptr = NULL;

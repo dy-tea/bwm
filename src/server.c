@@ -392,7 +392,7 @@ void server_init(void) {
   server.foreign_toplevel_image_capture_source_manager = wlr_ext_foreign_toplevel_image_capture_source_manager_v1_create(server.wl_display, 1);
 
   server.new_toplevel_capture_request.notify = handle_new_toplevel_capture_request;
-  wl_signal_add(&server.foreign_toplevel_image_capture_source_manager->events.new_request, &server.new_toplevel_capture_request);
+  wl_signal_add(&server.foreign_toplevel_image_capture_source_manager->events.capture_request, &server.new_toplevel_capture_request);
 
   // xdg foreign
   struct wlr_xdg_foreign_registry *xdg_foreign_registry = wlr_xdg_foreign_registry_create(server.wl_display);
