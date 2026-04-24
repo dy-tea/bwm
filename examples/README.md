@@ -235,8 +235,9 @@ bmsg desktop --focus <name>        # Focus named desktop
 bmsg desktop --focus next          # Focus next desktop
 bmsg desktop --focus prev          # Focus previous desktop
 bmsg desktop --layout tiled        # Set desktop to tiled layout
-bmsg desktop --layout monocle       # Set desktop to monocle layout
-bmsg desktop --rename <newname>     # Rename desktop
+bmsg desktop --layout monocle      # Set desktop to monocle layout
+bmsg desktop --layout scroller     # Set desktop to scroller layout
+bmsg desktop --rename <newname>    # Rename desktop
 ```
 
 #### Focus Commands
