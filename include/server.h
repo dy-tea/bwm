@@ -154,6 +154,13 @@ struct bwm_server {
   uint32_t resize_edges;
   uint32_t cursor_buttons;
 
+  // tiled resize state
+  struct node_t *tiled_resize_node;
+  struct node_t *tiled_resize_parent_vertical;
+  struct node_t *tiled_resize_parent_horizontal;
+  double tiled_resize_initial_ratio_v;
+  double tiled_resize_initial_ratio_h;
+
   // bspwm integration
   monitor_t *monitors;
   monitor_t *focused_monitor;
