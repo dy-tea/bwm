@@ -1,5 +1,6 @@
 #include "server.h"
 #include "config.h"
+#include "log.h"
 #include <wlr/util/log.h>
 #include <stdio.h>
 #include <string.h>
@@ -32,10 +33,20 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  wlr_log_init(WLR_DEBUG, NULL);
+  if (log_init(NULL) != 0) {
+    fprintf(stderr, "Error: Failed to initialize logging\n");
+    return 1;
+  }
+  
+  if (log_setup_signals() != 0) {
+    fprintf(stderr, "Error: Failed to setup signal handlers\n");
+    return 1;
+  }
+  
   config_init_with_config_dir(config_dir);
   server_init();
   int ret = server_run();
   server_fini();
+  log_fini();
   return ret;
 }

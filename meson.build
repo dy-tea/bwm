@@ -93,6 +93,7 @@ executable(
 		'src' / 'layer.c',
 		'src' / 'config.c',
 		'src' / 'lock.c',
+		'src' / 'log.c',
 		'src' / 'input.c',
 		'src' / 'idle.c',
 		'src' / 'rule.c',
