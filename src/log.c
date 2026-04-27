@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include <time.h>
 #include <signal.h>
 #include <execinfo.h>
@@ -45,14 +46,19 @@ static void log_callback(enum wlr_log_importance importance, const char *fmt, va
 
   // print to stdout
   fprintf(stdout, "[%s] %s ", time_str, level_str);
-  vfprintf(stdout, fmt, args);
+  va_list args_copy;
+  va_copy(args_copy, args);
+  vfprintf(stdout, fmt, args_copy);
+  va_end(args_copy);
   fprintf(stdout, "\n");
   fflush(stdout);
 
   // print to file
   if (log_file) {
     fprintf(log_file, "[%s] %s ", time_str, level_str);
-    vfprintf(log_file, fmt, args);
+    va_copy(args_copy, args);
+    vfprintf(log_file, fmt, args_copy);
+    va_end(args_copy);
     fprintf(log_file, "\n");
     fflush(log_file);
     current_line_count++;
