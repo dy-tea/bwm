@@ -52,6 +52,12 @@ bmsg config gapless_monocle true|false
 When true, windows are rearranged to fill gaps when windows are closed.
 
 ```
+bmsg config disable_decorations true|false
+```
+
+When true, requests all windows to render without decorations.
+
+```
 bmsg config edge_scroller_pointer_focus true|false
 ```
 

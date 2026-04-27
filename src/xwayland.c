@@ -666,6 +666,9 @@ static void handle_map(struct wl_listener *listener, void *data) {
 	if (rule && rule->has_state && rule->state == STATE_FULLSCREEN)
 		toggle_fullscreen();
 
+	if (disable_decorations)
+		wlr_xwayland_surface_set_fullscreen(xsurface, true);
+
 	arrange(target_monitor, target_desktop, target_desktop_is_focused);
 
 	if (!wants_float && xwayland_view->node && xwayland_view->node->client) {

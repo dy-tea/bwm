@@ -442,10 +442,13 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   if (rule && rule->state == STATE_FULLSCREEN)
   	toggle_fullscreen();
 
+  if (disable_decorations)
+    wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, true);
+
   // only use transaction for focused desktop
   arrange(target_monitor, target_desktop, target_desktop_is_focused);
 
-  // Tabbed ancestors force server-side decorations; otherwise allow CSD.
+  // tabbed ancestors force SSD, otherwise allow CSD
   toplevel_apply_decoration_mode(toplevel);
 
   toplevel->image_capture_surface = wlr_scene_surface_create(

@@ -27,6 +27,7 @@ bool focus_follows_pointer = false;
 bool pointer_follows_focus = false;
 bool record_history = true;
 bool click_to_focus = false;
+bool disable_decorations = false;
 int mapping_events_count = 0;
 int directional_focus_tightness = 20;
 int ignore_ewmh_fullscreen = 0;
