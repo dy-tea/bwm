@@ -55,7 +55,18 @@ When true, windows are rearranged to fill gaps when windows are closed.
 bmsg config disable_decorations true|false
 ```
 
-When true, requests all windows to render without decorations.
+When true, requests all windows to render without decorations (titlebars, borders, etc.)
+by signaling them to enter fullscreen mode. This provides a clean, minimal interface while
+maintaining normal window management. Similar to dwl (Dynamic Window Leader).
+
+The compositor maintains the decoration-free state across window state changes:
+- Fullscreening/unfullscreening windows preserves the decoration-free appearance
+- Maximizing/unmaximizing windows maintains hidden decorations
+- All other window state transitions keep decorations hidden
+
+New windows created after enabling this setting will have no decorations. Existing windows
+may need to be restarted for the change to take effect. Normal tiling, floating, and window
+management operations continue to work as expected.
 
 ```
 bmsg config edge_scroller_pointer_focus true|false

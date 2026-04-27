@@ -34,6 +34,15 @@ static void handle_foreign_fullscreen_request(struct wl_listener *listener, void
 static void handle_foreign_close_request(struct wl_listener *listener, void *data);
 static void handle_foreign_destroy(struct wl_listener *listener, void *data);
 
+static void toplevel_apply_disable_decorations(struct bwm_toplevel *toplevel) {
+  if (!toplevel || !toplevel->xdg_toplevel)
+    return;
+
+  // if disable_decorations is enabled, always request fullscreen to hide decorations
+  if (disable_decorations)
+    wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, true);
+}
+
 static bool toplevel_should_use_server_decorations(struct bwm_toplevel *tl) {
   if (!tl || !tl->node)
     return false;
@@ -442,8 +451,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   if (rule && rule->state == STATE_FULLSCREEN)
   	toggle_fullscreen();
 
-  if (disable_decorations)
-    wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, true);
+  toplevel_apply_disable_decorations(toplevel);
 
   // only use transaction for focused desktop
   arrange(target_monitor, target_desktop, target_desktop_is_focused);
@@ -888,6 +896,8 @@ void toplevel_request_maximize(struct wl_listener *listener, void *data) {
   toplevel->client_maximized = requested_maximized;
 
   toggle_monocle();
+
+  toplevel_apply_disable_decorations(toplevel);
 }
 
 void toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
@@ -921,6 +931,8 @@ void toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
 
   wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, requested_fullscreen);
   update_foreign_toplevel_state(toplevel);
+
+  toplevel_apply_disable_decorations(toplevel);
 }
 
 void toplevel_set_title(struct wl_listener *listener, void *data) {

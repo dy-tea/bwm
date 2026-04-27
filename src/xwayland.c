@@ -417,6 +417,15 @@ static void xwayland_view_set_fullscreen(struct bwm_xwayland_view *xwayland_view
 	wlr_xwayland_surface_set_fullscreen(surface, fullscreen);
 }
 
+static void xwayland_view_apply_disable_decorations(struct bwm_xwayland_view *xwayland_view) {
+	if (!xwayland_view || !xwayland_view->xwayland_surface)
+		return;
+
+	// if disable_decorations is enabled, always request fullscreen to hide decorations
+	if (disable_decorations)
+		wlr_xwayland_surface_set_fullscreen(xwayland_view->xwayland_surface, true);
+}
+
 void xwayland_view_set_activated(struct bwm_xwayland_view *xwayland_view, bool activated) {
 	struct wlr_xwayland_surface *surface = xwayland_view->xwayland_surface;
 
@@ -666,8 +675,7 @@ static void handle_map(struct wl_listener *listener, void *data) {
 	if (rule && rule->has_state && rule->state == STATE_FULLSCREEN)
 		toggle_fullscreen();
 
-	if (disable_decorations)
-		wlr_xwayland_surface_set_fullscreen(xsurface, true);
+	xwayland_view_apply_disable_decorations(xwayland_view);
 
 	arrange(target_monitor, target_desktop, target_desktop_is_focused);
 
@@ -877,6 +885,8 @@ static void handle_request_fullscreen(struct wl_listener *listener, void *data) 
 		wlr_log(WLR_INFO, "handle_request_fullscreen: denying remove-fullscreen");
 		wlr_xwayland_surface_set_fullscreen(xsurface, true);
 	}
+
+	xwayland_view_apply_disable_decorations(xwayland_view);
 }
 
 static void handle_request_minimize(struct wl_listener *listener, void *data) {
