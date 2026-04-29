@@ -438,6 +438,25 @@ static void ipc_cmd_output(char **args, int num, int client_fd) {
     oc->color_transform = new_transform;
     output_config_apply(oc);
     send_success(client_fd, "output color_profile set\n");
+  } else if (streq("tearing", subcmd)) {
+    if (num < 2) {
+      send_failure(client_fd, "output tearing: missing state\n");
+      return;
+    }
+    args++;
+    num--;
+
+    if (streq("on", *args) || streq("enable", *args) || streq("true", *args)) {
+      oc->allow_tearing = 1;
+    } else if (streq("off", *args) || streq("disable", *args) || streq("false", *args)) {
+      oc->allow_tearing = 0;
+    } else {
+      send_failure(client_fd, "output tearing: invalid state (on/off)\n");
+      return;
+    }
+
+    output_config_apply(oc);
+    send_success(client_fd, "output tearing set\n");
   } else {
     send_failure(client_fd, "output: unknown subcommand\n");
   }

@@ -16,6 +16,7 @@
 #include <wlr/types/wlr_xdg_activation_v1.h>
 #include <wlr/types/wlr_pointer_gestures_v1.h>
 #include <wlr/types/wlr_ext_background_effect_v1.h>
+#include <wlr/types/wlr_tearing_control_v1.h>
 
 enum cursor_mode {
   CURSOR_PASSTHROUGH,
@@ -118,6 +119,10 @@ struct bwm_server {
   struct wl_listener output_manager_apply;
   struct wl_listener output_manager_test;
 
+  struct wlr_tearing_control_manager_v1 *tearing_control_v1;
+  struct wl_listener tearing_control_new_object;
+  struct wl_list tearing_controllers;
+
   struct wlr_session_lock_manager_v1 *session_lock_manager;
   struct wl_listener new_session_lock;
   struct wlr_scene_rect *lock_background;
@@ -180,6 +185,8 @@ struct bwm_server {
 extern struct bwm_server server;
 
 void begin_interactive(struct bwm_toplevel *toplevel, enum cursor_mode mode, uint32_t edges);
+
+void handle_new_tearing_hint(struct wl_listener *listener, void *data);
 
 void server_init(void);
 int server_run(void);

@@ -34,6 +34,7 @@ struct bwm_output {
   struct wl_listener destroy_lock_surface;
 
   bool enabled;
+  bool allow_tearing;
   int lx, ly;
   int width, height;
 

@@ -37,6 +37,7 @@ struct output_config *output_config_create(const char *name) {
   oc->adaptive_sync = OUTPUT_CONFIG_ADAPTIVE_SYNC_AUTO;
   oc->render_bit_depth = OUTPUT_CONFIG_RENDER_BIT_DEPTH_AUTO;
   oc->subpixel = OUTPUT_CONFIG_SUBPIXEL_AUTO;
+  oc->allow_tearing = -1;
 
   return oc;
 }
@@ -212,6 +213,9 @@ void output_config_apply(struct output_config *oc) {
       wlr_color_transform_ref(oc->color_transform);
     output->color_transform = oc->color_transform;
   }
+
+  if (output && oc->allow_tearing >= 0)
+    output->allow_tearing = oc->allow_tearing;
 }
 
 void output_apply_all_config(void) {

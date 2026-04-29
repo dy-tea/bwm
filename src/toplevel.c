@@ -1377,3 +1377,7 @@ void handle_new_xdg_decoration(struct wl_listener *listener, void *data) {
     wlr_xdg_toplevel_decoration_v1_set_mode(deco, mode);
   }
 }
+
+bool toplevel_can_tear(struct bwm_toplevel *toplevel) {
+	return toplevel->tearing_hint == WP_TEARING_CONTROL_V1_PRESENTATION_HINT_ASYNC;
+}

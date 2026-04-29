@@ -436,6 +436,12 @@ void server_init(void) {
   // fixes
   wlr_fixes_create(server.wl_display, 1);
 
+  // tearing control
+  server.tearing_control_v1 = wlr_tearing_control_manager_v1_create(server.wl_display, 1);
+  server.tearing_control_new_object.notify = handle_new_tearing_hint;
+  wl_list_init(&server.tearing_controllers);
+  wl_signal_add(&server.tearing_control_v1->events.new_object, &server.tearing_control_new_object);
+
   // input method support
   server.input_method_manager = wlr_input_method_manager_v2_create(server.wl_display);
   server.text_input_manager = wlr_text_input_manager_v3_create(server.wl_display);
@@ -678,6 +684,8 @@ void server_fini(void) {
   wl_list_remove(&server.pinch_end.link);
   wl_list_remove(&server.hold_begin.link);
   wl_list_remove(&server.hold_end.link);
+
+  wl_list_remove(&server.tearing_control_new_object.link);
 
   wl_list_remove(&server.new_virtual_pointer.link);
 

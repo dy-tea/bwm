@@ -457,6 +457,7 @@ bmsg output <name> render_bit_depth 8|10
 bmsg output <name> color_profile gamma22
 bmsg output <name> color_profile srgb
 bmsg output <name> color_profile icc /path/to/profile.icc
+bmsg output <name> tearing on|off
 ```
 
 - `name` — connector name (e.g. `DP-1`, `HDMI-A-1`)

@@ -6,6 +6,7 @@
 #include <wayland-server.h>
 #include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
+#include <wlr/types/wlr_tearing_control_v1.h>
 
 struct bwm_toplevel {
   struct wl_list link;
@@ -59,6 +60,9 @@ struct bwm_toplevel {
   bool configured;
   bool client_maximized;
 
+  // tearing control
+  enum wp_tearing_control_v1_presentation_hint tearing_hint;
+
   // xdg-decoration
   struct wlr_xdg_toplevel_decoration_v1 *xdg_decoration;
   struct wl_listener decoration_destroy;
@@ -108,3 +112,5 @@ void toplevel_set_mica(struct bwm_toplevel *tl, bool enabled);
 void toplevel_set_acrylic(struct bwm_toplevel *tl, bool enabled);
 void toplevel_set_border_radius(struct bwm_toplevel *tl, float radius);
 void toplevel_apply_decoration_mode(struct bwm_toplevel *tl);
+
+bool toplevel_can_tear(struct bwm_toplevel *toplevel);

@@ -79,28 +79,50 @@ static void output_configure_scene(struct bwm_output *output) {
 		output_configure_scene_iterator, output);
 }
 
+static bool output_can_tear(struct bwm_output *output) {
+	return output->allow_tearing;
+}
+
 void output_frame(struct wl_listener *listener, void *data) {
 	(void)data;
-  struct bwm_output *output = wl_container_of(listener, output, frame);
-  struct wlr_scene_output *scene_output =
-      wlr_scene_get_scene_output(server.scene, output->wlr_output);
+	struct bwm_output *output = wl_container_of(listener, output, frame);
+	struct wlr_scene_output *scene_output = wlr_scene_get_scene_output(server.scene, output->wlr_output);
 
-  if (!scene_output)
-    return;
+	if (!scene_output)
+		return;
 
-  output_configure_scene(output);
+	output_configure_scene(output);
 
-  if (blur_ctx.available)
-    blur_output_frame(output, scene_output);
+	if (blur_ctx.available)
+		blur_output_frame(output, scene_output);
 
-  struct wlr_scene_output_state_options opts = {
-    .color_transform = output->color_transform,
-  };
-  wlr_scene_output_commit(scene_output, &opts);
+	struct wlr_scene_output_state_options opts = {
+		.color_transform = output->color_transform,
+	};
 
-  struct timespec now;
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  wlr_scene_output_send_frame_done(scene_output, &now);
+	struct wlr_output_state pending;
+	wlr_output_state_init(&pending);
+	if (!wlr_scene_output_build_state(scene_output, &pending, &opts)) {
+		wlr_output_state_finish(&pending);
+		return;
+	}
+
+	if (output_can_tear(output)) {
+		pending.tearing_page_flip = true;
+
+		if (!wlr_output_test_state(output->wlr_output, &pending)) {
+			wlr_log(WLR_DEBUG, "Output test failed, retrying without tearing page-flip");
+			pending.tearing_page_flip = false;
+		}
+	}
+
+	if (!wlr_output_commit_state(output->wlr_output, &pending))
+		wlr_log(WLR_ERROR, "Failed to commit output state");
+	wlr_output_state_finish(&pending);
+
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	wlr_scene_output_send_frame_done(scene_output, &now);
 }
 
 static void handle_output_present(struct wl_listener *listener, void *data) {

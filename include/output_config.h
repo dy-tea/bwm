@@ -67,6 +67,7 @@ struct output_config {
   enum output_config_render_bit_depth render_bit_depth;
   enum output_config_subpixel subpixel;
   struct wlr_color_transform *color_transform;
+  int allow_tearing;
 };
 
 struct output_config *output_config_create(const char *name);
