@@ -786,6 +786,7 @@ static void handle_destroy(struct wl_listener *listener, void *data) {
 	wl_list_remove(&xwayland_view->associate.link);
 	wl_list_remove(&xwayland_view->dissociate.link);
 	wl_list_remove(&xwayland_view->override_redirect.link);
+	wl_list_remove(&xwayland_view->link);
 
 	if (xwayland_view->image_capture != NULL) {
 		wlr_scene_node_destroy(&xwayland_view->image_capture->tree.node);
