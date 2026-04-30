@@ -254,6 +254,14 @@ static void update_all_toplevels_visibility(monitor_t *m, desktop_t *current_des
     }
     d = d->next;
   }
+
+  struct bwm_xwayland_view *xwayland_view;
+  wl_list_for_each(xwayland_view, &server.xwayland.views, link) {
+    if (!xwayland_view->mapped || !xwayland_view->scene_tree || !xwayland_view->node)
+      continue;
+    if (xwayland_view->node->client && xwayland_view->node->client->state == STATE_FLOATING)
+      update_window_visibility(xwayland_view->node, m, current_desktop, &window_count);
+  }
 }
 
 void workspace_switch_to_desktop(const char *name) {

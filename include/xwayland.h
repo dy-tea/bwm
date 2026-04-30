@@ -28,6 +28,7 @@ struct bwm_xwayland {
 	struct wlr_xwayland *wlr_xwayland;
 	struct wlr_xcursor_manager *xcursor_manager;
 	xcb_atom_t atoms[ATOM_LAST];
+	struct wl_list views;
 };
 
 struct bwm_xwayland_view {
@@ -68,6 +69,8 @@ struct bwm_xwayland_view {
 	struct wl_listener associate;
 	struct wl_listener dissociate;
 	struct wl_listener override_redirect;
+	
+	struct wl_list link;
 };
 
 struct bwm_xwayland_unmanaged {

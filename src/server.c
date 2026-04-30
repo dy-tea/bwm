@@ -261,6 +261,7 @@ void server_init(void) {
   wl_signal_add(&server.virtual_keyboard_manager->events.new_virtual_keyboard, &server.new_virtual_keyboard);
 
   // xwayland support
+  wl_list_init(&server.xwayland.views);
   server.xwayland.wlr_xwayland = wlr_xwayland_create(server.wl_display, server.compositor, true);
   if (server.xwayland.wlr_xwayland) {
     server.xwayland.xcursor_manager = server.cursor_mgr;
