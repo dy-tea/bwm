@@ -252,8 +252,7 @@ static void apply_node_state(node_t *node,
 	          int new_fw = rect->width + 2 * (int)bw;
 	          int new_fh = rect->height + 2 * (int)bw;
 	          if (new_fw > 0 && new_fh > 0)
-	            wlr_scene_buffer_set_dest_size(tl->border_shader_node,
-	                                           new_fw, new_fh);
+	            wlr_scene_buffer_set_dest_size(tl->border_shader_node, new_fw, new_fh);
 	        }
 	      }
 	    } else if (node->client->xwayland_view) {

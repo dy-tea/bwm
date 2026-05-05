@@ -169,17 +169,20 @@ void toplevel_center_and_clip_surface(struct bwm_toplevel *toplevel) {
   client_t *c = toplevel->node->client;
   bool floating = (c->state == STATE_FLOATING);
   bool fullscreen = (c->state == STATE_FULLSCREEN);
+  bool tiled = (c->state == STATE_TILED);
   int x = 0, y = 0;
+ 	struct wlr_box *container_rect = NULL;
+  bool clip_to_geometry = true;
 
-  // center floating and fullscreen surfaces
-  if (floating || fullscreen) {
-    struct wlr_box *container_rect = NULL;
-
+  // center floating, fullscreen, and undersized tiled surfaces
+  if (floating || fullscreen || tiled) {
     if (floating) {
       container_rect = &c->floating_rectangle;
     } else if (fullscreen) {
       monitor_t *m = toplevel->node->monitor;
       container_rect = m ? &m->rectangle : &c->tiled_rectangle;
+    } else {
+      container_rect = &c->tiled_rectangle;
     }
 
     if (container_rect && toplevel->geometry.width > 0 && toplevel->geometry.height > 0) {
@@ -189,35 +192,24 @@ void toplevel_center_and_clip_surface(struct bwm_toplevel *toplevel) {
       x = center_x > 0 ? center_x : 0;
       y = center_y > 0 ? center_y : 0;
 
-      wlr_log(WLR_DEBUG, "Centering surface: %dx%d at offset (%d,%d)",
-        toplevel->geometry.width, toplevel->geometry.height, x, y);
+      if ((floating || fullscreen) && (x != 0 || y != 0)) {
+        wlr_log(WLR_DEBUG, "Centering surface: %dx%d at offset (%d,%d) in container %dx%d",
+          toplevel->geometry.width, toplevel->geometry.height, x, y,
+          container_rect->width, container_rect->height);
+        clip_to_geometry = false;
+      }
     }
   }
 
   wlr_scene_node_set_position(&toplevel->content_tree->node, x, y);
 
-  bool clip_to_geometry = true;
-  if ((floating || fullscreen) && (toplevel->geometry.x != 0 || toplevel->geometry.y != 0))
-    clip_to_geometry = false;
-
   if (!wl_list_empty(&toplevel->content_tree->children)) {
-    struct wlr_box *rect = NULL;
-
-    if (floating) {
-      rect = &c->floating_rectangle;
-    } else if (c->state == STATE_FULLSCREEN) {
-      monitor_t *m = toplevel->node->monitor;
-      rect = m ? &m->rectangle : &c->tiled_rectangle;
-    } else {
-      rect = &c->tiled_rectangle;
-    }
-
     if (clip_to_geometry) {
       struct wlr_box clip = {
         .x = toplevel->geometry.x,
         .y = toplevel->geometry.y,
-        .width = rect->width,
-        .height = rect->height
+        .width = container_rect->width,
+        .height = container_rect->height
       };
 
       wlr_scene_subsurface_tree_set_clip(&toplevel->content_tree->node, &clip);
@@ -637,19 +629,8 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
             transaction_commit_dirty_client();
           }
         } else {
-          struct wlr_box *rect = NULL;
-          if (c->state == STATE_FULLSCREEN) {
-            monitor_t *m = toplevel->node->monitor;
-            rect = m ? &m->rectangle : &c->tiled_rectangle;
-          } else {
-            rect = &c->tiled_rectangle;
-          }
-          if (rect &&
-              (toplevel->geometry.width < rect->width ||
-               toplevel->geometry.height < rect->height)) {
-            toplevel->geometry.width = rect->width;
-            toplevel->geometry.height = rect->height;
-          }
+          // Do not force geometry to expand - preserve actual client geometry
+          // Centering and clipping handle undersized surfaces properly
         }
       }
     }
