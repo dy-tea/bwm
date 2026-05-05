@@ -36,7 +36,6 @@ static bwm_subscriber_t *subscriber_head = NULL;
 static bwm_subscriber_t *subscriber_tail = NULL;
 
 static void ipc_cmd_subscribe(char **args, int num, int client_fd);
-static monitor_t *find_monitor_by_name(const char *name);
 void toplevel_map(struct wl_listener *listener, void *data);
 
 const char *ipc_get_socket_path(void) {
@@ -563,7 +562,7 @@ static void ipc_cmd_input(char **args, int num, int client_fd) {
   input_apply_config_all_keyboards();
 }
 
-static desktop_t *find_desktop_by_name_in_monitor(monitor_t *mon, const char *name) {
+desktop_t *find_desktop_by_name_in_monitor(monitor_t *mon, const char *name) {
   desktop_t *d = mon->desk;
   while (d) {
     if (strcmp(d->name, name) == 0)
@@ -1890,7 +1889,7 @@ static void ipc_cmd_desktop(char **args, int num, int client_fd) {
   }
 }
 
-static monitor_t *find_monitor_by_name(const char *name) {
+monitor_t *find_monitor_by_name(const char *name) {
   for (monitor_t *m = server.monitors; m != NULL; m = m->next)
     if (strcmp(m->name, name) == 0)
       return m;

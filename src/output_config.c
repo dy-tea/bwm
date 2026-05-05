@@ -216,6 +216,27 @@ void output_config_apply(struct output_config *oc) {
 
   if (output && oc->allow_tearing >= 0)
     output->allow_tearing = oc->allow_tearing;
+
+  // link output to monitor if enabled but not linked
+  if (output && wlr_output->enabled && !output->monitor) {
+    // find monitor without output
+    monitor_t *unlinked_monitor = NULL;
+    for (monitor_t *m = server.monitors; m != NULL; m = m->next) {
+      if (!m->output) {
+        unlinked_monitor = m;
+        break;
+      }
+    }
+
+    // if found, link it
+    if (unlinked_monitor) {
+      unlinked_monitor->output = output;
+      output->monitor = unlinked_monitor;
+      strncpy(unlinked_monitor->name, wlr_output->name, SMALEN - 1);
+      unlinked_monitor->name[SMALEN - 1] = '\0';
+      output_enable(output);
+    }
+  }
 }
 
 void output_apply_all_config(void) {

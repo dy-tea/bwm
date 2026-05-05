@@ -14,9 +14,11 @@ typedef struct {
 
 typedef struct {
   char desktop[SMALEN];
+  char monitor[SMALEN];
   client_state_t state;
   bool has_state;
   bool has_desktop;
+  bool has_monitor;
   bool follow;
   bool has_follow;
   bool focus;

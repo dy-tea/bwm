@@ -104,6 +104,8 @@ void list_rules(char *buf, size_t buf_size) {
 
     if (r->consequence.has_desktop)
       offset += snprintf(buf + offset, buf_size - offset, "desktop=%s ", r->consequence.desktop);
+    if (r->consequence.has_monitor)
+      offset += snprintf(buf + offset, buf_size - offset, "monitor=%s ", r->consequence.monitor);
     if (r->consequence.has_state) {
       const char *state_str = "unknown";
       switch (r->consequence.state) {

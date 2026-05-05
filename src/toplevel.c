@@ -1,5 +1,6 @@
 #include "toplevel.h"
 #include "blur.h"
+#include "ipc.h"
 #include "keyboard.h"
 #include "output.h"
 #include "popup.h"
@@ -8,7 +9,6 @@
 #include "tree.h"
 #include "transaction.h"
 #include "types.h"
-#include "workspace.h"
 #include "rule.h"
 #include "scroller.h"
 #include "xwayland.h"
@@ -291,12 +291,31 @@ void toplevel_map(struct wl_listener *listener, void *data) {
       should_focus = false;
   }
 
+  // find target monitor
+  monitor_t *target_monitor = mon;
+  if (rule && rule->has_monitor) {
+  	wlr_log(WLR_DEBUG, "  Rule specifies monitor: %s", rule->monitor);
+   	monitor_t *new_monitor = find_monitor_by_name(rule->monitor);
+    if (new_monitor) {
+    	target_monitor = new_monitor;
+     wlr_log(WLR_DEBUG, "  Target desktop changed to: %s", target_monitor->name);
+    } else {
+    	wlr_log(WLR_ERROR, "  Monitor %s not found", rule->monitor);
+    }
+  }
+
+  if (!target_monitor)
+    target_monitor = m;
+
+  n->monitor = target_monitor;
+
+  // find target desktop
   desktop_t *target_desktop = d;
   wlr_log(WLR_DEBUG, "Window %s: current desktop=%s, has_rule=%d",
           app_id ? app_id : "?", d->name, rule != NULL);
   if (rule && rule->has_desktop) {
     wlr_log(WLR_DEBUG, "  Rule specifies desktop: %s", rule->desktop);
-    desktop_t *new_desk = find_desktop_by_name(rule->desktop);
+    desktop_t *new_desk = find_desktop_by_name_in_monitor(target_monitor, rule->desktop);
     if (new_desk) {
       target_desktop = new_desk;
       wlr_log(WLR_DEBUG, "  Target desktop changed to: %s", target_desktop->name);
@@ -376,11 +395,6 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   if (app_id)
     wlr_foreign_toplevel_handle_v1_set_app_id(toplevel->foreign_toplevel, app_id);
 
-  monitor_t *target_monitor = target_desktop->monitor;
-  if (!target_monitor)
-    target_monitor = m;
-
-  n->monitor = target_monitor;
 
   // center to output if floating, also ensure it does not tile
   if (rule && rule->state == STATE_FLOATING) {
@@ -602,7 +616,7 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
     if (!toplevel->configured && serial != 0) {
       toplevel->configured = true;
       wlr_log(WLR_DEBUG, "Toplevel marked configured via serial=%u (transaction match=%d)",
-              serial, successful);
+      serial, successful);
     }
 
     if (toplevel->saved_surface_tree && !successful)
@@ -623,14 +637,10 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
 
         if (c->state == STATE_FLOATING) {
           if (c->floating_rectangle.width > 0) {
-            wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel,
-                                     toplevel->geometry.width,
-                                     toplevel->geometry.height);
+            wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, toplevel->geometry.width,
+              toplevel->geometry.height);
             transaction_commit_dirty_client();
           }
-        } else {
-          // Do not force geometry to expand - preserve actual client geometry
-          // Centering and clipping handle undersized surfaces properly
         }
       }
     }
@@ -1001,6 +1011,10 @@ void focus_toplevel(struct bwm_toplevel *toplevel) {
 
   // Update input method focus
   input_method_relay_set_focus(server.input_method_relay, surface);
+
+  if (toplevel->node && toplevel->node->monitor) {
+    server.focused_monitor = toplevel->node->monitor;
+  }
 
   // update borders
   if (toplevel->node) {

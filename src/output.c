@@ -7,6 +7,7 @@
 #include "toplevel.h"
 #include "tree.h"
 #include "blur.h"
+#include "types.h"
 #include <time.h>
 #include <stdlib.h>
 #include <string.h>
@@ -175,12 +176,63 @@ void handle_new_output(struct wl_listener *listener, void *data) {
   o->wlr_output = wlr_output;
   wlr_output_init_render(wlr_output, server.allocator, server.renderer);
 
-  // Link output to a monitor
-  if (server.focused_monitor && !server.focused_monitor->output) {
-    server.focused_monitor->output = o;
-    o->monitor = server.focused_monitor;
-    strncpy(server.focused_monitor->name, wlr_output->name, SMALEN - 1);
-    server.focused_monitor->name[SMALEN - 1] = '\0';
+  // try finding unlinked monitor
+  monitor_t *target_monitor = NULL;
+  for (monitor_t *m = server.monitors; m != NULL; m = m->next) {
+    if (!m->output) {
+      target_monitor = m;
+      break;
+    }
+  }
+
+  // if all monitors are linked, create new monitor
+  if (!target_monitor) {
+    target_monitor = (monitor_t *)calloc(1, sizeof(monitor_t));
+    if (target_monitor) {
+      target_monitor->id = next_monitor_id++;
+      target_monitor->wired = true;
+      target_monitor->window_gap = window_gap;
+      target_monitor->border_width = border_width;
+      target_monitor->padding = (padding_t){0};
+      target_monitor->rectangle = (struct wlr_box){0, 0, 1920, 1080};
+
+      // create default desktop for new monitor
+      desktop_t *d = (desktop_t *)calloc(1, sizeof(desktop_t));
+      if (d) {
+        d->id = next_desktop_id++;
+        strncpy(d->name, "default", SMALEN - 1);
+        d->layout = LAYOUT_TILED;
+        d->user_layout = LAYOUT_TILED;
+        d->window_gap = window_gap;
+        d->border_width = border_width;
+        d->padding = (padding_t){0};
+        d->root = NULL;
+        d->focus = NULL;
+        d->monitor = target_monitor;
+
+        target_monitor->desk = d;
+        target_monitor->desk_head = d;
+        target_monitor->desk_tail = d;
+      }
+
+      // add to monitor list
+      if (mon_tail) {
+        target_monitor->prev = mon_tail;
+        mon_tail->next = target_monitor;
+        mon_tail = target_monitor;
+      } else {
+        mon = target_monitor;
+        mon_head = target_monitor;
+        mon_tail = target_monitor;
+      }
+    }
+  }
+
+  if (target_monitor) {
+    target_monitor->output = o;
+    o->monitor = target_monitor;
+    strncpy(target_monitor->name, wlr_output->name, SMALEN - 1);
+    target_monitor->name[SMALEN - 1] = '\0';
   }
 
   struct wlr_output_state state;
@@ -273,9 +325,12 @@ void output_disable(struct bwm_output *output) {
 
   output->enabled = false;
 
-  if (output->monitor && output->monitor->desk) {
-    output->monitor->desk->monitor = NULL;
-    output->monitor->desk = NULL;
+  if (output->monitor) {
+    if (output->monitor->desk) {
+      output->monitor->desk->monitor = NULL;
+      output->monitor->desk = NULL;
+    }
+    output->monitor->output = NULL;
   }
 
   output->monitor = NULL;

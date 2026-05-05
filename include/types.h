@@ -16,6 +16,8 @@ struct bwm_toplevel;
 struct bwm_xwayland_view;
 struct bwm_tab_bar;
 
+struct monitor_t *monitor_at(double x, double y);
+
 // enums
 typedef enum { TYPE_HORIZONTAL, TYPE_VERTICAL, TYPE_TABBED } split_type_t;
 

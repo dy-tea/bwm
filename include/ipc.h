@@ -4,6 +4,7 @@
 #include <wayland-server-core.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include "types.h"
 
 #define BWM_SOCKET_ENV "BWM_SOCKET"
 #define BWM_SOCKET_PATH_TEMPLATE "/tmp/bwm-%d.sock"
@@ -49,3 +50,6 @@ const char *ipc_get_socket_path(void);
 
 void ipc_put_status(bwm_subscriber_mask_t mask, const char *fmt, ...);
 void ipc_print_report(int fd);
+
+desktop_t *find_desktop_by_name_in_monitor(monitor_t *mon, const char *name);
+monitor_t *find_monitor_by_name(const char *name);

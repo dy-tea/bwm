@@ -1635,3 +1635,10 @@ void update_border_colors(struct wlr_scene_tree *border_tree, struct wlr_scene_r
     if (rects[i])
       wlr_scene_rect_set_color(rects[i], color);
 }
+
+monitor_t *monitor_at(double x, double y) {
+  for (monitor_t *m = mon_head; m != NULL; m = m->next)
+    if (wlr_box_contains_point(&m->rectangle, (int)x, (int)y))
+      return m;
+  return NULL;
+}
