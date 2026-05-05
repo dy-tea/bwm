@@ -9,6 +9,7 @@
 #include "blur.h"
 #include <time.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
@@ -178,6 +179,8 @@ void handle_new_output(struct wl_listener *listener, void *data) {
   if (server.focused_monitor && !server.focused_monitor->output) {
     server.focused_monitor->output = o;
     o->monitor = server.focused_monitor;
+    strncpy(server.focused_monitor->name, wlr_output->name, SMALEN - 1);
+    server.focused_monitor->name[SMALEN - 1] = '\0';
   }
 
   struct wlr_output_state state;
