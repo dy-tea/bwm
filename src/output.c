@@ -163,7 +163,22 @@ static void handle_output_destroy(struct wl_listener *listener, void *data) {
   wl_list_remove(&output->present.link);
   wl_list_remove(&output->request_state.link);
   wl_list_remove(&output->destroy.link);
-  wl_list_remove(&output->link);
+
+  if (output->prev)
+    output->prev->next = output->next;
+  else
+    mon_head = output->next;
+
+  if (output->next)
+    output->next->prev = output->prev;
+  else
+    mon_tail = output->prev;
+
+  if (server.focused_output == output)
+    server.focused_output = (output->next) ? output->next : output->prev;
+  if (mon == output)
+    mon = mon_head;
+
   wlr_color_transform_unref(output->color_transform);
   blur_output_fini(output->blur_ctx);
   free(output);

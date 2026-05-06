@@ -18,7 +18,6 @@ enum scale_filter_mode {
 };
 
 struct bwm_output {
-  struct wl_list link;
   struct wlr_output *wlr_output;
   struct wlr_box usable_area;
   struct wlr_scene_tree *layer_bg;
