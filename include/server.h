@@ -109,7 +109,6 @@ struct bwm_server {
   struct wl_list physical_keyboards;
 
   struct wlr_output_layout *output_layout;
-  struct wl_list outputs;
   struct wl_listener new_output;
 
   struct wlr_output_power_manager_v1 *output_power_manager;
@@ -166,9 +165,7 @@ struct bwm_server {
   double tiled_resize_initial_ratio_v;
   double tiled_resize_initial_ratio_h;
 
-  // bspwm integration
-  monitor_t *monitors;
-  monitor_t *focused_monitor;
+  struct bwm_output *focused_output;
 
   // workspace tracking
   struct wlr_ext_workspace_manager_v1 *workspace_manager;

@@ -172,68 +172,63 @@ static void handle_output_destroy(struct wl_listener *listener, void *data) {
 void handle_new_output(struct wl_listener *listener, void *data) {
 	(void)listener;
   struct wlr_output *wlr_output = data;
-  struct bwm_output *o = calloc(1, sizeof(struct bwm_output));
-  o->wlr_output = wlr_output;
+  struct bwm_output *output = calloc(1, sizeof(struct bwm_output));
+  if (!output)
+    return;
+
+  output->wlr_output = wlr_output;
   wlr_output_init_render(wlr_output, server.allocator, server.renderer);
 
-  // try finding unlinked monitor
-  monitor_t *target_monitor = NULL;
-  for (monitor_t *m = server.monitors; m != NULL; m = m->next) {
-    if (!m->output) {
-      target_monitor = m;
-      break;
-    }
+  // init output info
+  output->enabled = false;
+  output->allow_tearing = false;
+  strncpy(output->name, wlr_output->name, SMALEN - 1);
+  output->name[SMALEN - 1] = 0;
+  output->id = next_monitor_id++;
+  output->wired = true;
+  output->window_gap = window_gap;
+  output->border_width = border_width;
+  output->padding = (padding_t){0};
+  output->rectangle = (struct wlr_box){0, 0, 1920, 1080};
+
+  // create default workspace for output
+  desktop_t *d = calloc(1, sizeof(desktop_t));
+  if (d) {
+    d->id = next_desktop_id++;
+    strncpy(d->name, "default", SMALEN - 1);
+    d->layout = LAYOUT_TILED;
+    d->user_layout = LAYOUT_TILED;
+    d->window_gap = window_gap;
+    d->border_width = border_width;
+    d->padding = (padding_t){0};
+    d->root = NULL;
+    d->focus = NULL;
+    d->output = output;
+
+    output->desk = d;
+    output->desk_head = d;
+    output->desk_tail = d;
   }
 
-  // if all monitors are linked, create new monitor
-  if (!target_monitor) {
-    target_monitor = (monitor_t *)calloc(1, sizeof(monitor_t));
-    if (target_monitor) {
-      target_monitor->id = next_monitor_id++;
-      target_monitor->wired = true;
-      target_monitor->window_gap = window_gap;
-      target_monitor->border_width = border_width;
-      target_monitor->padding = (padding_t){0};
-      target_monitor->rectangle = (struct wlr_box){0, 0, 1920, 1080};
+  // add to monitor linked list
+  if (!mon)
+  	mon = output;
 
-      // create default desktop for new monitor
-      desktop_t *d = (desktop_t *)calloc(1, sizeof(desktop_t));
-      if (d) {
-        d->id = next_desktop_id++;
-        strncpy(d->name, "default", SMALEN - 1);
-        d->layout = LAYOUT_TILED;
-        d->user_layout = LAYOUT_TILED;
-        d->window_gap = window_gap;
-        d->border_width = border_width;
-        d->padding = (padding_t){0};
-        d->root = NULL;
-        d->focus = NULL;
-        d->monitor = target_monitor;
+  if (!mon_head)
+  	mon_head = output;
 
-        target_monitor->desk = d;
-        target_monitor->desk_head = d;
-        target_monitor->desk_tail = d;
-      }
-
-      // add to monitor list
-      if (mon_tail) {
-        target_monitor->prev = mon_tail;
-        mon_tail->next = target_monitor;
-        mon_tail = target_monitor;
-      } else {
-        mon = target_monitor;
-        mon_head = target_monitor;
-        mon_tail = target_monitor;
-      }
-    }
+  if (mon_tail) {
+    output->prev = mon_tail;
+    mon_tail->next = output;
+    mon_tail = output;
+  } else {
+    mon = output;
+    mon_head = output;
+    mon_tail = output;
   }
 
-  if (target_monitor) {
-    target_monitor->output = o;
-    o->monitor = target_monitor;
-    strncpy(target_monitor->name, wlr_output->name, SMALEN - 1);
-    target_monitor->name[SMALEN - 1] = '\0';
-  }
+  if (!server.focused_output)
+    server.focused_output = output;
 
   struct wlr_output_state state;
   wlr_output_state_init(&state);
@@ -246,54 +241,50 @@ void handle_new_output(struct wl_listener *listener, void *data) {
   wlr_output_commit_state(wlr_output, &state);
   wlr_output_state_finish(&state);
 
-  o->frame.notify = output_frame;
-  wl_signal_add(&wlr_output->events.frame, &o->frame);
+  output->frame.notify = output_frame;
+  wl_signal_add(&wlr_output->events.frame, &output->frame);
 
-  o->request_state.notify = output_request_state;
-  wl_signal_add(&wlr_output->events.request_state, &o->request_state);
+  output->request_state.notify = output_request_state;
+  wl_signal_add(&wlr_output->events.request_state, &output->request_state);
 
-  o->present.notify = handle_output_present;
-  wl_signal_add(&wlr_output->events.present, &o->present);
+  output->present.notify = handle_output_present;
+  wl_signal_add(&wlr_output->events.present, &output->present);
 
-  o->destroy.notify = handle_output_destroy;
-  wl_signal_add(&wlr_output->events.destroy, &o->destroy);
+  output->destroy.notify = handle_output_destroy;
+  wl_signal_add(&wlr_output->events.destroy, &output->destroy);
 
   for (int i = 0; i < 4; i++)
-    wl_list_init(&o->layers[i]);
+    wl_list_init(&output->layers[i]);
 
-  o->layer_bg = wlr_scene_tree_create(server.bg_tree);
-  o->layer_bottom = wlr_scene_tree_create(server.bot_tree);
-  o->layer_top = wlr_scene_tree_create(server.top_tree);
-  o->layer_overlay = wlr_scene_tree_create(server.over_tree);
+  output->layer_bg = wlr_scene_tree_create(server.bg_tree);
+  output->layer_bottom = wlr_scene_tree_create(server.bot_tree);
+  output->layer_top = wlr_scene_tree_create(server.top_tree);
+  output->layer_overlay = wlr_scene_tree_create(server.over_tree);
 
-  wl_list_insert(&server.outputs, &o->link);
-  struct wlr_output_layout_output *l_output =
-      wlr_output_layout_add_auto(server.output_layout, wlr_output);
-  struct wlr_scene_output *scene_output =
-      wlr_scene_output_create(server.scene, wlr_output);
-  wlr_scene_output_layout_add_output(server.scene_layout, l_output,
-                                  scene_output);
+  struct wlr_output_layout_output *l_output = wlr_output_layout_add_auto(server.output_layout, wlr_output);
+  struct wlr_scene_output *scene_output = wlr_scene_output_create(server.scene, wlr_output);
+  wlr_scene_output_layout_add_output(server.scene_layout, l_output, scene_output);
 
-  wlr_output->data = o;
+  wlr_output->data = output;
 
   struct wlr_box layout_box;
   wlr_output_layout_get_box(server.output_layout, wlr_output, &layout_box);
-  o->rectangle = layout_box;
-  o->usable_area = layout_box;
-  o->blur_ctx = blur_output_init(o->rectangle.width, o->rectangle.height);
+  output->rectangle = layout_box;
+  output->usable_area = layout_box;
+  output->blur_ctx = blur_output_init(output->rectangle.width, output->rectangle.height);
 
   // update monitor rectangle
-  if (server.focused_monitor) {
-  wlr_output_layout_get_box(server.output_layout, wlr_output,
-                              &server.focused_monitor->rectangle);
-  wlr_log(WLR_INFO, "Monitor rectangle updated: %dx%d at %d,%d",
-          server.focused_monitor->rectangle.width,
-          server.focused_monitor->rectangle.height,
-          server.focused_monitor->rectangle.x,
-          server.focused_monitor->rectangle.y);
+  if (server.focused_output) {
+	  wlr_output_layout_get_box(server.output_layout, wlr_output,
+	    &server.focused_output->rectangle);
+	  wlr_log(WLR_INFO, "Monitor rectangle updated: %dx%d at %d,%d",
+	    server.focused_output->rectangle.width,
+	    server.focused_output->rectangle.height,
+	    server.focused_output->rectangle.x,
+	    server.focused_output->rectangle.y);
   }
 
-  output_enable(o);
+  output_enable(output);
   output_update_manager_config();
 }
 
@@ -324,16 +315,10 @@ void output_disable(struct bwm_output *output) {
     return;
 
   output->enabled = false;
-
-  if (output->monitor) {
-    if (output->monitor->desk) {
-      output->monitor->desk->monitor = NULL;
-      output->monitor->desk = NULL;
-    }
-    output->monitor->output = NULL;
+  if (output->desk) {
+    output->desk->output = NULL;
+    output->desk = NULL;
   }
-
-  output->monitor = NULL;
 }
 
 void output_destroy(struct bwm_output *output) {
@@ -418,12 +403,7 @@ void output_update_scale(struct bwm_output *output, float scale) {
   output->ly = layout_box.y;
   output->width = layout_box.width;
   output->height = layout_box.height;
-
-  if (output->monitor) {
-    output->monitor->rectangle = layout_box;
-    wlr_log(WLR_INFO, "Monitor rectangle updated after scale: %dx%d at %d,%d",
-            layout_box.width, layout_box.height, layout_box.x, layout_box.y);
-  }
+  output->rectangle = layout_box;
 
   struct bwm_toplevel *toplevel;
   wl_list_for_each(toplevel, &server.toplevels, link) {
@@ -432,7 +412,7 @@ void output_update_scale(struct bwm_output *output, float scale) {
       continue;
 
     node_t *n = toplevel->node;
-    if (n->monitor && n->monitor->output == output) {
+    if (n->output && n->output == output) {
       struct wlr_surface *surface = toplevel->xdg_toplevel->base->surface;
       wlr_log(WLR_DEBUG, "Notifying toplevel of scale %.2f", scale);
       wlr_fractional_scale_v1_notify_scale(surface, scale);
@@ -440,7 +420,7 @@ void output_update_scale(struct bwm_output *output, float scale) {
     }
   }
 
-  // Notify all layer surfaces on this output
+  // notify all layer surfaces on this output
   for (int i = 0; i < 4; i++) {
     struct bwm_layer_surface *layer;
     wl_list_for_each(layer, &output->layers[i], link) {
@@ -456,12 +436,16 @@ void output_update_scale(struct bwm_output *output, float scale) {
 
   blur_invalidate_mica(output->blur_ctx);
 
-  // Rearrange all desktops on this monitor
-  if (output->monitor) {
-    monitor_t *m = output->monitor;
-    for (desktop_t *d = m->desk; d != NULL; d = d->next)
-      arrange(m, d, true);
-  }
+  // rearrange all desktop on this output
+  for (desktop_t *d = output->desk; d != NULL; d = d->next)
+    arrange(output, d, true);
 
   update_idle_inhibitors(NULL);
+}
+
+struct bwm_output *output_get_valid(void) {
+  for (struct bwm_output *m = mon_head; m != NULL; m = m->next)
+    if (m->enabled && m->wlr_output)
+      return m;
+  return NULL;
 }

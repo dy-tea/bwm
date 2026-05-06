@@ -8,6 +8,7 @@
 #include "workspace.h"
 #include "scroller.h"
 #include "keyboard.h"
+#include "output.h"
 #include "tabs.h"
 #include <float.h>
 #include <stdlib.h>
@@ -170,7 +171,7 @@ add_abs:
 			// probably should remove this, not sure
 			if (!focused_view) {
 				wlr_log(WLR_INFO, "last_focused is NULL, searching for any mapped xwayland window");
-				monitor_t *mon = server.focused_monitor ? server.focused_monitor : mon_head;
+				struct bwm_output *mon = server.focused_output ? server.focused_output : mon_head;
 				if (mon && mon->desk) {
 					desktop_t *d = mon->desk;
 					node_t *n = d->root;
@@ -516,7 +517,7 @@ static void handle_map(struct wl_listener *listener, void *data) {
 	xwayland_view->geometry.width = xsurface->width;
 	xwayland_view->geometry.height = xsurface->height;
 
-	monitor_t *mon = server.focused_monitor ? server.focused_monitor : mon_head;
+	struct bwm_output *mon = server.focused_output ? server.focused_output : mon_head;
 	if (!mon) {
 		wlr_log(WLR_ERROR, "No monitor available for xwayland view");
 		return;
@@ -545,7 +546,7 @@ static void handle_map(struct wl_listener *listener, void *data) {
 	client->toplevel = NULL;
 	client->xwayland_view = xwayland_view;
 	xwayland_view->node = node;
-	node->monitor = mon;
+	node->output = mon;
 
 	const char *app_id = xsurface->class;
 	const char *title = xsurface->title;
@@ -585,8 +586,8 @@ static void handle_map(struct wl_listener *listener, void *data) {
 			wlr_log(WLR_ERROR, "XWayland rule: desktop '%s' not found", rule->desktop);
 	}
 
-	monitor_t *target_monitor = target_desktop->monitor ? target_desktop->monitor : mon;
-	node->monitor = target_monitor;
+	struct bwm_output *target_monitor = target_desktop->output ? target_desktop->output : mon;
+	node->output = target_monitor;
 
 	if (rule && rule->has_hidden)
 		node->hidden = rule->hidden;
@@ -717,7 +718,7 @@ static void handle_unmap(struct wl_listener *listener, void *data) {
 	}
 
 	if (xwayland_view->node) {
-		monitor_t *mon = xwayland_view->node->monitor;
+		struct bwm_output *mon = xwayland_view->node->output;
 		desktop_t *desk = NULL;
 		if (mon) {
 			for (desktop_t *d = mon->desk_head; d; d = d->next) {
@@ -830,8 +831,8 @@ static void handle_request_configure(struct wl_listener *listener, void *data) {
 		if (xwayland_view->node && xwayland_view->node->client) {
 			client_t *client = xwayland_view->node->client;
 			struct wlr_box rect;
-			if (client->state == STATE_FULLSCREEN && xwayland_view->node->monitor)
-				rect = xwayland_view->node->monitor->rectangle;
+			if (client->state == STATE_FULLSCREEN && xwayland_view->node->output)
+				rect = xwayland_view->node->output->rectangle;
 			else
 				rect = client->tiled_rectangle;
 			wlr_xwayland_surface_configure(xsurface, rect.x, rect.y, rect.width, rect.height);
@@ -846,11 +847,11 @@ static void handle_request_fullscreen(struct wl_listener *listener, void *data) 
 	struct wlr_xwayland_surface *xsurface = xwayland_view->xwayland_surface;
 
 	node_t *node = xwayland_view->node;
-	if (!node || !node->client || !node->monitor || !node->desktop)
+	if (!node || !node->client || !node->output || !node->desktop)
 		return;
 
 	client_t *client = node->client;
-	monitor_t *m = node->monitor;
+	struct bwm_output *m = node->output;
 	desktop_t *d = node->desktop;
 
 	wlr_log(WLR_INFO, "handle_request_fullscreen: xwayland wants fullscreen=%d, current state=%d last_state=%d",
@@ -904,7 +905,7 @@ static void handle_request_activate(struct wl_listener *listener, void *data) {
 		return;
 
 	if (xwayland_view->node) {
-		monitor_t *mon = xwayland_view->node->monitor;
+		struct bwm_output *mon = xwayland_view->node->output;
 		if (mon) {
 			for (desktop_t *d = mon->desk_head; d; d = d->next) {
 				node_t *n = d->root;
@@ -1129,7 +1130,7 @@ static struct bwm_xwayland_view *create_xwayland_view(struct wlr_xwayland_surfac
 	xwayland_view->override_redirect.notify = handle_override_redirect;
 
 	xsurface->data = xwayland_view;
-	
+
 	wl_list_insert(&server.xwayland.views, &xwayland_view->link);
 
 	return xwayland_view;

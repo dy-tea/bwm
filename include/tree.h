@@ -12,8 +12,8 @@ client_t *make_client(void);
 void free_node(node_t *n);
 
 // Tree layout
-void arrange(monitor_t *m, desktop_t *d, bool use_transaction);
-void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
+void arrange(struct bwm_output *m, desktop_t *d, bool use_transaction);
+void apply_layout(struct bwm_output *m, desktop_t *d, node_t *n, struct wlr_box rect,
                   struct wlr_box root_rect);
 
 // node insertion and removal
@@ -37,16 +37,16 @@ node_t *next_leaf(node_t *n, node_t *r);
 node_t *prev_leaf(node_t *n, node_t *r);
 
 // focus management
-bool focus_node(monitor_t *m, desktop_t *d, node_t *n);
-bool activate_node(monitor_t *m, desktop_t *d, node_t *n);
+bool focus_node(struct bwm_output *m, desktop_t *d, node_t *n);
+bool activate_node(struct bwm_output *m, desktop_t *d, node_t *n);
 node_t *find_fence(node_t *n, direction_t dir);
 bool is_adjacent(node_t *a, node_t *b, direction_t dir);
 
 // node manipulation
-void swap_nodes(monitor_t *m1, desktop_t *d1, node_t *n1, monitor_t *m2,
+void swap_nodes(struct bwm_output *m1, desktop_t *d1, node_t *n1, struct bwm_output *m2,
                 desktop_t *d2, node_t *n2);
-bool set_state(monitor_t *m, desktop_t *d, node_t *n, client_state_t s);
-void set_floating(monitor_t *m, desktop_t *d, node_t *n, bool value);
+bool set_state(struct bwm_output *m, desktop_t *d, node_t *n, client_state_t s);
+void set_floating(struct bwm_output *m, desktop_t *d, node_t *n, bool value);
 void close_node(node_t *n);
 
 // preselection
@@ -61,7 +61,7 @@ void equalize_tree(node_t *n);
 void balance_tree(node_t *n);
 
 // geometry
-struct wlr_box get_rectangle(monitor_t *m, node_t *n);
+struct wlr_box get_rectangle(struct bwm_output *m, node_t *n);
 unsigned int node_area(node_t *n);
 
 // Transaction helpers

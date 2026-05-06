@@ -908,7 +908,7 @@ static bool rebuild_live_blur(struct bwm_output *output,
   wl_list_for_each(tl, &server.toplevels, link) {
     if (!tl->blur_node || !tl->node || !tl->node->client) continue;
     if (!tl->node->client->shown) continue;
-    if (!tl->node->monitor || tl->node->monitor->output != output) continue;
+    if (!tl->node->output || tl->node->output != output) continue;
 
     GLuint src = capture_bg_to_tex1(output, ctx, scene_output, false,
         &tl->scene_tree->node, &tl->blur_scene_hidden);
@@ -945,8 +945,8 @@ static void push_blur_to_toplevels(struct bwm_output *output) {
   struct bwm_toplevel *tl;
   wl_list_for_each(tl, &server.toplevels, link) {
     if (!tl->blur_node || !tl->node) continue;
-    monitor_t *m = tl->node->monitor;
-    if (!m || m->output != output) continue;
+    struct bwm_output *m = tl->node->output;
+    if (!m || m != output) continue;
 
     if (!tl->blur_buf) {
       wlr_scene_buffer_set_buffer(tl->blur_node, NULL);
@@ -957,8 +957,8 @@ static void push_blur_to_toplevels(struct bwm_output *output) {
 
     client_t *c = tl->node->client;
     struct wlr_box r;
-    if (c->state == STATE_FULLSCREEN && tl->node->monitor)
-      r = tl->node->monitor->rectangle;
+    if (c->state == STATE_FULLSCREEN && tl->node->output)
+      r = tl->node->output->rectangle;
     else if (c->state == STATE_FLOATING)
       r = c->floating_rectangle;
     else
@@ -1069,7 +1069,7 @@ static bool rebuild_live_acrylic(struct bwm_output *output,
   wl_list_for_each(tl, &server.toplevels, link) {
     if (!tl->acrylic_node || !tl->node || !tl->node->client) continue;
     if (!tl->node->client->shown) continue;
-    if (!tl->node->monitor || tl->node->monitor->output != output) continue;
+    if (!tl->node->output || tl->node->output != output) continue;
 
     GLuint src = capture_bg_to_tex1(output, ctx, scene_output, false,
       &tl->scene_tree->node, &tl->blur_scene_hidden);
@@ -1119,8 +1119,8 @@ static void push_acrylic_to_toplevels(struct bwm_output *output) {
   struct bwm_toplevel *tl;
   wl_list_for_each(tl, &server.toplevels, link) {
     if (!tl->acrylic_node || !tl->node) continue;
-    monitor_t *m = tl->node->monitor;
-    if (!m || m->output != output) continue;
+    struct bwm_output *m = tl->node->output;
+    if (!m || m != output) continue;
 
     if (!tl->acrylic_buf) {
       wlr_scene_buffer_set_buffer(tl->acrylic_node, NULL);
@@ -1131,8 +1131,8 @@ static void push_acrylic_to_toplevels(struct bwm_output *output) {
 
     client_t *c = tl->node->client;
     struct wlr_box r;
-    if (c->state == STATE_FULLSCREEN && tl->node->monitor)
-      r = tl->node->monitor->rectangle;
+    if (c->state == STATE_FULLSCREEN && tl->node->output)
+      r = tl->node->output->rectangle;
     else if (c->state == STATE_FLOATING)
       r = c->floating_rectangle;
     else
@@ -1195,15 +1195,15 @@ static void push_mica_to_toplevels(struct bwm_output *output) {
   struct bwm_toplevel *tl;
   wl_list_for_each(tl, &server.toplevels, link) {
     if (!tl->mica_node || !tl->node) continue;
-    monitor_t *m = tl->node->monitor;
-    if (!m || m->output != output) continue;
+    struct bwm_output *m = tl->node->output;
+    if (!m || m != output) continue;
 
     wlr_scene_buffer_set_buffer(tl->mica_node, buf);
 
     client_t *c = tl->node->client;
     struct wlr_box r;
-    if (c->state == STATE_FULLSCREEN && tl->node->monitor)
-      r = tl->node->monitor->rectangle;
+    if (c->state == STATE_FULLSCREEN && tl->node->output)
+      r = tl->node->output->rectangle;
     else if (c->state == STATE_FLOATING)
       r = c->floating_rectangle;
     else
@@ -1226,8 +1226,8 @@ static void push_mica_to_toplevels(struct bwm_output *output) {
 
 static struct wlr_box get_client_rect(struct bwm_toplevel *tl) {
   client_t *c = tl->node->client;
-  if (c->state == STATE_FULLSCREEN && tl->node->monitor)
-    return tl->node->monitor->rectangle;
+  if (c->state == STATE_FULLSCREEN && tl->node->output)
+    return tl->node->output->rectangle;
   else if (c->state == STATE_FLOATING)
     return c->floating_rectangle;
   else
@@ -1296,7 +1296,7 @@ static bool rebuild_corner_masks(struct bwm_output *output,
   wl_list_for_each(tl, &server.toplevels, link) {
     if (!tl->corner_mask_node || !tl->node || !tl->node->client) continue;
     if (!tl->node->client->shown) continue;
-    if (!tl->node->monitor || tl->node->monitor->output != output) continue;
+    if (!tl->node->output || tl->node->output != output) continue;
 
     client_t *c = tl->node->client;
     if (c->border_radius <= 0.0f) continue;
@@ -1354,8 +1354,8 @@ static void push_corner_masks_to_toplevels(struct bwm_output *output) {
   struct bwm_toplevel *tl;
   wl_list_for_each(tl, &server.toplevels, link) {
     if (!tl->corner_mask_node || !tl->node || !tl->node->client) continue;
-    monitor_t *m = tl->node->monitor;
-    if (!m || m->output != output) continue;
+    struct bwm_output *m = tl->node->output;
+    if (!m || m != output) continue;
 
     client_t *c = tl->node->client;
     if (c->border_radius <= 0.0f) {
@@ -1575,7 +1575,7 @@ void blur_output_frame(struct bwm_output *output, struct wlr_scene_output *scene
     struct bwm_toplevel *tl;
     wl_list_for_each(tl, &server.toplevels, link) {
       if (tl->blur_node && tl->node && tl->node->client && tl->node->client->shown &&
-          tl->node->monitor && tl->node->monitor->output == output) {
+          tl->node->output && tl->node->output == output) {
         any_blur = true;
         break;
       }
@@ -1604,7 +1604,7 @@ void blur_output_frame(struct bwm_output *output, struct wlr_scene_output *scene
     struct bwm_toplevel *tl;
     wl_list_for_each(tl, &server.toplevels, link) {
       if (tl->acrylic_node && tl->node && tl->node->client && tl->node->client->shown &&
-          tl->node->monitor && tl->node->monitor->output == output) {
+          tl->node->output && tl->node->output == output) {
         any_acrylic = true;
         break;
       }
@@ -1627,7 +1627,7 @@ void blur_output_frame(struct bwm_output *output, struct wlr_scene_output *scene
     wl_list_for_each(tl, &server.toplevels, link) {
       if (!tl->border_dirty) continue;
       if (!tl->node || !tl->node->client || !tl->node->client->shown) continue;
-      if (!tl->node->monitor || tl->node->monitor->output != output) continue;
+      if (!tl->node->output || tl->node->output != output) continue;
       client_t *c = tl->node->client;
       if (c->border_radius <= 0.0f) { tl->border_dirty = false; continue; }
 
@@ -1646,7 +1646,7 @@ void blur_output_frame(struct bwm_output *output, struct wlr_scene_output *scene
     wl_list_for_each(tl, &server.toplevels, link) {
       if (tl->corner_mask_node && tl->node && tl->node->client &&
           tl->node->client->border_radius > 0.0f &&
-          tl->node->monitor && tl->node->monitor->output == output) {
+          tl->node->output && tl->node->output == output) {
         any_cm = true;
         break;
       }

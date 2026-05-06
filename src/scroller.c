@@ -1,6 +1,7 @@
 #include "scroller.h"
 #include "tree.h"
 #include "toplevel.h"
+#include "output.h"
 #include <stdlib.h>
 #include <math.h>
 #include <wlr/util/log.h>
@@ -68,7 +69,7 @@ int scroller_collect_nodes(desktop_t *d, node_t ***out_nodes) {
   return count;
 }
 
-static void scroller_arrange_stack(node_t *head_node, struct wlr_box base_geom, int gap, monitor_t *m) {
+static void scroller_arrange_stack(node_t *head_node, struct wlr_box base_geom, int gap, struct bwm_output *m) {
   if (!head_node || !head_node->client) return;
 
   client_t *head = head_node->client;
@@ -93,7 +94,7 @@ static void scroller_arrange_stack(node_t *head_node, struct wlr_box base_geom, 
     wlr_log(WLR_DEBUG, "scroller_arrange_stack: setting node %u geom=(%d,%d %dx%d)",
             head_node->id, r.x, r.y, r.width, r.height);
     node_set_pending_rectangle(head_node, base_geom);
-    head_node->monitor = m;
+    head_node->output = m;
     node_set_dirty(head_node);
     return;
   }
@@ -129,7 +130,7 @@ static void scroller_arrange_stack(node_t *head_node, struct wlr_box base_geom, 
 
     node_t *stack_node = (c == head) ? head_node : NULL;
     if (!stack_node) {
-      for (node_t *n = first_extrema(head_node->monitor->desk->root); n; n = next_leaf(n, head_node->monitor->desk->root)) {
+      for (node_t *n = first_extrema(head_node->output->desk->root); n; n = next_leaf(n, head_node->output->desk->root)) {
         if (n->client == c) {
           stack_node = n;
           break;
@@ -139,13 +140,13 @@ static void scroller_arrange_stack(node_t *head_node, struct wlr_box base_geom, 
 
     if (stack_node) {
       node_set_pending_rectangle(stack_node, geom);
-      stack_node->monitor = m;
+      stack_node->output = m;
       node_set_dirty(stack_node);
     }
   }
 }
 
-void scroller_arrange(monitor_t *m, desktop_t *d, struct wlr_box available) {
+void scroller_arrange(struct bwm_output *m, desktop_t *d, struct wlr_box available) {
   if (!d || !d->root) return;
 
   wlr_log(WLR_DEBUG, "scroller_arrange: starting, available=(%d,%d %dx%d)",
@@ -399,7 +400,7 @@ void scroller_center_window(desktop_t *d, client_t *client) {
   }
 
   node_t *n = client->toplevel->node;
-  monitor_t *m = n->monitor;
+  struct bwm_output *m = n->output;
 
   if (!m) {
     return;

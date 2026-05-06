@@ -127,12 +127,12 @@ void handle_new_layer_surface(struct wl_listener *listener, void *data) {
 
   if (!layer_surface->output) {
     wlr_log(WLR_INFO, "Layer surface has no output, using focused_monitor");
-    if (!server.focused_monitor || !server.focused_monitor->output) {
+    if (!server.focused_output) {
       wlr_log(WLR_ERROR, "No focused monitor, destroying layer surface");
       wlr_layer_surface_v1_destroy(layer_surface);
       return;
     }
-    layer_surface->output = server.focused_monitor->output->wlr_output;
+    layer_surface->output = server.focused_output->wlr_output;
   }
 
   output = layer_surface->output->data;
@@ -223,7 +223,7 @@ void arrange_layers(struct bwm_output *output) {
 
   if (!wlr_box_equal(&usable_area, &output->usable_area)) {
     output->usable_area = usable_area;
-    monitor_t *m = output->monitor;
+    struct bwm_output *m = output;
     if (m && m->desk)
       arrange(m, m->desk, true);
   }

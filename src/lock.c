@@ -24,7 +24,7 @@ void destroy_unlock(struct bwm_session_lock *session_lock, const bool unlock) {
 	if (!(server.locked = !unlock)) {
 		wlr_scene_node_set_enabled(&server.lock_background->node, false);
 
-		focus_node(server.focused_monitor, server.focused_monitor->desk, server.focused_monitor->desk->focus);
+		focus_node(server.focused_output, server.focused_output->desk, server.focused_output->desk->focus);
 	}
 
 	wlr_scene_node_destroy(&session_lock->scene_tree->node);
@@ -49,7 +49,7 @@ void destroy_lock_surface(struct wl_listener *listener, void *data) {
 		wlr_seat_keyboard_notify_enter(server.seat, surface->surface,
 			keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
 	} else if (!server.locked) {
-		focus_node(server.focused_monitor, server.focused_monitor->desk, server.focused_monitor->desk->focus);
+		focus_node(server.focused_output, server.focused_output->desk, server.focused_output->desk->focus);
 	} else {
 		wlr_seat_keyboard_notify_clear_focus(server.seat);
 	}
@@ -71,7 +71,7 @@ void lock_new_surface(struct wl_listener *listener, void *data) {
   output->destroy_lock_surface.notify = destroy_lock_surface;
   wl_signal_add(&surface->events.destroy, &output->destroy_lock_surface);
 
-  if (mon->output == output) {
+  if (mon == output) {
   	struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(server.seat);
   	if (keyboard)
    		wlr_seat_keyboard_notify_enter(server.seat, surface->surface,

@@ -1,4 +1,5 @@
 #include "transaction.h"
+#include "output.h"
 #include "types.h"
 #include "keyboard.h"
 #include "server.h"
@@ -38,8 +39,8 @@ static void destroy_empty_wlr_keyboard_group(void *data) {
 
 bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed);
 
-static monitor_t *find_monitor_for_desktop(desktop_t *d) {
-  monitor_t *m = mon_head;
+static struct bwm_output *find_monitor_for_desktop(desktop_t *d) {
+  struct bwm_output *m = mon_head;
   while (m != NULL) {
     desktop_t *desk = m->desk_head;
     while (desk != NULL) {
@@ -561,20 +562,20 @@ void toggle_pseudo_tiled(void) {
 }
 
 void focus_next_desktop(void) {
-  if (!server.focused_monitor || !server.focused_monitor->desk)
+  if (!server.focused_output || !server.focused_output->desk)
     return;
 
-  desktop_t *next = server.focused_monitor->desk->next;
+  desktop_t *next = server.focused_output->desk->next;
   if (next != NULL) {
     workspace_switch_to_desktop(next->name);
   }
 }
 
 void focus_prev_desktop(void) {
-  if (!server.focused_monitor || !server.focused_monitor->desk)
+  if (!server.focused_output || !server.focused_output->desk)
     return;
 
-  desktop_t *prev = server.focused_monitor->desk->prev;
+  desktop_t *prev = server.focused_output->desk->prev;
   if (prev != NULL) {
     wlr_log(WLR_DEBUG, "Focus prev desktop - %s", prev->name);
     workspace_switch_to_desktop(prev->name);
@@ -634,7 +635,7 @@ void send_to_desktop(int desktop_index) {
     }
   }
 
-  monitor_t *target_mon = find_monitor_for_desktop(target);
+  struct bwm_output *target_mon = find_monitor_for_desktop(target);
   if (target_mon == NULL) {
     wlr_log(WLR_ERROR, "Could not find monitor for desktop: %s", target->name);
     return;
@@ -671,7 +672,7 @@ void send_to_desktop_by_name(const char *name) {
 
   desktop_t *src_desk = mon->desk;
 
-  monitor_t *target_mon = find_monitor_for_desktop(target);
+  struct bwm_output *target_mon = find_monitor_for_desktop(target);
   if (target_mon == NULL) {
     wlr_log(WLR_ERROR, "Could not find monitor for desktop: %s", target->name);
     return;

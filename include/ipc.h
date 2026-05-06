@@ -51,5 +51,5 @@ const char *ipc_get_socket_path(void);
 void ipc_put_status(bwm_subscriber_mask_t mask, const char *fmt, ...);
 void ipc_print_report(int fd);
 
-desktop_t *find_desktop_by_name_in_monitor(monitor_t *mon, const char *name);
-monitor_t *find_monitor_by_name(const char *name);
+desktop_t *find_desktop_by_name_in_monitor(struct bwm_output *mon, const char *name);
+struct bwm_output *find_output_by_name(const char *name);

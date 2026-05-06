@@ -11,6 +11,7 @@
 #include "input.h"
 #include "config.h"
 #include "xwayland.h"
+#include "output.h"
 #include <linux/input-event-codes.h>
 #include <math.h>
 #include <stdlib.h>
@@ -48,8 +49,8 @@ static void cursor_constrain(struct wlr_pointer_constraint_v1 *constraint);
 static void reset_cursor_mode(void) {
   if (server.tiled_resize_node) {
     node_t *node = server.tiled_resize_node;
-    if (node->monitor && node->desktop)
-      arrange(node->monitor, node->desktop, true);
+    if (node->output && node->desktop)
+      arrange(node->output, node->desktop, true);
   }
 
   server.cursor_mode = CURSOR_PASSTHROUGH;
@@ -456,9 +457,9 @@ static void process_cursor_motion(uint32_t time, double dx, double dy, double dx
 
     // TODO: make this configurable
     // update focused monitor if tracking is enabled (monitor_follows_pointer)
-    monitor_t *m = monitor_at(server.cursor->x, server.cursor->y);
-    if (m && m != server.focused_monitor)
-      server.focused_monitor = m;
+    struct bwm_output *m = output_at(server.cursor->x, server.cursor->y);
+    if (m && m != server.focused_output)
+      server.focused_output = m;
   } else {
     wlr_seat_pointer_clear_focus(seat);
   }
@@ -553,7 +554,7 @@ void cursor_button(struct wl_listener *listener, void *data) {
   } else {
   	// tab bar click
     if (event->button == BTN_LEFT) {
-      for (monitor_t *m = mon_head; m != NULL; m = m->next) {
+      for (struct bwm_output *m = mon_head; m != NULL; m = m->next) {
         desktop_t *d = m->desk;
         if (d == NULL)
           continue;
@@ -586,7 +587,7 @@ void cursor_button(struct wl_listener *listener, void *data) {
     	if (xwayland_surface != NULL) {
     		struct bwm_xwayland_view *xwayland_view = type;
     		if (xwayland_view && xwayland_view->node) {
-	        monitor_t *m = xwayland_view->node->monitor;
+	        struct bwm_output *m = xwayland_view->node->output;
 	        desktop_t *d = m ? m->desk : NULL;
 	        if (d)
 	          d->focus = xwayland_view->node;
@@ -595,7 +596,7 @@ void cursor_button(struct wl_listener *listener, void *data) {
     	} else {
     		struct bwm_toplevel *toplevel = type;
 		    if (toplevel && toplevel->node) {
-	        monitor_t *m = toplevel->node->monitor;
+	        struct bwm_output *m = toplevel->node->output;
 	        desktop_t *d = m ? m->desk : NULL;
 	        if (d)
 	          d->focus = toplevel->node;

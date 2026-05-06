@@ -44,9 +44,9 @@ char focused_border_color[16] = "1793dfff";
 char presel_feedback_color[16] = "ff5555ff";
 
 // global state
-monitor_t *mon = NULL;
-monitor_t *mon_head = NULL;
-monitor_t *mon_tail = NULL;
+struct bwm_output *mon = NULL;
+struct bwm_output *mon_head = NULL;
+struct bwm_output *mon_tail = NULL;
 uint32_t next_node_id = 1;
 uint32_t next_desktop_id = 1;
 uint32_t next_monitor_id = 1;
@@ -228,7 +228,7 @@ node_t *prev_leaf(node_t *n, node_t *r) {
   return second_extrema(p->parent->first_child);
 }
 
-void arrange(monitor_t *m, desktop_t *d, bool use_transaction) {
+void arrange(struct bwm_output *m, desktop_t *d, bool use_transaction) {
   if (d->root == NULL) {
     if (use_transaction)
       transaction_commit_dirty();
@@ -236,8 +236,8 @@ void arrange(monitor_t *m, desktop_t *d, bool use_transaction) {
   }
 
   struct wlr_box rect;
-  if (m->output)
-    rect = m->output->usable_area;
+  if (m)
+    rect = m->usable_area;
   else
     rect = m->rectangle;
 
@@ -276,7 +276,7 @@ void arrange(monitor_t *m, desktop_t *d, bool use_transaction) {
     transaction_commit_dirty();
 }
 
-static void render_leaf(monitor_t *m, desktop_t *d, node_t *n,
+static void render_leaf(struct bwm_output *m, desktop_t *d, node_t *n,
   	struct wlr_box rect, struct wlr_box root_rect, bool omit_window_gap) {
   if (n == NULL || n->client == NULL)
     return;
@@ -324,7 +324,7 @@ static void render_leaf(monitor_t *m, desktop_t *d, node_t *n,
     n->client->committed_tiled_rectangle = r;
 }
 
-static void apply_layout_tabbed_subtree(monitor_t *m, desktop_t *d, node_t *n,
+static void apply_layout_tabbed_subtree(struct bwm_output *m, desktop_t *d, node_t *n,
     struct wlr_box content_rect, struct wlr_box root_rect) {
   if (n == NULL)
     return;
@@ -332,7 +332,7 @@ static void apply_layout_tabbed_subtree(monitor_t *m, desktop_t *d, node_t *n,
     return;
 
   n->pending.rectangle = content_rect;
-  n->monitor = m;
+  n->output = m;
   node_set_dirty(n);
 
   if (is_leaf(n)) {
@@ -344,7 +344,7 @@ static void apply_layout_tabbed_subtree(monitor_t *m, desktop_t *d, node_t *n,
   apply_layout_tabbed_subtree(m, d, n->second_child, content_rect, root_rect);
 }
 
-void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
+void apply_layout(struct bwm_output *m, desktop_t *d, node_t *n, struct wlr_box rect,
                   struct wlr_box root_rect) {
   if (n == NULL)
     return;
@@ -357,7 +357,7 @@ void apply_layout(monitor_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
 
   // set pending
   n->pending.rectangle = rect;
-  n->monitor = m;
+  n->output = m;
   node_set_dirty(n);
 
   wlr_log(WLR_DEBUG, "apply_layout: node %u pending_rect=(%d,%d %dx%d)",
@@ -966,13 +966,13 @@ void kill_node(desktop_t *d, node_t *n) {
   close_node(n);
 }
 
-bool focus_node(monitor_t *m, desktop_t *d, node_t *n) {
+bool focus_node(struct bwm_output *m, desktop_t *d, node_t *n) {
   if (m == NULL || d == NULL || n == NULL)
     return false;
 
   d->focus = n;
   mon = m;
-  server.focused_monitor = m;
+  server.focused_output = m;
 
   bool is_current_desktop = (m->desk == d);
   if (is_current_desktop && d->layout == LAYOUT_MONOCLE && d->root != NULL) {
@@ -1048,7 +1048,7 @@ bool focus_node(monitor_t *m, desktop_t *d, node_t *n) {
   return true;
 }
 
-bool activate_node(monitor_t *m, desktop_t *d, node_t *n) {
+bool activate_node(struct bwm_output *m, desktop_t *d, node_t *n) {
   return focus_node(m, d, n);
 }
 
@@ -1102,7 +1102,7 @@ node_t *find_fence(node_t *n, direction_t dir) {
   return NULL;
 }
 
-void swap_nodes(monitor_t *m1, desktop_t *d1, node_t *n1, monitor_t *m2,
+void swap_nodes(struct bwm_output *m1, desktop_t *d1, node_t *n1, struct bwm_output *m2,
                 desktop_t *d2, node_t *n2) {
   if (n1 == NULL || n2 == NULL || n1 == n2)
     return;
@@ -1150,7 +1150,7 @@ void swap_nodes(monitor_t *m1, desktop_t *d1, node_t *n1, monitor_t *m2,
     arrange(m2, d2, true);
 }
 
-bool set_state(monitor_t *m, desktop_t *d, node_t *n, client_state_t s) {
+bool set_state(struct bwm_output *m, desktop_t *d, node_t *n, client_state_t s) {
   if (n == NULL || n->client == NULL)
     return false;
 
@@ -1161,7 +1161,7 @@ bool set_state(monitor_t *m, desktop_t *d, node_t *n, client_state_t s) {
   return true;
 }
 
-void set_floating(monitor_t *m, desktop_t *d, node_t *n, bool value) {
+void set_floating(struct bwm_output *m, desktop_t *d, node_t *n, bool value) {
   if (n == NULL || n->client == NULL)
     return;
 
@@ -1314,7 +1314,7 @@ void balance_tree(node_t *n) {
   balance_rec(n);
 }
 
-struct wlr_box get_rectangle(monitor_t *m, node_t *n) {
+struct wlr_box get_rectangle(struct bwm_output *m, node_t *n) {
   if (n != NULL)
     return n->rectangle;
   return m->rectangle;
@@ -1500,8 +1500,8 @@ static void get_border_color(client_t *client, float *color) {
   }
 
   const char *color_str;
-  monitor_t *m = client->toplevel ? client->toplevel->node->monitor :
-  	client->xwayland_view ? client->xwayland_view->node->monitor : NULL;
+  struct bwm_output *m = client->toplevel ? client->toplevel->node->output :
+  	client->xwayland_view ? client->xwayland_view->node->output : NULL;
   desktop_t *d = m ? m->desk : NULL;
 
   bool the_only_window = (mon_head == mon_tail) && d && d->root && d->root->client;
@@ -1636,8 +1636,8 @@ void update_border_colors(struct wlr_scene_tree *border_tree, struct wlr_scene_r
       wlr_scene_rect_set_color(rects[i], color);
 }
 
-monitor_t *monitor_at(double x, double y) {
-  for (monitor_t *m = mon_head; m != NULL; m = m->next)
+struct bwm_output *output_at(double x, double y) {
+  for (struct bwm_output *m = mon_head; m != NULL; m = m->next)
     if (wlr_box_contains_point(&m->rectangle, (int)x, (int)y))
       return m;
   return NULL;

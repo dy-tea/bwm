@@ -157,8 +157,6 @@ void server_init(void) {
   server.output_manager_test.notify = handle_output_manager_test;
   wl_signal_add(&server.output_manager->events.test, &server.output_manager_test);
 
-  wl_list_init(&server.outputs);
-
   // scene graph
   server.scene = wlr_scene_create();
   server.scene_layout = wlr_scene_attach_output_layout(server.scene, server.output_layout);
@@ -447,40 +445,6 @@ void server_init(void) {
   server.input_method_manager = wlr_input_method_manager_v2_create(server.wl_display);
   server.text_input_manager = wlr_text_input_manager_v3_create(server.wl_display);
   server.input_method_relay = input_method_relay_create();
-
-  // init desktop structure
-  monitor_t *m = (monitor_t *)calloc(1, sizeof(monitor_t));
-  m->id = next_monitor_id++;
-  strncpy(m->name, "default", SMALEN - 1);
-  m->wired = true;
-  m->window_gap = window_gap;
-  m->border_width = border_width;
-  m->padding = (padding_t){0};
-  m->rectangle = (struct wlr_box){0, 0, 1920, 1080};
-
-  // create default desktop
-  desktop_t *d = (desktop_t *)calloc(1, sizeof(desktop_t));
-  d->id = next_desktop_id++;
-  strncpy(d->name, "1", SMALEN - 1);
-  d->layout = LAYOUT_TILED;
-  d->user_layout = LAYOUT_TILED;
-  d->window_gap = window_gap;
-  d->border_width = border_width;
-  d->padding = (padding_t){0};
-  d->root = NULL;
-  d->focus = NULL;
-
-  m->desk = d;
-  m->desk_head = d;
-  m->desk_tail = d;
-  d->monitor = m;
-
-  mon = m;
-  mon_head = m;
-  mon_tail = m;
-
-  server.monitors = m;
-  server.focused_monitor = m;
 
   transaction_init();
   workspace_init();

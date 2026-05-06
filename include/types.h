@@ -10,13 +10,13 @@
 // forward declarations
 struct node_t;
 struct desktop_t;
-struct monitor_t;
 struct client_t;
+struct bwm_output;
 struct bwm_toplevel;
 struct bwm_xwayland_view;
 struct bwm_tab_bar;
 
-struct monitor_t *monitor_at(double x, double y);
+struct bwm_output *output_at(double x, double y);
 
 // enums
 typedef enum { TYPE_HORIZONTAL, TYPE_VERTICAL, TYPE_TABBED } split_type_t;
@@ -116,7 +116,7 @@ typedef struct node_t {
   struct node_t *second_child;
   struct node_t *parent;
   client_t *client;
-  struct monitor_t *monitor;
+  struct bwm_output *output;
   struct desktop_t *desktop;
 
   // transaction support
@@ -156,28 +156,11 @@ typedef struct desktop_t {
   padding_t padding;
   int window_gap;
   unsigned int border_width;
-  struct monitor_t *monitor;
+  struct bwm_output *output;
 } desktop_t;
 
-typedef struct monitor_t {
-  char name[SMALEN];
-  uint32_t id;
-  struct bwm_output *output;
-  bool wired;
-  padding_t padding;
-  unsigned int sticky_count;
-  int window_gap;
-  unsigned int border_width;
-  struct wlr_box rectangle;
-  desktop_t *desk;
-  desktop_t *desk_head;
-  desktop_t *desk_tail;
-  struct monitor_t *prev;
-  struct monitor_t *next;
-} monitor_t;
-
 typedef struct {
-  monitor_t *monitor;
+  struct bwm_output *output;
   desktop_t *desktop;
   node_t *node;
 } coordinates_t;
@@ -209,9 +192,9 @@ extern char focused_border_color[16];
 extern char presel_feedback_color[16];
 
 // global state
-extern monitor_t *mon;
-extern monitor_t *mon_head;
-extern monitor_t *mon_tail;
+extern struct bwm_output *mon;
+extern struct bwm_output *mon_head;
+extern struct bwm_output *mon_tail;
 extern uint32_t next_node_id;
 extern uint32_t next_desktop_id;
 extern uint32_t next_monitor_id;

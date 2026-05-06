@@ -3,6 +3,7 @@
 #include "toplevel.h"
 #include "tree.h"
 #include "types.h"
+#include "output.h"
 #include <stdlib.h>
 #include <string.h>
 #include <wlr/types/wlr_xdg_shell.h>
@@ -188,7 +189,7 @@ static void apply_node_state(node_t *node,
 
     struct wlr_box *rect;
     if (node->client->state == STATE_FULLSCREEN) {
-      monitor_t *m = node->monitor;
+      struct bwm_output *m = node->output;
       if (m)
         rect = &m->rectangle;
       else return;
@@ -360,7 +361,7 @@ static bool should_configure(node_t *node,
   // determine target size based on state
   struct wlr_box target_rect;
   if (node->client->state == STATE_FULLSCREEN) {
-    monitor_t *m = node->monitor;
+    struct bwm_output *m = node->output;
     if (!m) return false;
     target_rect = m->rectangle;
   } else if (node->client->state == STATE_FLOATING)
@@ -471,7 +472,7 @@ static void transaction_commit(struct bwm_transaction *txn) {
         // determine the correct rectangle based on client state
         struct wlr_box *rect;
         if (node->client->state == STATE_FULLSCREEN) {
-          monitor_t *m = node->monitor;
+          struct bwm_output *m = node->output;
           if (m)
             rect = &m->rectangle;
           else

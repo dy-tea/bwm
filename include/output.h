@@ -4,9 +4,12 @@
 #include <wlr/util/box.h>
 #include <wlr/render/color.h>
 #include <time.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include "types.h"
 
-struct monitor_t;
 struct bwm_blur_output_ctx;
+struct desktop_t;
 
 enum scale_filter_mode {
 	SCALE_FILTER_AUTO,
@@ -17,14 +20,12 @@ enum scale_filter_mode {
 struct bwm_output {
   struct wl_list link;
   struct wlr_output *wlr_output;
-  struct wlr_box rectangle;
   struct wlr_box usable_area;
   struct wlr_scene_tree *layer_bg;
   struct wlr_scene_tree *layer_bottom;
   struct wlr_scene_tree *layer_top;
   struct wlr_scene_tree *layer_overlay;
   struct wl_list layers[4];
-  struct monitor_t *monitor;
   struct wl_listener frame;
   struct wl_listener request_state;
   struct wl_listener destroy;
@@ -47,6 +48,20 @@ struct bwm_output {
 
   struct wlr_color_transform *color_transform;
   struct bwm_blur_output_ctx *blur_ctx;
+
+  char name[64]; // SMALEN
+  uint32_t id;
+  bool wired;
+  padding_t padding;
+  unsigned int sticky_count;
+  int window_gap;
+  unsigned int border_width;
+  struct wlr_box rectangle;
+  struct desktop_t *desk;
+  struct desktop_t *desk_head;
+  struct desktop_t *desk_tail;
+  struct bwm_output *prev;
+  struct bwm_output *next;
 };
 
 void handle_new_output(struct wl_listener *listener, void *data);
@@ -59,3 +74,4 @@ void output_update_usable_area(struct bwm_output *output);
 void output_set_scale_filter(struct bwm_output *output, enum scale_filter_mode mode);
 void output_get_identifier(char *identifier, size_t len, struct bwm_output *output);
 void output_update_scale(struct bwm_output *output, float scale);
+struct bwm_output *output_get_valid(void);

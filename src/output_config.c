@@ -93,8 +93,7 @@ void output_config_apply(struct output_config *oc) {
   struct bwm_output *output = NULL;
   struct wlr_output *wlr_output = NULL;
 
-  struct bwm_output *o;
-  wl_list_for_each(o, &server.outputs, link) {
+  for (struct bwm_output *o = mon_head; o != NULL; o = o->next) {
     if (strcmp(o->wlr_output->name, oc->name) == 0) {
       output = o;
       wlr_output = o->wlr_output;
@@ -217,25 +216,10 @@ void output_config_apply(struct output_config *oc) {
   if (output && oc->allow_tearing >= 0)
     output->allow_tearing = oc->allow_tearing;
 
-  // link output to monitor if enabled but not linked
-  if (output && wlr_output->enabled && !output->monitor) {
-    // find monitor without output
-    monitor_t *unlinked_monitor = NULL;
-    for (monitor_t *m = server.monitors; m != NULL; m = m->next) {
-      if (!m->output) {
-        unlinked_monitor = m;
-        break;
-      }
-    }
-
-    // if found, link it
-    if (unlinked_monitor) {
-      unlinked_monitor->output = output;
-      output->monitor = unlinked_monitor;
-      strncpy(unlinked_monitor->name, wlr_output->name, SMALEN - 1);
-      unlinked_monitor->name[SMALEN - 1] = '\0';
-      output_enable(output);
-    }
+  if (output && wlr_output->enabled) {
+    strncpy(output->name, wlr_output->name, SMALEN - 1);
+    output->name[SMALEN - 1] = '\0';
+    output_enable(output);
   }
 }
 
@@ -260,8 +244,7 @@ void output_update_manager_config(void) {
 
   struct wlr_output_configuration_v1 *config = wlr_output_configuration_v1_create();
 
-  struct bwm_output *output;
-  wl_list_for_each(output, &server.outputs, link) {
+  for (struct bwm_output *output = mon_head; output != NULL; output = output->next) {
     struct wlr_output_configuration_head_v1 *head =
         wlr_output_configuration_head_v1_create(config, output->wlr_output);
 

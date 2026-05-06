@@ -100,7 +100,7 @@ static void handle_foreign_activate_request(struct wl_listener *listener, void *
   if (!toplevel->node || !toplevel->node->client)
     return;
 
-  monitor_t *m = toplevel->node->monitor;
+  struct bwm_output *m = toplevel->node->output;
   desktop_t *d = m ? m->desk : NULL;
 
   if (!d)
@@ -128,7 +128,7 @@ static void handle_foreign_fullscreen_request(struct wl_listener *listener, void
   if (toplevel->node == NULL || toplevel->node->client == NULL)
     return;
 
-  monitor_t *m = toplevel->node->monitor;
+  struct bwm_output *m = toplevel->node->output;
   desktop_t *d = m ? m->desk : NULL;
 
   if (event->fullscreen) {
@@ -179,7 +179,7 @@ void toplevel_center_and_clip_surface(struct bwm_toplevel *toplevel) {
     if (floating) {
       container_rect = &c->floating_rectangle;
     } else if (fullscreen) {
-      monitor_t *m = toplevel->node->monitor;
+      struct bwm_output *m = toplevel->node->output;
       container_rect = m ? &m->rectangle : &c->tiled_rectangle;
     } else {
       container_rect = &c->tiled_rectangle;
@@ -228,7 +228,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   toplevel->mapped = true;
   toplevel->configured = false;
 
-  monitor_t *m = server.focused_monitor;
+  struct bwm_output *m = server.focused_output;
   if (m == NULL) {
     wlr_log(WLR_ERROR, "No monitor available for toplevel");
     return;
@@ -236,8 +236,16 @@ void toplevel_map(struct wl_listener *listener, void *data) {
 
   desktop_t *d = m->desk;
   if (d == NULL) {
-    wlr_log(WLR_ERROR, "No desktop available for toplevel");
-    return;
+    // Try to find a valid output with a desk
+    struct bwm_output *valid_output = output_get_valid();
+    if (valid_output) {
+      m = valid_output;
+      d = m->desk;
+      server.focused_output = m;
+    } else {
+      wlr_log(WLR_ERROR, "No desktop available for toplevel");
+      return;
+    }
   }
 
   node_t *n = make_node(0);
@@ -292,22 +300,33 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   }
 
   // find target monitor
-  monitor_t *target_monitor = mon;
+  struct bwm_output *target_output = mon;
   if (rule && rule->has_monitor) {
   	wlr_log(WLR_DEBUG, "  Rule specifies monitor: %s", rule->monitor);
-   	monitor_t *new_monitor = find_monitor_by_name(rule->monitor);
+   	struct bwm_output *new_monitor = find_output_by_name(rule->monitor);
     if (new_monitor) {
-    	target_monitor = new_monitor;
-     wlr_log(WLR_DEBUG, "  Target desktop changed to: %s", target_monitor->name);
+    	target_output = new_monitor;
+     wlr_log(WLR_DEBUG, "  Target desktop changed to: %s", target_output->name);
     } else {
     	wlr_log(WLR_ERROR, "  Monitor %s not found", rule->monitor);
     }
   }
 
-  if (!target_monitor)
-    target_monitor = m;
+  if (!target_output)
+    target_output = m;
 
-  n->monitor = target_monitor;
+  // If target_output is disabled, fall back to the focused output
+  if (!target_output || !target_output->wlr_output) {
+    wlr_log(WLR_INFO, "Target output is not available, using focused output");
+    target_output = output_get_valid();
+    if (!target_output) {
+      wlr_log(WLR_ERROR, "No valid output available for toplevel");
+      free_node(n);
+      return;
+    }
+  }
+
+  n->output = target_output;
 
   // find target desktop
   desktop_t *target_desktop = d;
@@ -315,7 +334,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
           app_id ? app_id : "?", d->name, rule != NULL);
   if (rule && rule->has_desktop) {
     wlr_log(WLR_DEBUG, "  Rule specifies desktop: %s", rule->desktop);
-    desktop_t *new_desk = find_desktop_by_name_in_monitor(target_monitor, rule->desktop);
+    desktop_t *new_desk = find_desktop_by_name_in_monitor(target_output, rule->desktop);
     if (new_desk) {
       target_desktop = new_desk;
       wlr_log(WLR_DEBUG, "  Target desktop changed to: %s", target_desktop->name);
@@ -399,7 +418,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   // center to output if floating, also ensure it does not tile
   if (rule && rule->state == STATE_FLOATING) {
   	wlr_scene_node_reparent(&toplevel->scene_tree->node, server.float_tree);
-    struct wlr_box mon_rect = target_monitor->rectangle;
+    struct wlr_box mon_rect = target_output->rectangle;
     struct wlr_box base_rect = n->client->toplevel->xdg_toplevel->base->geometry;
    	n->client->floating_rectangle = (struct wlr_box){
       .x = mon_rect.x + (mon_rect.width - base_rect.width) / 2,
@@ -437,21 +456,21 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   insert_node(target_desktop, n, focus);
 
   // notify client of scale
-  if (target_monitor->output) {
-    float scale = target_monitor->output->wlr_output->scale;
+  if (target_output && target_output->wlr_output) {
+    float scale = target_output->wlr_output->scale;
     wlr_fractional_scale_v1_notify_scale(toplevel->xdg_toplevel->base->surface, scale);
     wlr_surface_set_preferred_buffer_scale(toplevel->xdg_toplevel->base->surface, ceil(scale));
   }
 
   // hide window if target desktop is not the focused desktop
-  bool target_desktop_is_focused = (target_desktop == target_monitor->desk);
+  bool target_desktop_is_focused = (target_desktop == (target_output ? target_output->desk : NULL));
   if (desktop_changed && !target_desktop_is_focused) {
     n->client->shown = false;
     wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
   }
 
-  if (should_focus && target_desktop_is_focused)
-   	focus_node(target_monitor, target_desktop, n);
+  if (should_focus && target_desktop_is_focused && target_output)
+  	focus_node(target_output, target_desktop, n);
   else if (should_focus && !target_desktop_is_focused)
     target_desktop->focus = n;
 
@@ -461,7 +480,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   toplevel_apply_disable_decorations(toplevel);
 
   // only use transaction for focused desktop
-  arrange(target_monitor, target_desktop, target_desktop_is_focused);
+  arrange(target_output, target_desktop, target_desktop_is_focused);
 
   // tabbed ancestors force SSD, otherwise allow CSD
   toplevel_apply_decoration_mode(toplevel);
@@ -523,7 +542,7 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
 
   node_t *n = toplevel->node;
 
-  monitor_t *m = mon;
+  struct bwm_output *m = mon;
   desktop_t *d = NULL;
 
   // find the actual desktop this node belongs to by walking up to root
@@ -909,7 +928,7 @@ void toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
   if (requested_fullscreen == (toplevel->node->client->state == STATE_FULLSCREEN))
     return;
 
-  monitor_t *m = toplevel->node->monitor;
+  struct bwm_output *m = toplevel->node->output;
   desktop_t *d = m ? m->desk : NULL;
 
   if (requested_fullscreen) {
@@ -1012,13 +1031,13 @@ void focus_toplevel(struct bwm_toplevel *toplevel) {
   // Update input method focus
   input_method_relay_set_focus(server.input_method_relay, surface);
 
-  if (toplevel->node && toplevel->node->monitor) {
-    server.focused_monitor = toplevel->node->monitor;
+  if (toplevel->node && toplevel->node->output) {
+    server.focused_output = toplevel->node->output;
   }
 
   // update borders
   if (toplevel->node) {
-    monitor_t *m = toplevel->node->monitor;
+    struct bwm_output *m = toplevel->node->output;
     desktop_t *d = m ? m->desk : NULL;
     if (d && d->root != NULL) {
       for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root)) {
@@ -1045,7 +1064,7 @@ void toplevel_apply_geometry(struct bwm_toplevel *toplevel) {
   struct wlr_box *rect;
 
   if (c->state == STATE_FULLSCREEN) {
-    monitor_t *m = toplevel->node->monitor;
+    struct bwm_output *m = toplevel->node->output;
     if (m)
       rect = &m->rectangle;
     else return;

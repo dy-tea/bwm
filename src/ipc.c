@@ -139,8 +139,7 @@ static void ipc_cmd_output(char **args, int num, int client_fd) {
     int offset = 0;
     offset += snprintf(buf + offset, sizeof(buf) - offset, "[\n");
     bool first = true;
-    struct bwm_output *output;
-    wl_list_for_each(output, &server.outputs, link) {
+    for (struct bwm_output *output = mon_head; output != NULL; output = output->next) {
       struct wlr_output *wo = output->wlr_output;
       if (!first)
         offset += snprintf(buf + offset, sizeof(buf) - offset, ",\n");
@@ -562,7 +561,7 @@ static void ipc_cmd_input(char **args, int num, int client_fd) {
   input_apply_config_all_keyboards();
 }
 
-desktop_t *find_desktop_by_name_in_monitor(monitor_t *mon, const char *name) {
+desktop_t *find_desktop_by_name_in_monitor(struct bwm_output *mon, const char *name) {
   desktop_t *d = mon->desk;
   while (d) {
     if (strcmp(d->name, name) == 0)
@@ -635,7 +634,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
       return;
     }
 
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk || !m->desk->focus) {
       send_failure(client_fd, "node -d: no focused node\n");
       return;
@@ -752,7 +751,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     args++;
     num--;
 
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "node -g: no focused desktop\n");
       return;
@@ -857,7 +856,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     args++;
     num--;
 
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "node -v: no focused desktop\n");
       return;
@@ -904,7 +903,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     args++;
     num--;
 
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "node -z: no focused desktop\n");
       return;
@@ -993,7 +992,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     transaction_commit_dirty();
     send_success(client_fd, "resized\n");
   } else if (streq("-a", *args) || streq("--activate", *args)) {
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "node -a: no focused desktop\n");
       return;
@@ -1006,7 +1005,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     activate_node(m, m->desk, n);
     send_success(client_fd, "activated\n");
   } else if (streq("-k", *args) || streq("--kill", *args)) {
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "node -k: no focused desktop\n");
       return;
@@ -1027,13 +1026,13 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     args++;
     num--;
 
-    monitor_t *target = find_monitor_by_name(*args);
+    struct bwm_output *target = find_output_by_name(*args);
     if (!target) {
       send_failure(client_fd, "node -m: monitor not found\n");
       return;
     }
 
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "node -m: no focused desktop\n");
       return;
@@ -1106,7 +1105,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     args++;
     num--;
 
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "node -n: no focused desktop\n");
       return;
@@ -1205,7 +1204,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     args++;
     num--;
 
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "node -l: no focused desktop\n");
       return;
@@ -1239,7 +1238,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     args++;
     num--;
 
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "node -y: no focused desktop\n");
       return;
@@ -1338,7 +1337,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     args++;
     num--;
 
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "node -r: no focused desktop\n");
       return;
@@ -1386,7 +1385,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     args++;
     num--;
 
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "node -C: no focused desktop\n");
       return;
@@ -1416,7 +1415,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
 
     send_success(client_fd, "circulated\n");
   } else if (streq("-i", *args) || streq("--insert-receptacle", *args)) {
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "node -i: no focused desktop\n");
       return;
@@ -1475,7 +1474,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     args++;
     num--;
 
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "node -p: no focused desktop\n");
       return;
@@ -1520,7 +1519,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     args++;
     num--;
 
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "node -o: no focused desktop\n");
       return;
@@ -1552,7 +1551,7 @@ static void ipc_cmd_node(char **args, int num, int client_fd) {
     args++;
     num--;
 
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "node -s: no focused desktop\n");
       return;
@@ -1600,7 +1599,7 @@ static void ipc_cmd_desktop(char **args, int num, int client_fd) {
     return;
   }
 
-  monitor_t *mon = server.focused_monitor;
+  struct bwm_output *mon = server.focused_output;
   if (!mon || !mon->desk) {
     send_failure(client_fd, "no desktop\n");
     return;
@@ -1700,8 +1699,8 @@ static void ipc_cmd_desktop(char **args, int num, int client_fd) {
 
     desktop_t *d0 = desk;
     desktop_t *d1 = target;
-    monitor_t *m0 = d0->monitor;
-    monitor_t *m1 = d1->monitor;
+    struct bwm_output *m0 = d0->output;
+    struct bwm_output *m1 = d1->output;
 
     if (m0 == m1) {
       desktop_t *prev0 = d0->prev;
@@ -1745,8 +1744,8 @@ static void ipc_cmd_desktop(char **args, int num, int client_fd) {
       if (prev1) prev1->next = d0; else m1->desk = d0;
       if (next1) next1->next = d0;
 
-      d0->monitor = m1;
-      d1->monitor = m0;
+      d0->output = m1;
+      d1->output = m0;
     }
 
     if (mon->desk == d0) mon->desk = d1;
@@ -1832,13 +1831,13 @@ static void ipc_cmd_desktop(char **args, int num, int client_fd) {
     num--;
 
     desktop_t *desk = mon->desk;
-    monitor_t *target = find_monitor_by_name(*args);
+    struct bwm_output *target = find_output_by_name(*args);
     if (!target) {
       send_failure(client_fd, "desktop -m: monitor not found\n");
       return;
     }
 
-    if (desk->monitor == target) {
+    if (desk->output == target) {
       send_failure(client_fd, "desktop -m: already on target monitor\n");
       return;
     }
@@ -1848,7 +1847,7 @@ static void ipc_cmd_desktop(char **args, int num, int client_fd) {
       return;
     }
 
-    monitor_t *src_mon = desk->monitor;
+    struct bwm_output *src_mon = desk->output;
 
     if (desk->prev) {
       desk->prev->next = desk->next;
@@ -1865,7 +1864,7 @@ static void ipc_cmd_desktop(char **args, int num, int client_fd) {
 
     desk->prev = target->desk_tail;
     desk->next = NULL;
-    desk->monitor = target;
+    desk->output = target;
 
     if (target->desk_tail) {
       target->desk_tail->next = desk;
@@ -1889,8 +1888,8 @@ static void ipc_cmd_desktop(char **args, int num, int client_fd) {
   }
 }
 
-monitor_t *find_monitor_by_name(const char *name) {
-  for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+struct bwm_output *find_output_by_name(const char *name) {
+  for (struct bwm_output *m = mon_head; m != NULL; m = m->next)
     if (strcmp(m->name, name) == 0)
       return m;
   return NULL;
@@ -1902,11 +1901,11 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
     return;
   }
 
-  monitor_t *mon = server.focused_monitor;
+  struct bwm_output *mon = server.focused_output;
   bool has_target = false;
 
   if ((*args)[0] != '-') {
-    mon = find_monitor_by_name(*args);
+    mon = find_output_by_name(*args);
     if (!mon) {
       send_failure(client_fd, "monitor: unknown monitor\n");
       return;
@@ -1923,7 +1922,7 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
 
   if (streq("-f", *args) || streq("--focus", *args)) {
     if (mon) {
-      server.focused_monitor = mon;
+      server.focused_output = mon;
       focus_node(mon, mon->desk, mon->desk ? mon->desk->focus : NULL);
       send_success(client_fd, "focused\n");
     } else {
@@ -1945,7 +1944,7 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
     send_success(client_fd, "renamed\n");
   } else if (streq("-a", *args) || streq("--add-desktops", *args)) {
     if (!has_target)
-      mon = server.focused_monitor;
+      mon = server.focused_output;
     if (!mon) {
       send_failure(client_fd, "monitor -a: no monitor available\n");
       return;
@@ -1978,7 +1977,7 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
         mon->desk_head = d;
         mon->desk_tail = d;
       }
-      d->monitor = mon;
+      d->output = mon;
 
       workspace_create_desktop(d->name);
 
@@ -1989,7 +1988,7 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
     send_success(client_fd, "desktops added\n");
   } else if (streq("-d", *args) || streq("--reset-desktops", *args)) {
     if (!has_target)
-      mon = server.focused_monitor;
+      mon = server.focused_output;
     if (!mon) {
       send_failure(client_fd, "monitor -d: no monitor available\n");
       return;
@@ -2036,7 +2035,7 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
         mon->desk_head = newd;
         mon->desk_tail = newd;
       }
-      newd->monitor = mon;
+      newd->output = mon;
 
       wlr_log(WLR_DEBUG, "IPC: creating workspace for new desktop %s", newd->name);
       workspace_create_desktop(newd->name);
@@ -2091,9 +2090,8 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
   } else if (streq("-l", *args) || streq("--list", *args)) {
     char buf[BWM_BUFSIZ];
     size_t offset = 0;
-    for (monitor_t *m = server.monitors; m != NULL; m = m->next) {
+    for (struct bwm_output *m = mon_head; m != NULL; m = m->next)
       offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", m->name);
-    }
     send_success(client_fd, buf);
   } else if (streq("-s", *args) || streq("--swap", *args)) {
     if (!has_target) {
@@ -2107,7 +2105,7 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
     args++;
     num--;
 
-    monitor_t *target = find_monitor_by_name(*args);
+    struct bwm_output *target = find_output_by_name(*args);
     if (!target) {
       send_failure(client_fd, "monitor -s: target monitor not found\n");
       return;
@@ -2118,8 +2116,8 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
       return;
     }
 
-    monitor_t *m0 = mon;
-    monitor_t *m1 = target;
+    struct bwm_output *m0 = mon;
+    struct bwm_output *m1 = target;
 
     desktop_t *d0 = m0->desk;
     desktop_t *d1 = m1->desk;
@@ -2134,7 +2132,7 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
 
     if (d0) {
       for (desktop_t *d = d0; d != NULL; d = d->next)
-        d->monitor = m1;
+        d->output = m1;
       d0->prev = NULL;
       desktop_t *tail = d0;
       while (tail->next)
@@ -2145,12 +2143,12 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
 
     if (d1)
       for (desktop_t *d = d1; d != NULL; d = d->next)
-        d->monitor = m0;
+        d->output = m0;
 
-    if (server.focused_monitor == m0)
-      server.focused_monitor = m1;
-    else if (server.focused_monitor == m1)
-      server.focused_monitor = m0;
+    if (server.focused_output == m0)
+      server.focused_output = m1;
+    else if (server.focused_output == m1)
+      server.focused_output = m0;
 
     transaction_commit_dirty();
     send_success(client_fd, "swapped\n");
@@ -2170,22 +2168,22 @@ static void ipc_cmd_monitor(char **args, int num, int client_fd) {
       return;
     }
 
-    monitor_t *prev = mon->prev;
-    monitor_t *next = mon->next;
+    struct bwm_output *prev = mon->prev;
+    struct bwm_output *next = mon->next;
 
     if (prev)
       prev->next = next;
-    else if (server.monitors == mon)
-      server.monitors = next;
+    else if (mon_head == mon)
+      mon_head = next;
 
     if (next)
       next->prev = prev;
 
-    if (server.focused_monitor == mon) {
-      server.focused_monitor = next ? next : prev;
-      if (server.focused_monitor) {
-        focus_node(server.focused_monitor, server.focused_monitor->desk,
-          server.focused_monitor->desk ? server.focused_monitor->desk->focus : NULL);
+    if (server.focused_output == mon) {
+      server.focused_output = next ? next : prev;
+      if (server.focused_output) {
+        focus_node(server.focused_output, server.focused_output->desk,
+          server.focused_output->desk ? server.focused_output->desk->focus : NULL);
       }
     }
 
@@ -2262,16 +2260,15 @@ static void ipc_cmd_query(char **args, int num, int client_fd) {
     return;
   }
 
-  // Parse optional selectors
-  monitor_t *filter_mon = NULL;
+  // parse optional selectors
+  struct bwm_output *filter_mon = NULL;
   desktop_t *filter_desk = NULL;
   node_t *filter_node = NULL;
   bool use_names = false;
 
   while (num > 0 && (streq("-m", *args) || streq("--monitor", *args) ||
-                     streq("-d", *args) || streq("--desktop", *args) ||
-                     streq("-n", *args) || streq("--node", *args) ||
-                     streq("--names", *args))) {
+	  streq("-d", *args) || streq("--desktop", *args) || streq("-n", *args) ||
+	  streq("--node", *args) || streq("--names", *args))) {
     if (streq("-m", *args) || streq("--monitor", *args)) {
       if (num < 2) {
         send_failure(client_fd, "query -m: missing monitor\n");
@@ -2279,7 +2276,7 @@ static void ipc_cmd_query(char **args, int num, int client_fd) {
       }
       args++;
       num--;
-      filter_mon = find_monitor_by_name(*args);
+      filter_mon = find_output_by_name(*args);
       if (!filter_mon) {
         send_failure(client_fd, "query -m: monitor not found\n");
         return;
@@ -2334,10 +2331,10 @@ static void ipc_cmd_query(char **args, int num, int client_fd) {
   if (streq("-T", *args) || streq("--tree", *args)) {
     offset += snprintf(buf + offset, sizeof(buf) - offset, "{\n");
 
-    monitor_t *m_start = filter_mon ? filter_mon : server.monitors;
-    monitor_t *m_end = filter_mon ? filter_mon->next : NULL;
+    struct bwm_output *m_start = filter_mon ? filter_mon : mon_head;
+    struct bwm_output *m_end = filter_mon ? filter_mon->next : NULL;
 
-    for (monitor_t *m = m_start; m != m_end; ) {
+    for (struct bwm_output *m = m_start; m != m_end; ) {
       offset += snprintf(buf + offset, sizeof(buf) - offset,
         "  \"monitor\": {\"name\": \"%s\", \"id\": %u},\n",
         m->name, m->id);
@@ -2362,10 +2359,10 @@ static void ipc_cmd_query(char **args, int num, int client_fd) {
       bool include = true;
       if (filter_node && toplevel->node != filter_node)
         include = false;
-      if (filter_desk && toplevel->node && toplevel->node->monitor &&
-          toplevel->node->monitor->desk != filter_desk)
+      if (filter_desk && toplevel->node && toplevel->node->output &&
+          toplevel->node->output->desk != filter_desk)
         include = false;
-      if (filter_mon && toplevel->node && toplevel->node->monitor != filter_mon)
+      if (filter_mon && toplevel->node && toplevel->node->output != filter_mon)
         include = false;
 
       if (include)
@@ -2379,7 +2376,7 @@ static void ipc_cmd_query(char **args, int num, int client_fd) {
     offset += snprintf(buf + offset, sizeof(buf) - offset, "}\n");
     send_success(client_fd, buf);
   } else if (streq("-M", *args) || streq("--monitors", *args)) {
-    for (monitor_t *m = filter_mon ? filter_mon : server.monitors;
+    for (struct bwm_output *m = filter_mon ? filter_mon : mon_head;
          m != NULL; m = filter_mon ? NULL : m->next) {
       if (use_names)
         offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", m->name);
@@ -2389,8 +2386,8 @@ static void ipc_cmd_query(char **args, int num, int client_fd) {
     }
     send_success(client_fd, buf);
   } else if (streq("-D", *args) || streq("--desktops", *args)) {
-    monitor_t *m_start = filter_mon ? filter_mon : server.monitors;
-    for (monitor_t *m = m_start; m != NULL; m = filter_mon ? NULL : m->next) {
+    struct bwm_output *m_start = filter_mon ? filter_mon : mon_head;
+    for (struct bwm_output *m = m_start; m != NULL; m = filter_mon ? NULL : m->next) {
       desktop_t *d_start = filter_desk ? filter_desk : m->desk;
       for (desktop_t *d = d_start; d != NULL; d = filter_desk ? NULL : d->next) {
         if (use_names)
@@ -2408,10 +2405,10 @@ static void ipc_cmd_query(char **args, int num, int client_fd) {
       bool include = true;
       if (filter_node && toplevel->node != filter_node)
         include = false;
-      if (filter_desk && toplevel->node && toplevel->node->monitor &&
-          toplevel->node->monitor->desk != filter_desk)
+      if (filter_desk && toplevel->node && toplevel->node->output &&
+          toplevel->node->output->desk != filter_desk)
         include = false;
-      if (filter_mon && toplevel->node && toplevel->node->monitor != filter_mon)
+      if (filter_mon && toplevel->node && toplevel->node->output != filter_mon)
         include = false;
 
       if (include) {
@@ -2431,7 +2428,7 @@ static void ipc_cmd_query(char **args, int num, int client_fd) {
     }
     send_success(client_fd, buf);
   } else if (streq("-f", *args) || streq("--focused", *args)) {
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (!m || !m->desk) {
       send_failure(client_fd, "no focused desktop\n");
       return;
@@ -2502,7 +2499,7 @@ static void ipc_cmd_wm(char **args, int num, int client_fd) {
     offset += snprintf(buf + offset, sizeof(buf) - offset, "  \"monitors\": [\n");
 
     bool first_mon = true;
-    for (monitor_t *m = server.monitors; m != NULL; m = m->next) {
+    for (struct bwm_output *m = mon_head; m != NULL; m = m->next) {
       if (!first_mon) offset += snprintf(buf + offset, sizeof(buf) - offset, ",\n");
       first_mon = false;
       offset += snprintf(buf + offset, sizeof(buf) - offset,
@@ -2538,7 +2535,7 @@ static void ipc_cmd_wm(char **args, int num, int client_fd) {
     args++;
     num--;
 
-    if (find_monitor_by_name(*args)) {
+    if (find_output_by_name(*args)) {
       send_failure(client_fd, "wm -a: monitor already exists\n");
       return;
     }
@@ -2571,15 +2568,14 @@ static void ipc_cmd_wm(char **args, int num, int client_fd) {
     send_success(client_fd, buf);
   } else if (streq("-g", *args) || streq("--get-status", *args)) {
     int output_count = 0;
-    struct bwm_output *output;
-    wl_list_for_each(output, &server.outputs, link)
+    for (struct bwm_output *m = mon_head; m != NULL; m = m->next)
       output_count++;
 
     offset += snprintf(buf + offset, sizeof(buf) - offset,
       "status: running\n"
       "monitors: %d\n", output_count);
 
-    monitor_t *m = server.focused_monitor;
+    struct bwm_output *m = server.focused_output;
     if (m && m->desk) {
       offset += snprintf(buf + offset, sizeof(buf) - offset,
         "focused_monitor: %s\n"
@@ -2624,7 +2620,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
     if (num >= 2) {
       int val = atoi(args[1]);
       border_width = val;
-      for (monitor_t *m = server.monitors; m != NULL; m = m->next) {
+      for (struct bwm_output *m = mon_head; m != NULL; m = m->next) {
         m->border_width = border_width;
         for (desktop_t *d = m->desk; d != NULL; d = d->next)
           d->border_width = border_width;
@@ -2640,7 +2636,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
     if (num >= 2) {
       int val = atoi(args[1]);
       window_gap = val;
-      for (monitor_t *m = server.monitors; m != NULL; m = m->next) {
+      for (struct bwm_output *m = mon_head; m != NULL; m = m->next) {
         m->window_gap = window_gap;
         for (desktop_t *d = m->desk; d != NULL; d = d->next)
           d->window_gap = window_gap;
@@ -2705,7 +2701,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       if (n >= 3) {
         color_bar_bg[0] = r; color_bar_bg[1] = g;
         color_bar_bg[2] = b; color_bar_bg[3] = a;
-        for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+        for (struct bwm_output *m = mon_head; m != NULL; m = m->next)
           for (desktop_t *d = m->desk; d != NULL; d = d->next)
             if (d->root != NULL)
               tabs_rebuild(d->root);
@@ -2726,7 +2722,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       if (n >= 3) {
         color_tab_bg[0] = r; color_tab_bg[1] = g;
         color_tab_bg[2] = b; color_tab_bg[3] = a;
-        for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+        for (struct bwm_output *m = mon_head; m != NULL; m = m->next)
           for (desktop_t *d = m->desk; d != NULL; d = d->next)
             if (d->root != NULL)
               tabs_rebuild(d->root);
@@ -2747,7 +2743,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       if (n >= 3) {
         color_tab_bg_active[0] = r; color_tab_bg_active[1] = g;
         color_tab_bg_active[2] = b; color_tab_bg_active[3] = a;
-        for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+        for (struct bwm_output *m = mon_head; m != NULL; m = m->next)
           for (desktop_t *d = m->desk; d != NULL; d = d->next)
             if (d->root != NULL)
               tabs_rebuild(d->root);
@@ -2768,7 +2764,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       if (n >= 3) {
         color_tab_text[0] = r; color_tab_text[1] = g;
         color_tab_text[2] = b; color_tab_text[3] = a;
-        for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+        for (struct bwm_output *m = mon_head; m != NULL; m = m->next)
           for (desktop_t *d = m->desk; d != NULL; d = d->next)
             if (d->root != NULL)
               tabs_rebuild(d->root);
@@ -2789,7 +2785,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       if (n >= 3) {
         color_tab_text_active[0] = r; color_tab_text_active[1] = g;
         color_tab_text_active[2] = b; color_tab_text_active[3] = a;
-        for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+        for (struct bwm_output *m = mon_head; m != NULL; m = m->next)
           for (desktop_t *d = m->desk; d != NULL; d = d->next)
             if (d->root != NULL)
               tabs_rebuild(d->root);
@@ -2810,7 +2806,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       if (n >= 3) {
         color_tab_sep[0] = r; color_tab_sep[1] = g;
         color_tab_sep[2] = b; color_tab_sep[3] = a;
-        for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+        for (struct bwm_output *m = mon_head; m != NULL; m = m->next)
           for (desktop_t *d = m->desk; d != NULL; d = d->next)
             if (d->root != NULL)
               tabs_rebuild(d->root);
@@ -2827,7 +2823,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
   } else if (streq("text_font", *args)) {
     if (num >= 2) {
       snprintf(text_font, sizeof(text_font), "%s", args[1]);
-      for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+      for (struct bwm_output *m = mon_head; m != NULL; m = m->next)
         for (desktop_t *d = m->desk; d != NULL; d = d->next)
           if (d->root != NULL)
             tabs_rebuild(d->root);
@@ -2842,7 +2838,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       int val = atoi(args[1]);
       if (val > 0) {
         text_height = val;
-        for (monitor_t *m = server.monitors; m != NULL; m = m->next)
+        for (struct bwm_output *m = mon_head; m != NULL; m = m->next)
           for (desktop_t *d = m->desk; d != NULL; d = d->next)
             if (d->root != NULL)
               tabs_rebuild(d->root);
@@ -3217,9 +3213,9 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       int val = atoi(args[1]);
       if (val >= 1 && val <= 8) {
         blur_downsample = val;
-        for (monitor_t *m = mon_head; m; m = m->next) {
-          if (m->output && m->output->blur_ctx)
-            blur_output_resize(m->output->blur_ctx, m->output->width, m->output->height, m->output);
+        for (struct bwm_output *m = mon_head; m; m = m->next) {
+          if (m && m->blur_ctx)
+            blur_output_resize(m->blur_ctx, m->width, m->height, m);
         }
         send_success(client_fd, "blur_downsample set\n");
       } else {
@@ -3233,8 +3229,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
   } else if (streq("mica_enabled", *args)) {
     if (num >= 2) {
       mica_enabled = (strcmp(args[1], "true") == 0);
-      struct bwm_output *output;
-      wl_list_for_each(output, &server.outputs, link)
+      for (struct bwm_output *output = mon_head; output; output = output->next)
         blur_invalidate_mica(output->blur_ctx);
       send_success(client_fd, "mica_enabled set\n");
     } else {
@@ -3245,8 +3240,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       float val = atof(args[1]);
       if (val >= 0.0f && val <= 1.0f) {
         mica_tint_strength = val;
-        struct bwm_output *output;
-        wl_list_for_each(output, &server.outputs, link)
+        for (struct bwm_output *output = mon_head; output; output = output->next)
           blur_invalidate_mica(output->blur_ctx);
         send_success(client_fd, "mica_tint_strength set\n");
       } else {
@@ -3264,8 +3258,7 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       if (n >= 3) {
         mica_tint[0] = r; mica_tint[1] = g;
         mica_tint[2] = b; mica_tint[3] = a;
-        struct bwm_output *output;
-        wl_list_for_each(output, &server.outputs, link)
+        for (struct bwm_output *output = mon_head; output; output = output->next)
           blur_invalidate_mica(output->blur_ctx);
         send_success(client_fd, "mica_tint set\n");
       } else {
@@ -3520,7 +3513,7 @@ static void ipc_cmd_equalize(char **args, int num, int client_fd) {
   (void)args;
   (void)num;
 
-  monitor_t *m = server.focused_monitor;
+  struct bwm_output *m = server.focused_output;
   if (!m || !m->desk) {
     send_failure(client_fd, "equalize: no focused desktop\n");
     return;
@@ -3540,7 +3533,7 @@ static void ipc_cmd_balance(char **args, int num, int client_fd) {
   (void)args;
   (void)num;
 
-  monitor_t *m = server.focused_monitor;
+  struct bwm_output *m = server.focused_output;
   if (!m || !m->desk) {
     send_failure(client_fd, "balance: no focused desktop\n");
     return;
@@ -3770,7 +3763,7 @@ static void ipc_cmd_scroller(char **args, int num, int client_fd) {
     return;
   }
 
-  monitor_t *mon = server.focused_monitor;
+  struct bwm_output *mon = server.focused_output;
   if (!mon || !mon->desk) {
     send_failure(client_fd, "no desktop\n");
     return;
@@ -4079,8 +4072,8 @@ void ipc_print_report(int fd) {
   char buf[BWM_BUFSIZ];
   size_t offset = 0;
 
-  for (monitor_t *m = server.monitors; m != NULL; m = m->next) {
-    char mon_flag = (server.focused_monitor == m) ? 'M' : 'm';
+  for (struct bwm_output *m = mon_head; m; m = m->next) {
+    char mon_flag = (server.focused_output == m) ? 'M' : 'm';
     offset += snprintf(buf + offset, sizeof(buf) - offset, "%c%s", mon_flag, m->name);
 
     for (desktop_t *d = m->desk; d != NULL; d = d->next) {

@@ -17,7 +17,7 @@ extern bool edge_scroller_pointer_focus;
 extern float *scroller_proportion_preset;
 extern int scroller_proportion_preset_count;
 
-void scroller_arrange(monitor_t *m, desktop_t *d, struct wlr_box available);
+void scroller_arrange(struct bwm_output *m, desktop_t *d, struct wlr_box available);
 
 void scroller_stack_push(client_t *head, client_t *new_client);
 void scroller_stack_remove(client_t *client);

@@ -26,7 +26,7 @@ struct desktop_t *find_desktop_by_name(const char *name) {
 
   if (name[0] == '^' && name[1] >= '1' && name[1] <= '9') {
     int mon_idx = name[1] - '1';
-    monitor_t *m = mon_head;
+    struct bwm_output *m = mon_head;
     for (int i = 0; m != NULL && i < mon_idx; m = m->next, i++)
     	;
     if (m && m->desk_head)
@@ -34,7 +34,7 @@ struct desktop_t *find_desktop_by_name(const char *name) {
     return NULL;
   }
 
-  monitor_t *m = mon_head;
+  struct bwm_output *m = mon_head;
   while (m != NULL) {
     desktop_t *d = m->desk_head;
     while (d != NULL) {
@@ -59,35 +59,11 @@ void workspace_init(void) {
   wl_signal_add(&server.workspace_manager->events.commit, &server.workspace_commit);
 
   struct wlr_ext_workspace_group_handle_v1 *group =
-      wlr_ext_workspace_group_handle_v1_create(server.workspace_manager, 0);
+    wlr_ext_workspace_group_handle_v1_create(server.workspace_manager, 0);
   if (!group) {
     wlr_log(WLR_ERROR, "Failed to create workspace group");
     return;
   }
-
-  struct bwm_output *output;
-  wl_list_for_each(output, &server.outputs, link)
-    wlr_ext_workspace_group_handle_v1_output_enter(group, output->wlr_output);
-
-  desktop_t *d = mon_head->desk_head;
-  while (d != NULL) {
-    struct wlr_ext_workspace_handle_v1 *workspace =
-      wlr_ext_workspace_handle_v1_create(server.workspace_manager, NULL, 0);
-    if (!workspace) {
-      wlr_log(WLR_ERROR, "Failed to create workspace: %s", d->name);
-      d = d->next;
-      continue;
-    }
-
-    wlr_ext_workspace_handle_v1_set_name(workspace, d->name);
-    wlr_ext_workspace_handle_v1_set_group(workspace, group);
-
-    d = d->next;
-  }
-
-  struct wlr_ext_workspace_handle_v1 *active = find_workspace_by_name(mon_head->desk->name);
-  if (active)
-    wlr_ext_workspace_handle_v1_set_active(active, true);
 
   wlr_log(WLR_INFO, "Workspace manager initialized");
 }
@@ -172,7 +148,7 @@ void workspace_create_desktop(const char *name) {
   wlr_log(WLR_INFO, "Created workspace: %s", name);
 }
 
-static void update_window_visibility(node_t *node, monitor_t *m, desktop_t *current_desktop, int *count) {
+static void update_window_visibility(node_t *node, struct bwm_output *m, desktop_t *current_desktop, int *count) {
   if (!node || !node->client)
     return;
 
@@ -182,7 +158,7 @@ static void update_window_visibility(node_t *node, monitor_t *m, desktop_t *curr
 
   (*count)++;
 
-  monitor_t *node_mon = node->monitor;
+  struct bwm_output *node_mon = node->output;
   if (!node_mon || node_mon != m)
     return;
 
@@ -232,7 +208,7 @@ found_desktop:
   }
 }
 
-static void update_all_toplevels_visibility(monitor_t *m, desktop_t *current_desktop) {
+static void update_all_toplevels_visibility(struct bwm_output *m, desktop_t *current_desktop) {
   int window_count = 0;
 
   struct bwm_toplevel *toplevel;
@@ -280,9 +256,9 @@ void workspace_switch_to_desktop(const char *name) {
     return;
   }
 
-  desktop_t *old_desktop = server.focused_monitor->desk;
+  desktop_t *old_desktop = server.focused_output->desk;
 
-  server.focused_monitor->desk = d;
+  server.focused_output->desk = d;
 
   wlr_log(WLR_DEBUG, "Switching from %s to %s",
           old_desktop ? old_desktop->name : "NULL", d->name);
@@ -294,7 +270,7 @@ void workspace_switch_to_desktop(const char *name) {
   wlr_ext_workspace_handle_v1_set_active(workspace, true);
   wlr_ext_workspace_handle_v1_set_hidden(workspace, false);
 
-  update_all_toplevels_visibility(server.focused_monitor, d);
+  update_all_toplevels_visibility(server.focused_output, d);
 
   if (d->root == NULL) {
     wlr_log(WLR_DEBUG, "Desktop %s has no root, skipping arrange/focus", name);
@@ -302,26 +278,26 @@ void workspace_switch_to_desktop(const char *name) {
     return;
   }
 
-  arrange(server.focused_monitor, d, true);
+  arrange(server.focused_output, d, true);
 
   if (d->focus != NULL)
-    focus_node(server.focused_monitor, d, d->focus);
+    focus_node(server.focused_output, d, d->focus);
 
   wlr_log(WLR_INFO, "Switched to desktop: %s", name);
 }
 
 void workspace_switch_to_desktop_by_index(int index) {
-  if (!server.workspace_manager || !server.focused_monitor)
+  if (!server.workspace_manager || !server.focused_output)
     return;
 
   wlr_log(WLR_DEBUG, "Looking for desktop at index %d", index);
-  desktop_t *target = server.focused_monitor->desk_head;
+  desktop_t *target = server.focused_output->desk_head;
   for (int idx = 0; target != NULL && idx < index; target = target->next, ++idx)
     wlr_log(WLR_DEBUG, "Desktop at idx %d: %s", idx, target->name);
 
   if (!target) {
     int count = 0;
-    target = server.focused_monitor->desk_head;
+    target = server.focused_output->desk_head;
     for (; target != NULL; target = target->next, ++count)
       wlr_log(WLR_DEBUG, "Desktop %d: %s", count, target->name);
     wlr_log(WLR_ERROR, "Desktop not found at index: %d (total: %d)", index, count);
