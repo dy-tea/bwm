@@ -451,15 +451,13 @@ static void process_cursor_motion(uint32_t time, double dx, double dy, double dx
   if (type == NULL && !seat->drag)
   	wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, "default");
 
+  struct bwm_output *m = output_at(server.cursor->x, server.cursor->y);
+  if (m && m != server.focused_output)
+    server.focused_output = m;
+
   if (surface) {
     wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
     wlr_seat_pointer_notify_motion(seat, time, sx, sy);
-
-    // TODO: make this configurable
-    // update focused monitor if tracking is enabled (monitor_follows_pointer)
-    struct bwm_output *m = output_at(server.cursor->x, server.cursor->y);
-    if (m && m != server.focused_output)
-      server.focused_output = m;
   } else {
     wlr_seat_pointer_clear_focus(seat);
   }

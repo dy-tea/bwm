@@ -300,7 +300,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
   }
 
   // find target monitor
-  struct bwm_output *target_output = mon;
+  struct bwm_output *target_output = m;
   if (rule && rule->has_monitor) {
   	wlr_log(WLR_DEBUG, "  Rule specifies monitor: %s", rule->monitor);
    	struct bwm_output *new_monitor = find_output_by_name(rule->monitor);

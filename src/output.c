@@ -288,17 +288,6 @@ void handle_new_output(struct wl_listener *listener, void *data) {
   output->usable_area = layout_box;
   output->blur_ctx = blur_output_init(output->rectangle.width, output->rectangle.height);
 
-  // update monitor rectangle
-  if (server.focused_output) {
-	  wlr_output_layout_get_box(server.output_layout, wlr_output,
-	    &server.focused_output->rectangle);
-	  wlr_log(WLR_INFO, "Monitor rectangle updated: %dx%d at %d,%d",
-	    server.focused_output->rectangle.width,
-	    server.focused_output->rectangle.height,
-	    server.focused_output->rectangle.x,
-	    server.focused_output->rectangle.y);
-  }
-
   output_enable(output);
   output_update_manager_config();
 }
