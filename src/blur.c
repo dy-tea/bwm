@@ -66,12 +66,12 @@ int acrylic_blur_passes = 4;
 
 bool screen_shader_enabled = false;
 
-float refraction_strength = 0.0f;
-float refraction_edge_size_px = 200.0f;
-float refraction_corner_radius_px = 6.666667f;
-float refraction_normal_pow = 1.0f;
-float refraction_rgb_fringing = 1.0f / 30.0f;
-int refraction_texture_repeat_mode = 0;
+float refraction_strength = 30.0f;
+float refraction_edge_size_px = 18.0f;
+float refraction_corner_radius_px = 8.0f;
+float refraction_normal_pow = 6.0f;
+float refraction_rgb_fringing = 22.0f / 30.0f;
+int refraction_texture_repeat_mode = 1;
 float refraction_offset = 1.0f;
 
 struct bwm_blur_ctx blur_ctx = {0};
@@ -1389,6 +1389,7 @@ static bool blur_render_border(struct bwm_toplevel *tl, int content_w, int conte
   int bw_i = (int)c->border_width;
   int fw = content_w + 2 * bw_i;
   int fh = content_h + 2 * bw_i;
+  if (bw_i <= 0) return false;
   if (fw <= 0 || fh <= 0) return false;
 
   if (!tl->border_shader_node) {
