@@ -41,26 +41,38 @@
 #include "blur_gauss_v_frag_src.h"
 #include "blur_mica_frag_src.h"
 #include "blur_acrylic_frag_src.h"
+#include "blur_refraction_frag_src.h"
 
 #include "grayscale_frag_src.h"
 #include "invert_frag_src.h"
 #include "nightlight_frag_src.h"
 #include "sepia_frag_src.h"
 
-bool blur_enabled = true;
 enum blur_algorithm blur_algorithm = BLUR_ALGORITHM_KAWASE;
+bool blur_enabled = true;
 int blur_passes = 1;
 float blur_radius = 5.0f;
 int blur_downsample = 4;
+
 bool mica_enabled = false;
 float mica_tint[4] = {0.12f, 0.12f, 0.14f, 1.0f};
 float mica_tint_strength = 0.35f;
+
 float acrylic_tint[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 float acrylic_tint_strength = 0.3f;
 float acrylic_noise_strength = 0.02f;
 float acrylic_light_anchor[2] = {0.5f, 0.5f};
 int acrylic_blur_passes = 4;
+
 bool screen_shader_enabled = false;
+
+float refraction_strength = 0.0f;
+float refraction_edge_size_px = 200.0f;
+float refraction_corner_radius_px = 6.666667f;
+float refraction_normal_pow = 1.0f;
+float refraction_rgb_fringing = 1.0f / 30.0f;
+int refraction_texture_repeat_mode = 0;
+float refraction_offset = 1.0f;
 
 struct bwm_blur_ctx blur_ctx = {0};
 
@@ -278,6 +290,63 @@ static void blur_pass(GLuint src_tex, GLuint dst_fbo, int w, int h, int pass_ind
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+static void refraction_pass(GLuint src_tex, GLuint dst_fbo, int w, int h, int refraction_mode) {
+  glBindFramebuffer(GL_FRAMEBUFFER, dst_fbo);
+  glViewport(0, 0, w, h);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, src_tex);
+
+  glUseProgram(blur_ctx.prog_refraction);
+  glUniform1i(blur_ctx.u_refraction.tex, 0);
+
+  if (blur_ctx.u_refraction.offset >= 0)
+    glUniform1f(blur_ctx.u_refraction.offset, refraction_offset);
+  if (blur_ctx.u_refraction.halfpixel >= 0)
+    glUniform2f(blur_ctx.u_refraction.halfpixel, 0.5f / (float)w, 0.5f / (float)h);
+
+  if (blur_ctx.u_refraction.refractionRectSize >= 0)
+    glUniform2f(blur_ctx.u_refraction.refractionRectSize, (float)w, (float)h);
+
+  float max_edge = 0.5f * (float)((w < h) ? w : h);
+  float edge = refraction_edge_size_px;
+  if (edge > max_edge) edge = max_edge;
+  if (edge < 0.0f) edge = 0.0f;
+  if (blur_ctx.u_refraction.refractionEdgeSizePixels >= 0)
+    glUniform1f(blur_ctx.u_refraction.refractionEdgeSizePixels, edge);
+
+  float max_corner = 0.5f * (float)((w < h) ? w : h);
+  float corner = refraction_corner_radius_px;
+  if (corner > max_corner) corner = max_corner;
+  if (corner < 0.0f) corner = 0.0f;
+  if (blur_ctx.u_refraction.refractionCornerRadiusPixels >= 0)
+    glUniform1f(blur_ctx.u_refraction.refractionCornerRadiusPixels, corner);
+
+  float strength_norm = refraction_strength / 30.0f;
+  if (strength_norm < 0.0f) strength_norm = 0.0f;
+  if (strength_norm > 1.0f) strength_norm = 1.0f;
+  if (blur_ctx.u_refraction.refractionStrength >= 0)
+    glUniform1f(blur_ctx.u_refraction.refractionStrength, strength_norm);
+
+  if (blur_ctx.u_refraction.refractionNormalPow >= 0)
+    glUniform1f(blur_ctx.u_refraction.refractionNormalPow, refraction_normal_pow);
+
+  float fringing = refraction_rgb_fringing;
+  if (fringing < 0.0f) fringing = 0.0f;
+  if (fringing > 1.0f) fringing = 1.0f;
+  if (blur_ctx.u_refraction.refractionRGBFringing >= 0)
+    glUniform1f(blur_ctx.u_refraction.refractionRGBFringing, fringing);
+
+  if (blur_ctx.u_refraction.refractionTextureRepeatMode >= 0)
+    glUniform1i(blur_ctx.u_refraction.refractionTextureRepeatMode, refraction_texture_repeat_mode);
+
+  if (blur_ctx.u_refraction.refractionMode >= 0)
+    glUniform1i(blur_ctx.u_refraction.refractionMode, refraction_mode);
+
+  draw_quad();
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 static void box_pass(GLuint src_tex, GLuint ping_fbo, GLuint ping_tex,
     GLuint pong_fbo, int w, int h) {
   // H: src_tex -> ping_fbo
@@ -353,6 +422,11 @@ static GLuint apply_blur(struct bwm_blur_output_ctx *ctx,
         ctx->fbo[pong], w, h);
       current = ctx->tex[pong];
       ping = pong;
+    } else if (blur_algorithm == BLUR_ALGORITHM_REFRACTION || blur_algorithm == BLUR_ALGORITHM_LENS_REFRACTION) {
+      int mode = (blur_algorithm == BLUR_ALGORITHM_LENS_REFRACTION) ? 1 : 0;
+      refraction_pass(current, ctx->fbo[pong], w, h, mode);
+      current = ctx->tex[pong];
+      ping = pong;
     } else {
       blur_pass(current, ctx->fbo[ping], w, h, i);
       current = ctx->tex[ping];
@@ -387,13 +461,14 @@ bool blur_init(void) {
   blur_ctx.prog_blit = link_program(blit_frag_src);
   blur_ctx.prog_mica_tint = link_program(blur_mica_frag_src);
   blur_ctx.prog_acrylic_tint = link_program(blur_acrylic_frag_src);
+  blur_ctx.prog_refraction = link_program(blur_refraction_frag_src);
   blur_ctx.prog_ext_blit = link_program(ext_blit_frag_src);
   blur_ctx.prog_border = link_program(border_frag_src);
   blur_ctx.prog_corner_mask = link_program(border_corner_mask_frag_src);
 
   if (!blur_ctx.prog_kawase || !blur_ctx.prog_gauss_h || !blur_ctx.prog_gauss_v ||
       !blur_ctx.prog_box_h || !blur_ctx.prog_box_v || !blur_ctx.prog_blit ||
-      !blur_ctx.prog_mica_tint || !blur_ctx.prog_acrylic_tint) {
+      !blur_ctx.prog_mica_tint || !blur_ctx.prog_acrylic_tint || !blur_ctx.prog_refraction) {
     wlr_log(WLR_ERROR, "blur: one or more required shaders failed to compile");
     egl_unset_current();
     return false;
@@ -426,6 +501,18 @@ bool blur_init(void) {
   blur_ctx.u_acrylic.noise_strength = glGetUniformLocation(blur_ctx.prog_acrylic_tint, "noise_strength");
   blur_ctx.u_acrylic.resolution = glGetUniformLocation(blur_ctx.prog_acrylic_tint, "resolution");
   blur_ctx.u_acrylic.light_anchor = glGetUniformLocation(blur_ctx.prog_acrylic_tint, "light_anchor");
+
+  blur_ctx.u_refraction.tex = glGetUniformLocation(blur_ctx.prog_refraction, "tex");
+  blur_ctx.u_refraction.offset = glGetUniformLocation(blur_ctx.prog_refraction, "offset");
+  blur_ctx.u_refraction.halfpixel = glGetUniformLocation(blur_ctx.prog_refraction, "halfpixel");
+  blur_ctx.u_refraction.refractionRectSize = glGetUniformLocation(blur_ctx.prog_refraction, "refractionRectSize");
+  blur_ctx.u_refraction.refractionEdgeSizePixels = glGetUniformLocation(blur_ctx.prog_refraction, "refractionEdgeSizePixels");
+  blur_ctx.u_refraction.refractionCornerRadiusPixels = glGetUniformLocation(blur_ctx.prog_refraction, "refractionCornerRadiusPixels");
+  blur_ctx.u_refraction.refractionStrength = glGetUniformLocation(blur_ctx.prog_refraction, "refractionStrength");
+  blur_ctx.u_refraction.refractionNormalPow = glGetUniformLocation(blur_ctx.prog_refraction, "refractionNormalPow");
+  blur_ctx.u_refraction.refractionRGBFringing = glGetUniformLocation(blur_ctx.prog_refraction, "refractionRGBFringing");
+  blur_ctx.u_refraction.refractionTextureRepeatMode = glGetUniformLocation(blur_ctx.prog_refraction, "refractionTextureRepeatMode");
+  blur_ctx.u_refraction.refractionMode = glGetUniformLocation(blur_ctx.prog_refraction, "refractionMode");
 
   if (blur_ctx.prog_border) {
     blur_ctx.u_border.resolution = glGetUniformLocation(blur_ctx.prog_border, "resolution");
@@ -469,6 +556,7 @@ void blur_fini(void) {
   glDeleteProgram(blur_ctx.prog_blit);
   glDeleteProgram(blur_ctx.prog_mica_tint);
   glDeleteProgram(blur_ctx.prog_acrylic_tint);
+  glDeleteProgram(blur_ctx.prog_refraction);
   if (blur_ctx.prog_ext_blit)
     glDeleteProgram(blur_ctx.prog_ext_blit);
   if (blur_ctx.prog_border)
@@ -898,6 +986,8 @@ static GLuint ensure_sized_buf(struct wlr_buffer **buf_out, GLuint *fbo_out,
   return fbo;
 }
 
+static struct wlr_box get_client_rect(struct bwm_toplevel *tl);
+
 static bool rebuild_live_blur(struct bwm_output *output,
 		struct wlr_scene_output *scene_output) {
   struct bwm_blur_output_ctx *ctx = output->blur_ctx;
@@ -932,6 +1022,31 @@ static bool rebuild_live_blur(struct bwm_output *output,
     glUseProgram(blur_ctx.prog_blit);
     glUniform1i(blur_ctx.u_blit.tex, 0);
     draw_quad();
+
+    client_t *c = tl->node->client;
+    if (c && c->border_radius > 0.0f && blur_ctx.prog_corner_mask) {
+      struct wlr_box content_r = get_client_rect(tl);
+      float ow = (float)w, oh = (float)h;
+      float win_u  = (float)(content_r.x - output->lx) / ow;
+      float win_v  = (float)(content_r.y - output->ly) / oh;
+      float win_sw = (float)content_r.width  / ow;
+      float win_sh = (float)content_r.height / oh;
+      int bw_i = (c->state == STATE_FULLSCREEN) ? 0 : (int)c->border_width;
+      float inner_r = (c->border_radius > (float)bw_i) ? c->border_radius - (float)bw_i : 0.0f;
+
+      glEnable(GL_BLEND);
+      glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
+      glUseProgram(blur_ctx.prog_corner_mask);
+      glUniform1i(blur_ctx.u_corner_mask.tex, 0);
+      glUniform2f(blur_ctx.u_corner_mask.win_pos_uv, win_u, win_v);
+      glUniform2f(blur_ctx.u_corner_mask.win_size_uv, win_sw, win_sh);
+      glUniform2f(blur_ctx.u_corner_mask.win_size_px,
+          (float)content_r.width, (float)content_r.height);
+      glUniform1f(blur_ctx.u_corner_mask.border_radius_px, inner_r);
+      draw_quad();
+      glDisable(GL_BLEND);
+    }
+
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glFlush();
@@ -1106,6 +1221,31 @@ static bool rebuild_live_acrylic(struct bwm_output *output,
     glUniform2f(blur_ctx.u_acrylic.resolution, (float)w, (float)h);
     glUniform2f(blur_ctx.u_acrylic.light_anchor, acrylic_light_anchor[0], acrylic_light_anchor[1]);
     draw_quad();
+
+    client_t *c = tl->node->client;
+    if (c && c->border_radius > 0.0f && blur_ctx.prog_corner_mask) {
+      struct wlr_box content_r = get_client_rect(tl);
+      float ow = (float)w, oh = (float)h;
+      float win_u  = (float)(content_r.x - output->lx) / ow;
+      float win_v  = (float)(content_r.y - output->ly) / oh;
+      float win_sw = (float)content_r.width  / ow;
+      float win_sh = (float)content_r.height / oh;
+      int bw_i = (c->state == STATE_FULLSCREEN) ? 0 : (int)c->border_width;
+      float inner_r = (c->border_radius > (float)bw_i) ? c->border_radius - (float)bw_i : 0.0f;
+
+      glEnable(GL_BLEND);
+      glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
+      glUseProgram(blur_ctx.prog_corner_mask);
+      glUniform1i(blur_ctx.u_corner_mask.tex, 0);
+      glUniform2f(blur_ctx.u_corner_mask.win_pos_uv, win_u, win_v);
+      glUniform2f(blur_ctx.u_corner_mask.win_size_uv, win_sw, win_sh);
+      glUniform2f(blur_ctx.u_corner_mask.win_size_px,
+          (float)content_r.width, (float)content_r.height);
+      glUniform1f(blur_ctx.u_corner_mask.border_radius_px, inner_r);
+      draw_quad();
+      glDisable(GL_BLEND);
+    }
+
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glFlush();
@@ -1661,21 +1801,25 @@ void blur_output_frame(struct bwm_output *output, struct wlr_scene_output *scene
 }
 
 enum blur_algorithm blur_algorithm_from_str(const char *str) {
-  if (!str)                         return BLUR_ALGORITHM_KAWASE;
-  if (strcmp(str, "kawase")   == 0) return BLUR_ALGORITHM_KAWASE;
+  if (!str) return BLUR_ALGORITHM_KAWASE;
+  if (strcmp(str, "kawase") == 0) return BLUR_ALGORITHM_KAWASE;
   if (strcmp(str, "gaussian") == 0) return BLUR_ALGORITHM_GAUSSIAN;
-  if (strcmp(str, "box")      == 0) return BLUR_ALGORITHM_BOX;
-  if (strcmp(str, "none")     == 0) return BLUR_ALGORITHM_NONE;
+  if (strcmp(str, "box") == 0) return BLUR_ALGORITHM_BOX;
+  if (strcmp(str, "refraction") == 0) return BLUR_ALGORITHM_REFRACTION;
+  if (strcmp(str, "lens_refraction") == 0) return BLUR_ALGORITHM_LENS_REFRACTION;
+  if (strcmp(str, "none") == 0) return BLUR_ALGORITHM_NONE;
   wlr_log(WLR_ERROR, "blur: unknown algorithm '%s', using kawase", str);
   return BLUR_ALGORITHM_KAWASE;
 }
 
 const char *blur_algorithm_to_str(enum blur_algorithm algo) {
   switch (algo) {
-  case BLUR_ALGORITHM_KAWASE:   return "kawase";
+  case BLUR_ALGORITHM_KAWASE: return "kawase";
   case BLUR_ALGORITHM_GAUSSIAN: return "gaussian";
-  case BLUR_ALGORITHM_BOX:      return "box";
-  default:                      return "none";
+  case BLUR_ALGORITHM_BOX: return "box";
+  case BLUR_ALGORITHM_REFRACTION: return "refraction";
+  case BLUR_ALGORITHM_LENS_REFRACTION: return "lens_refraction";
+  default: return "none";
   }
 }
 
@@ -1684,9 +1828,9 @@ static void screen_shader_set_prog(GLuint prog, const char *name) {
     glDeleteProgram(screen_shader_prog);
   screen_shader_prog = prog;
   if (prog) {
-    screen_shader_u_tex        = glGetUniformLocation(prog, "tex");
+    screen_shader_u_tex = glGetUniformLocation(prog, "tex");
     screen_shader_u_resolution = glGetUniformLocation(prog, "resolution");
-    screen_shader_u_time       = glGetUniformLocation(prog, "time");
+    screen_shader_u_time = glGetUniformLocation(prog, "time");
     clock_gettime(CLOCK_MONOTONIC, &screen_shader_start_time);
     snprintf(screen_shader_name_str, sizeof(screen_shader_name_str), "%s", name);
     screen_shader_enabled = true;

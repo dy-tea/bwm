@@ -16,6 +16,8 @@ enum blur_algorithm {
   BLUR_ALGORITHM_KAWASE,
   BLUR_ALGORITHM_GAUSSIAN,
   BLUR_ALGORITHM_BOX,
+  BLUR_ALGORITHM_REFRACTION,
+  BLUR_ALGORITHM_LENS_REFRACTION,
 };
 
 extern bool blur_enabled;
@@ -23,6 +25,7 @@ extern enum blur_algorithm blur_algorithm;
 extern int blur_passes;
 extern float blur_radius;
 extern int blur_downsample;
+
 extern bool mica_enabled;
 extern float mica_tint[4];
 extern float mica_tint_strength;
@@ -31,7 +34,16 @@ extern float acrylic_tint_strength;
 extern float acrylic_noise_strength;
 extern float acrylic_light_anchor[2];
 extern int acrylic_blur_passes;
+
 extern bool screen_shader_enabled;
+
+extern float refraction_strength;
+extern float refraction_edge_size_px;
+extern float refraction_corner_radius_px;
+extern float refraction_normal_pow;
+extern float refraction_rgb_fringing;
+extern int refraction_texture_repeat_mode;
+extern float refraction_offset;
 
 struct bwm_blur_output_ctx {
   int width, height;
@@ -67,6 +79,7 @@ struct bwm_blur_ctx {
   GLuint prog_blit;
   GLuint prog_mica_tint;
   GLuint prog_acrylic_tint;
+  GLuint prog_refraction;
   GLuint prog_ext_blit;
   GLuint prog_border;
   GLuint prog_corner_mask;
@@ -89,6 +102,19 @@ struct bwm_blur_ctx {
   struct {
     GLint tex, tint, tint_strength, noise_strength, resolution, light_anchor;
   } u_acrylic;
+  struct {
+    GLint tex;
+    GLint offset;
+    GLint halfpixel;
+    GLint refractionRectSize;
+    GLint refractionEdgeSizePixels;
+    GLint refractionCornerRadiusPixels;
+    GLint refractionStrength;
+    GLint refractionNormalPow;
+    GLint refractionRGBFringing;
+    GLint refractionTextureRepeatMode;
+    GLint refractionMode;
+  } u_refraction;
   struct {
     GLint tex;
   } u_ext_blit;

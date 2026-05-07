@@ -3208,6 +3208,104 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       snprintf(buf, sizeof(buf), "%.2f\n", blur_radius);
       send_success(client_fd, buf);
     }
+  } else if (streq("refraction_strength", *args)) {
+    if (num >= 2) {
+      float val = atof(args[1]);
+      if (val >= 0.0f && val <= 30.0f) {
+        refraction_strength = val;
+        send_success(client_fd, "refraction_strength set\n");
+      } else {
+        send_failure(client_fd, "config refraction_strength: value must be 0.0-30.0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.3f\n", refraction_strength);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("refraction_edge_size_px", *args)) {
+    if (num >= 2) {
+      float val = atof(args[1]);
+      if (val >= 0.0f && val <= 400.0f) {
+        refraction_edge_size_px = val;
+        send_success(client_fd, "refraction_edge_size_px set\n");
+      } else {
+        send_failure(client_fd, "config refraction_edge_size_px: value must be 0.0-400.0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.3f\n", refraction_edge_size_px);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("refraction_corner_radius_px", *args)) {
+    if (num >= 2) {
+      float val = atof(args[1]);
+      if (val >= 0.0f && val <= 400.0f) {
+        refraction_corner_radius_px = val;
+        send_success(client_fd, "refraction_corner_radius_px set\n");
+      } else {
+        send_failure(client_fd, "config refraction_corner_radius_px: value must be 0.0-400.0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.3f\n", refraction_corner_radius_px);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("refraction_normal_pow", *args)) {
+    if (num >= 2) {
+      float val = atof(args[1]);
+      if (val >= 0.0f && val <= 8.0f) {
+        refraction_normal_pow = val;
+        send_success(client_fd, "refraction_normal_pow set\n");
+      } else {
+        send_failure(client_fd, "config refraction_normal_pow: value must be 0.0-8.0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.3f\n", refraction_normal_pow);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("refraction_rgb_fringing", *args)) {
+    if (num >= 2) {
+      float val = atof(args[1]);
+      if (val >= 0.0f && val <= 1.0f) {
+        refraction_rgb_fringing = val;
+        send_success(client_fd, "refraction_rgb_fringing set\n");
+      } else {
+        send_failure(client_fd, "config refraction_rgb_fringing: value must be 0.0-1.0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.6f\n", refraction_rgb_fringing);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("refraction_texture_repeat_mode", *args)) {
+    if (num >= 2) {
+      int val = atoi(args[1]);
+      if (val == 0 || val == 1) {
+        refraction_texture_repeat_mode = val;
+        send_success(client_fd, "refraction_texture_repeat_mode set\n");
+      } else {
+        send_failure(client_fd, "config refraction_texture_repeat_mode: value must be 0 (clamp) or 1 (mirror)\n");
+      }
+    } else {
+      char buf[32];
+      snprintf(buf, sizeof(buf), "%d\n", refraction_texture_repeat_mode);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("refraction_offset", *args)) {
+    if (num >= 2) {
+      float val = atof(args[1]);
+      if (val >= 0.0f && val <= 8.0f) {
+        refraction_offset = val;
+        send_success(client_fd, "refraction_offset set\n");
+      } else {
+        send_failure(client_fd, "config refraction_offset: value must be 0.0-8.0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.3f\n", refraction_offset);
+      send_success(client_fd, buf);
+    }
   } else if (streq("blur_downsample", *args)) {
     if (num >= 2) {
       int val = atoi(args[1]);

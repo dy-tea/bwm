@@ -81,10 +81,46 @@ bmsg config scroller_default_proportion <value>
 Sets the default proportion for scroller layout (0.1-1.0).
 
 ```
+bmsg config scroller_default_proportion_single <value>
+```
+
+Sets the default proportion for a single window in scroller layout (0.1-1.0).
+
+```
 bmsg config scroller_proportion_preset [<values>]
 ```
 
 Sets preset proportions for scroller layout (comma-separated).
+
+```
+bmsg config scroller_focus_center true|false
+```
+
+When true, the focused window is centered in the scroller viewport.
+
+```
+bmsg config scroller_prefer_center true|false
+```
+
+When true, scroller layout prefers centering the focused window.
+
+```
+bmsg config scroller_prefer_overspread true|false
+```
+
+When true, scroller layout prefers spreading windows to fill available space.
+
+```
+bmsg config scroller_ignore_proportion_single true|false
+```
+
+When true, proportion settings are ignored for single-window scroller desktops.
+
+```
+bmsg config scroller_structs <n>
+```
+
+Sets the number of visible scroller structs (non-negative integer).
 
 ```
 bmsg config tab_color_bar_bg "R G B A"
@@ -135,6 +171,114 @@ bmsg config text_height <pixels>
 ```
 
 Sets the default text height in pixels used for compositor-rendered text.
+
+```
+bmsg config focus_follows_pointer true|false
+```
+
+When true, focus follows the pointer cursor as it moves between windows.
+
+```
+bmsg config pointer_follows_focus true|false
+```
+
+When true, the pointer is warped to follow window focus changes.
+
+```
+bmsg config click_to_focus true|false
+```
+
+When true, clicking a window focuses it.
+
+```
+bmsg config directional_focus_tightness <0-100>
+```
+
+Sets how tightly directional focus navigation favors close windows. 0=least strict, 100=most strict.
+
+```
+bmsg config record_history true|false
+```
+
+When true, focus history is recorded for cycling through previous windows.
+
+```
+bmsg config mapping_events_count <n>
+```
+
+Sets the number of recent mapping events to track (non-negative integer).
+
+```
+bmsg config ignore_ewmh_fullscreen <0-2>
+```
+
+Controls how EWMH fullscreen requests are handled: 0=honor, 1=ignore, 2=auto.
+
+```
+bmsg config split_ratio <value>
+```
+
+Sets the default split ratio for new containers (0.0-1.0).
+
+```
+bmsg config automatic_scheme longest_side|alternate|spiral
+```
+
+Sets the automatic tiling scheme: `longest_side` splits the largest container, `alternate` alternates direction, `spiral` spirals.
+
+```
+bmsg config initial_polarity first_child|second_child
+```
+
+Sets the initial insertion side for new windows (first_child=left/top, second_child=right/bottom).
+
+```
+bmsg config top_padding <pixels>
+```
+
+Sets the top padding (margin) for all desktops.
+
+```
+bmsg config right_padding <pixels>
+```
+
+Sets the right padding for all desktops.
+
+```
+bmsg config bottom_padding <pixels>
+```
+
+Sets the bottom padding for all desktops.
+
+```
+bmsg config left_padding <pixels>
+```
+
+Sets the left padding for all desktops.
+
+```
+bmsg config normal_border_color <color>
+```
+
+Sets the border color for unfocused/inactive windows.
+
+```
+bmsg config active_border_color <color>
+```
+
+Sets the border color for the active window within a container.
+
+```
+bmsg config focused_border_color <color>
+```
+
+Sets the border color for the focused window.
+
+```
+bmsg config presel_feedback_color <color>
+```
+
+Sets the color of the preselection feedback indicator.
 
 ### Monitor/Desktop Setup
 
@@ -222,6 +366,10 @@ bmsg node --flag sticky=on         						# Toggle sticky flag on window
 bmsg node --flag private=off       						# Toggle private flag on window
 bmsg node --flag locked=true       						# Toggle locked flag on window
 bmsg node --flag marked=off        						# Toggle marked flag on window
+bmsg node --flag blur=on|off       						# Toggle blur effect on window
+bmsg node --flag mica=on|off       						# Toggle mica effect on window
+bmsg node --flag acrylic=on|off    						# Toggle acrylic effect on window
+bmsg node --flag border_radius=<float>  				# Set border radius on window
 bmsg node --move <dx> <dy>         						# Move floating window by delta x,y
 bmsg node --resize <handle> <dx> <dy>  				# Resize floating window (handle: northwest/nw/north/n/ne/east/e/southeast/se/south/s/southwest/sw/west/w/center/c)
 bmsg node --activate               						# Activate focused window
@@ -255,6 +403,10 @@ bmsg desktop --layout tiled        # Set desktop to tiled layout
 bmsg desktop --layout monocle      # Set desktop to monocle layout
 bmsg desktop --layout scroller     # Set desktop to scroller layout
 bmsg desktop --rename <newname>    # Rename desktop
+bmsg desktop --swap <name>         # Swap contents with another desktop on same monitor
+bmsg desktop --remove              # Remove current desktop (fails if only desktop)
+bmsg desktop --bubble up|prev|down|next  # Reorder desktop in list
+bmsg desktop --to-monitor <name>   # Move desktop to another monitor
 ```
 
 #### Focus Commands
@@ -352,6 +504,8 @@ bmsg rule -a vesktop desktop=III
 - `mica=on|off` - Whether a window should have the mica effect set
 - `acrylic=on|off` - Whether a window should have the acrylic effect set
 - `border_radius=10.0` - Set the border radius to a given float value
+- `scroller_proportion=<0.1-1.0>` - Set the scroller proportion for matched windows
+- `scroller_proportion_single=<0.1-1.0>` - Set the single-window scroller proportion for matched windows
 
 
 **Matching by Title:**
@@ -522,20 +676,30 @@ Pointer/Touchpad properties:
 ### Monitor Commands
 
 ```
-bmsg monitor <name> -f                 # Focus monitor
+bmsg monitor <name> -f                # Focus monitor
 bmsg monitor <name> -n <newname>      # Rename monitor
 bmsg monitor <name> -a <desk1> ...    # Add desktops
 bmsg monitor <name> -d <desk1> ...    # Reset desktops
-monitor -l                            # List all monitors
+bmsg monitor <name> -s <target>       # Swap desktops with target monitor
+bmsg monitor <name> -r                # Remove monitor (must have no desktops)
+bmsg monitor <name> -g <WxH:X,Y>      # Set monitor rectangle geometry
+bmsg monitor <name> -o <names...>     # Reorder desktops on monitor
+bmsg monitor <name> -d                # List desktop names on monitor
+bmsg monitor -l                       # List all monitors
 ```
 
 ### Query Commands
 
 ```
-bmsg query -T --tree      # Get window tree
-bmsg query -M --monitors # List monitors
-bmsg query -D --desktops # List desktops
-bmsg query -N --nodes    # List node IDs
+bmsg query -T --tree               # Get window tree
+bmsg query -M --monitors           # List monitors
+bmsg query -D --desktops           # List desktops
+bmsg query -N --nodes              # List node IDs
+bmsg query -f --focused            # Get JSON info about focused node
+bmsg query ... -m <name>           # Filter results by monitor
+bmsg query ... -d <name>           # Filter results by desktop
+bmsg query ... -n <id>             # Filter results by node id
+bmsg query ... --names             # Output names instead of IDs
 ```
 
 ### Config Commands
@@ -563,10 +727,10 @@ bmsg config blur_enabled true|false
 Enables or disables the blur effect (default: true).
 
 ```
-bmsg config blur_algorithm none|kawase|gaussian|box
+bmsg config blur_algorithm none|kawase|gaussian|box|refraction|lens_refraction
 ```
 
-Sets the blur algorithm (default: kawase).
+Sets the blur algorithm (default: kawase). `refraction` and `lens_refraction` apply a glass-like distortion effect (see Refraction Settings).
 
 ```
 bmsg config blur_passes <n>
@@ -642,6 +806,52 @@ bmsg config acrylic_blur_passes <n>
 
 Sets the number of blur passes for acrylic effect (0-10, default: 4). Higher values create stronger blur.
 
+### Refraction Settings
+
+Refraction creates a glass-like distortion effect on blurred backgrounds, similar to the "Better Blur DX" KWin effect.
+
+```
+bmsg config refraction_strength <0.0-30.0>
+```
+
+Sets the refraction distortion strength (default: 8.0).
+
+```
+bmsg config refraction_edge_size_px <0.0-400.0>
+```
+
+Sets the edge glow/lighting effect size in pixels (default: 230.0).
+
+```
+bmsg config refraction_corner_radius_px <0.0-400.0>
+```
+
+Sets the corner radius for the refraction effect in pixels (default: 80.0).
+
+```
+bmsg config refraction_normal_pow <0.0-8.0>
+```
+
+Sets the power/exponent for the refraction normal map (default: 4.0).
+
+```
+bmsg config refraction_rgb_fringing <0.0-1.0>
+```
+
+Sets the chromatic aberration (RGB color fringing) strength (default: 0.15).
+
+```
+bmsg config refraction_texture_repeat_mode <0|1>
+```
+
+Texture repeat mode: 0=clamp, 1=mirrored repeat (default: 1).
+
+```
+bmsg config refraction_offset <0.0-8.0>
+```
+
+Sets the refraction offset value (default: 3.0).
+
 ### Screen Shaders
 
 Screen shaders display as a filter above content. GLSL fragment shaders are supported.
@@ -670,6 +880,10 @@ Globally set if screen shaders should be enabled.
 bmsg wm --dump-state               # Dump current WM state as JSON
 bmsg wm --load-state               # Load WM state (not implemented)
 bmsg wm --add-monitor <name>       # Add a new monitor
+bmsg wm -g --get-status            # Return compositor status (monitor/desktop/node counts)
+bmsg wm -h [true|false]            # Get or set focus record history
+bmsg wm -o --adopt-orphans         # Adopt orphaned toplevels into tree
+bmsg wm -r --restart               # Restart the compositor
 ```
 
 ### Subscribe Commands
@@ -678,7 +892,30 @@ bmsg wm --add-monitor <name>       # Add a new monitor
 bmsg subscribe [-c <count>] [-f <fifo>] <event>...
 ```
 
-Subscribe to WM events (advanced usage).
+Subscribe to WM events. Available event types:
+
+```
+report|R              # Periodic report output
+monitor|M             # All monitor events (add/remove/focus/change)
+monitor_add           # Monitor added
+monitor_remove        # Monitor removed
+monitor_focus         # Monitor focus change
+monitor_change        # Monitor property change
+desktop|D             # All desktop events (add/remove/focus/change/layout)
+desktop_add           # Desktop added
+desktop_remove        # Desktop removed
+desktop_focus         # Desktop focus change
+desktop_change        # Desktop property change
+desktop_layout        # Desktop layout change
+node|N                # All node events (add/remove/focus/change/state/flag)
+node_add              # Node added
+node_remove           # Node removed
+node_focus            # Node focus change
+node_change           # Node property change
+node_state            # Node state change
+node_flag             # Node flag change
+all|A                 # All event types
+```
 
 ### Keyboard Grouping Commands
 
@@ -691,8 +928,13 @@ Set keyboard grouping mode.
 ### Scroller Commands
 
 ```
-bmsg scroller proportion <value>   # Set proportion for focused scroller client
-bmsg scroller stack                # Stack focused client with previous
+bmsg scroller proportion <value>          # Set proportion for focused scroller client
+bmsg scroller stack                       # Stack focused client with previous
+bmsg scroller unstack                     # Unstack focused client from its stack
+bmsg scroller resize <delta>              # Resize focused scroller client width by delta
+bmsg scroller set_proportion <value>      # Set scroller proportion (0.1-1.0)
+bmsg scroller cycle_preset                # Cycle to next proportion preset
+bmsg scroller center                      # Center focused scroller window in viewport
 ```
 
 ### Equalize/Balance Commands

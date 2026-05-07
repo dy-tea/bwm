@@ -18,6 +18,7 @@ shaders = [
 	'blur_gauss_v.frag',
 	'blur_mica.frag',
 	'blur_acrylic.frag',
+	'blur_refraction.frag',
 
 	# Fullscreen effects
 	'grayscale.frag',
