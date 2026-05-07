@@ -106,14 +106,14 @@ struct bwm_blur_ctx {
     GLint tex;
     GLint offset;
     GLint halfpixel;
-    GLint refractionRectSize;
-    GLint refractionEdgeSizePixels;
-    GLint refractionCornerRadiusPixels;
-    GLint refractionStrength;
-    GLint refractionNormalPow;
-    GLint refractionRGBFringing;
-    GLint refractionTextureRepeatMode;
-    GLint refractionMode;
+    GLint refraction_rect_size;
+    GLint refraction_edge_size_pixels;
+    GLint refraction_corner_radius_pixels;
+    GLint refraction_strength;
+    GLint refraction_normal_pow;
+    GLint refraction_RGB_fringing;
+    GLint refraction_texture_repeat_mode;
+    GLint refraction_mode;
   } u_refraction;
   struct {
     GLint tex;

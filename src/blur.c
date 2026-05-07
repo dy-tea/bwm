@@ -73,6 +73,8 @@ float refraction_normal_pow = 6.0f;
 float refraction_rgb_fringing = 22.0f / 30.0f;
 int refraction_texture_repeat_mode = 1;
 float refraction_offset = 1.0f;
+float refraction_noise_strength = 0.03f;
+float refraction_noise_scale = 1.0f;
 
 struct bwm_blur_ctx blur_ctx = {0};
 
@@ -304,43 +306,43 @@ static void refraction_pass(GLuint src_tex, GLuint dst_fbo, int w, int h, int re
   if (blur_ctx.u_refraction.halfpixel >= 0)
     glUniform2f(blur_ctx.u_refraction.halfpixel, 0.5f / (float)w, 0.5f / (float)h);
 
-  if (blur_ctx.u_refraction.refractionRectSize >= 0)
-    glUniform2f(blur_ctx.u_refraction.refractionRectSize, (float)w, (float)h);
+  if (blur_ctx.u_refraction.refraction_rect_size >= 0)
+    glUniform2f(blur_ctx.u_refraction.refraction_rect_size, (float)w, (float)h);
 
   float max_edge = 0.5f * (float)((w < h) ? w : h);
   float edge = refraction_edge_size_px;
   if (edge > max_edge) edge = max_edge;
   if (edge < 0.0f) edge = 0.0f;
-  if (blur_ctx.u_refraction.refractionEdgeSizePixels >= 0)
-    glUniform1f(blur_ctx.u_refraction.refractionEdgeSizePixels, edge);
+  if (blur_ctx.u_refraction.refraction_edge_size_pixels >= 0)
+    glUniform1f(blur_ctx.u_refraction.refraction_edge_size_pixels, edge);
 
   float max_corner = 0.5f * (float)((w < h) ? w : h);
   float corner = refraction_corner_radius_px;
   if (corner > max_corner) corner = max_corner;
   if (corner < 0.0f) corner = 0.0f;
-  if (blur_ctx.u_refraction.refractionCornerRadiusPixels >= 0)
-    glUniform1f(blur_ctx.u_refraction.refractionCornerRadiusPixels, corner);
+  if (blur_ctx.u_refraction.refraction_corner_radius_pixels >= 0)
+    glUniform1f(blur_ctx.u_refraction.refraction_corner_radius_pixels, corner);
 
   float strength_norm = refraction_strength / 30.0f;
   if (strength_norm < 0.0f) strength_norm = 0.0f;
   if (strength_norm > 1.0f) strength_norm = 1.0f;
-  if (blur_ctx.u_refraction.refractionStrength >= 0)
-    glUniform1f(blur_ctx.u_refraction.refractionStrength, strength_norm);
+  if (blur_ctx.u_refraction.refraction_strength >= 0)
+    glUniform1f(blur_ctx.u_refraction.refraction_strength, strength_norm);
 
-  if (blur_ctx.u_refraction.refractionNormalPow >= 0)
-    glUniform1f(blur_ctx.u_refraction.refractionNormalPow, refraction_normal_pow);
+  if (blur_ctx.u_refraction.refraction_normal_pow >= 0)
+    glUniform1f(blur_ctx.u_refraction.refraction_normal_pow, refraction_normal_pow);
 
   float fringing = refraction_rgb_fringing;
   if (fringing < 0.0f) fringing = 0.0f;
   if (fringing > 1.0f) fringing = 1.0f;
-  if (blur_ctx.u_refraction.refractionRGBFringing >= 0)
-    glUniform1f(blur_ctx.u_refraction.refractionRGBFringing, fringing);
+  if (blur_ctx.u_refraction.refraction_RGB_fringing >= 0)
+    glUniform1f(blur_ctx.u_refraction.refraction_RGB_fringing, fringing);
 
-  if (blur_ctx.u_refraction.refractionTextureRepeatMode >= 0)
-    glUniform1i(blur_ctx.u_refraction.refractionTextureRepeatMode, refraction_texture_repeat_mode);
+  if (blur_ctx.u_refraction.refraction_texture_repeat_mode >= 0)
+    glUniform1i(blur_ctx.u_refraction.refraction_texture_repeat_mode, refraction_texture_repeat_mode);
 
-  if (blur_ctx.u_refraction.refractionMode >= 0)
-    glUniform1i(blur_ctx.u_refraction.refractionMode, refraction_mode);
+  if (blur_ctx.u_refraction.refraction_mode >= 0)
+    glUniform1i(blur_ctx.u_refraction.refraction_mode, refraction_mode);
 
   draw_quad();
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -505,14 +507,14 @@ bool blur_init(void) {
   blur_ctx.u_refraction.tex = glGetUniformLocation(blur_ctx.prog_refraction, "tex");
   blur_ctx.u_refraction.offset = glGetUniformLocation(blur_ctx.prog_refraction, "offset");
   blur_ctx.u_refraction.halfpixel = glGetUniformLocation(blur_ctx.prog_refraction, "halfpixel");
-  blur_ctx.u_refraction.refractionRectSize = glGetUniformLocation(blur_ctx.prog_refraction, "refractionRectSize");
-  blur_ctx.u_refraction.refractionEdgeSizePixels = glGetUniformLocation(blur_ctx.prog_refraction, "refractionEdgeSizePixels");
-  blur_ctx.u_refraction.refractionCornerRadiusPixels = glGetUniformLocation(blur_ctx.prog_refraction, "refractionCornerRadiusPixels");
-  blur_ctx.u_refraction.refractionStrength = glGetUniformLocation(blur_ctx.prog_refraction, "refractionStrength");
-  blur_ctx.u_refraction.refractionNormalPow = glGetUniformLocation(blur_ctx.prog_refraction, "refractionNormalPow");
-  blur_ctx.u_refraction.refractionRGBFringing = glGetUniformLocation(blur_ctx.prog_refraction, "refractionRGBFringing");
-  blur_ctx.u_refraction.refractionTextureRepeatMode = glGetUniformLocation(blur_ctx.prog_refraction, "refractionTextureRepeatMode");
-  blur_ctx.u_refraction.refractionMode = glGetUniformLocation(blur_ctx.prog_refraction, "refractionMode");
+  blur_ctx.u_refraction.refraction_rect_size = glGetUniformLocation(blur_ctx.prog_refraction, "refraction_rect_size");
+  blur_ctx.u_refraction.refraction_edge_size_pixels = glGetUniformLocation(blur_ctx.prog_refraction, "refraction_edge_size_pixels");
+  blur_ctx.u_refraction.refraction_corner_radius_pixels = glGetUniformLocation(blur_ctx.prog_refraction, "refraction_corner_radius_pixels");
+  blur_ctx.u_refraction.refraction_strength = glGetUniformLocation(blur_ctx.prog_refraction, "refraction_strength");
+  blur_ctx.u_refraction.refraction_normal_pow = glGetUniformLocation(blur_ctx.prog_refraction, "refraction_normal_pow");
+  blur_ctx.u_refraction.refraction_RGB_fringing = glGetUniformLocation(blur_ctx.prog_refraction, "refraction_RGB_fringing");
+  blur_ctx.u_refraction.refraction_texture_repeat_mode = glGetUniformLocation(blur_ctx.prog_refraction, "refraction_texture_repeat_mode");
+  blur_ctx.u_refraction.refraction_mode = glGetUniformLocation(blur_ctx.prog_refraction, "refraction_mode");
 
   if (blur_ctx.prog_border) {
     blur_ctx.u_border.resolution = glGetUniformLocation(blur_ctx.prog_border, "resolution");
