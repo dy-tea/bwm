@@ -111,8 +111,9 @@ void output_config_apply(struct output_config *oc) {
 
   if (oc->enable == OUTPUT_CONFIG_DISABLE) {
     wlr_output_state_set_enabled(&state, false);
-    wlr_output_commit_state(wlr_output, &state);
-    wlr_output_state_finish(&state);
+  if (!wlr_output_commit_state(wlr_output, &state))
+    wlr_log(WLR_ERROR, "output_config_apply: failed to commit state for %s", oc->name);
+  wlr_output_state_finish(&state);
     return;
   }
 

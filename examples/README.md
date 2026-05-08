@@ -280,20 +280,15 @@ bmsg config presel_feedback_color <color>
 
 Sets the color of the preselection feedback indicator.
 
-### Monitor/Desktop Setup
+### Output/Desktop Setup
 
 ```
-bmsg monitor -d <name1> <name2> ...
+bmsg output <name> desktops <name1> <name2> ...
+bmsg output <name> -d <name1> <name2> ...
 ```
 
-Configures desktops on the focused monitor. Desktop names are space-separated.
+Configures desktops on the focused output. Desktop names are space-separated.
 The number of desktops is determined by the number of names provided.
-
-```
-bmsg monitor <name> -d <name1> <name2> ...
-```
-
-Configures desktops on a specific monitor by name.
 
 ## bwmhkrc (Hotkey Config)
 
@@ -613,6 +608,16 @@ bmsg output <name> color_profile gamma22
 bmsg output <name> color_profile srgb
 bmsg output <name> color_profile icc /path/to/profile.icc
 bmsg output <name> tearing on|off
+bmsg output <name> focus                       # Focus output
+bmsg output <name> rename <newname>            # Rename output
+bmsg output <name> desktops                    # List desktop names on output
+bmsg output <name> desktops <names...>         # Reset/replace desktops on output
+bmsg output desktops <names...>                # Reset desktops on focused output
+bmsg output <name> add-desktops <names...>     # Add desktops to output
+bmsg output <name> swap-desktops <target>      # Swap desktops with another output
+bmsg output <name> remove                      # Remove output (must have no desktops)
+bmsg output <name> rectangle <WxH:X,Y>         # Set output rectangle geometry
+bmsg output <name> reorder-desktops <names...> # Reorder desktops on output
 ```
 
 - `name` — connector name (e.g. `DP-1`, `HDMI-A-1`)
@@ -672,21 +677,6 @@ Pointer/Touchpad properties:
 - `scroll_button_lock` - Lock scroll button (true/false)
 - `scroll_factor` - Scroll speed multiplier
 - `rotation_angle` - Pointer rotation (degrees)
-
-### Monitor Commands
-
-```
-bmsg monitor <name> -f                # Focus monitor
-bmsg monitor <name> -n <newname>      # Rename monitor
-bmsg monitor <name> -a <desk1> ...    # Add desktops
-bmsg monitor <name> -d <desk1> ...    # Reset desktops
-bmsg monitor <name> -s <target>       # Swap desktops with target monitor
-bmsg monitor <name> -r                # Remove monitor (must have no desktops)
-bmsg monitor <name> -g <WxH:X,Y>      # Set monitor rectangle geometry
-bmsg monitor <name> -o <names...>     # Reorder desktops on monitor
-bmsg monitor <name> -d                # List desktop names on monitor
-bmsg monitor -l                       # List all monitors
-```
 
 ### Query Commands
 

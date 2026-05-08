@@ -3,8 +3,8 @@
 # Example bwmrc configuration
 # This file is executed at server startup
 
-# Set up desktops (names separated by spaces)
-bmsg monitor -d I II III IV V VI VII VIII IX X
+# Set up desktops on HDMI-A-1 (names separated by spaces)
+bmsg output HDMI-A-1 -d I II III IV V VI VII VIII IX X
 
 # Set border width
 bmsg config border_width 2

@@ -455,6 +455,278 @@ static void ipc_cmd_output(char **args, int num, int client_fd) {
 
     output_config_apply(oc);
     send_success(client_fd, "output tearing set\n");
+  } else if (streq("focus", subcmd) || streq("-f", subcmd) || streq("--focus", subcmd)) {
+    server.focused_output = mon;
+    focus_node(mon, mon->desk, mon->desk ? mon->desk->focus : NULL);
+    send_success(client_fd, "focused\n");
+  } else if (streq("rename", subcmd) || streq("-n", subcmd) || streq("--rename", subcmd)) {
+    if (num < 2) {
+      send_failure(client_fd, "output rename: missing name argument\n");
+      return;
+    }
+    args++;
+    num--;
+    strncpy(mon->name, *args, SMALEN - 1);
+    mon->name[SMALEN - 1] = '\0';
+    transaction_commit_dirty();
+    send_success(client_fd, "renamed\n");
+  } else if (streq("add-desktops", subcmd) || streq("-a", subcmd) || streq("--add-desktops", subcmd)) {
+    if (num < 2) {
+      send_failure(client_fd, "output add-desktops: missing desktop names\n");
+      return;
+    }
+    args++;
+    num--;
+    while (num > 0) {
+      desktop_t *d = (desktop_t *)calloc(1, sizeof(desktop_t));
+      d->id = next_desktop_id++;
+      strncpy(d->name, *args, SMALEN - 1);
+      d->name[SMALEN - 1] = '\0';
+      d->layout = LAYOUT_TILED;
+      d->user_layout = LAYOUT_TILED;
+      d->window_gap = window_gap;
+      d->border_width = border_width;
+      d->padding = (padding_t){0};
+      d->root = NULL;
+      d->focus = NULL;
+
+      if (mon->desk_tail) {
+        d->prev = mon->desk_tail;
+        mon->desk_tail->next = d;
+        mon->desk_tail = d;
+      } else {
+        mon->desk = d;
+        mon->desk_head = d;
+        mon->desk_tail = d;
+      }
+      d->output = mon;
+
+      workspace_create_desktop(d->name);
+
+      args++;
+      num--;
+    }
+    transaction_commit_dirty();
+    send_success(client_fd, "desktops added\n");
+  } else if (streq("desktops", subcmd) || streq("-d", subcmd) || streq("--desktops", subcmd)) {
+    if (num < 2) {
+      char buf[BWM_BUFSIZ];
+      size_t offset = 0;
+      for (desktop_t *d = mon->desk; d != NULL; d = d->next) {
+        offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", d->name);
+      }
+      send_success(client_fd, buf);
+    } else {
+      args++;
+      num--;
+
+      desktop_t *d = mon->desk;
+      for (; num > 0 && d != NULL; d = d->next) {
+        strncpy(d->name, *args, SMALEN - 1);
+        d->name[SMALEN - 1] = '\0';
+        workspace_create_desktop(d->name);
+        args++;
+        num--;
+      }
+
+      while (num > 0) {
+        desktop_t *newd = (desktop_t *)calloc(1, sizeof(desktop_t));
+        newd->id = next_desktop_id++;
+        strncpy(newd->name, *args, SMALEN - 1);
+        newd->name[SMALEN - 1] = '\0';
+        newd->layout = LAYOUT_TILED;
+        newd->user_layout = LAYOUT_TILED;
+        newd->window_gap = window_gap;
+        newd->border_width = border_width;
+        newd->padding = (padding_t){0};
+        newd->root = NULL;
+        newd->focus = NULL;
+
+        if (mon->desk_tail) {
+          newd->prev = mon->desk_tail;
+          mon->desk_tail->next = newd;
+          mon->desk_tail = newd;
+        } else {
+          mon->desk = newd;
+          mon->desk_head = newd;
+          mon->desk_tail = newd;
+        }
+        newd->output = mon;
+
+        workspace_create_desktop(newd->name);
+        args++;
+        num--;
+      }
+
+      while (d != NULL) {
+        if (d == mon->desk) {
+          mon->desk = d->next;
+          if (mon->desk)
+            mon->desk->prev = NULL;
+          if (mon->desk_head == d)
+            mon->desk_head = d->next;
+          if (mon->desk_tail == d)
+            mon->desk_tail = d->prev;
+          if (mon->desk)
+            focus_node(mon, mon->desk, mon->desk->focus);
+        } else {
+          if (d->prev)
+            d->prev->next = d->next;
+          if (d->next)
+            d->next->prev = d->prev;
+          if (mon->desk_tail == d)
+            mon->desk_tail = d->prev;
+        }
+        desktop_t *next = d->next;
+        d = next;
+        free(d);
+      }
+
+      transaction_commit_dirty();
+      workspace_sync();
+
+      if (mon->desk) {
+        focus_node(mon, mon->desk, mon->desk->focus);
+      }
+
+      send_success(client_fd, "desktops reset\n");
+    }
+  } else if (streq("swap-desktops", subcmd) || streq("-s", subcmd) || streq("--swap", subcmd)) {
+    if (num < 2) {
+      send_failure(client_fd, "output swap-desktops: missing target output\n");
+      return;
+    }
+    args++;
+    num--;
+
+    struct bwm_output *target = find_output_by_name(*args);
+    if (!target) {
+      send_failure(client_fd, "output swap-desktops: target output not found\n");
+      return;
+    }
+
+    if (target == mon) {
+      send_failure(client_fd, "output swap-desktops: cannot swap with self\n");
+      return;
+    }
+
+    struct bwm_output *m0 = mon;
+    struct bwm_output *m1 = target;
+
+    desktop_t *d0 = m0->desk;
+    desktop_t *d1 = m1->desk;
+
+    m0->desk = d1;
+    m0->desk_head = d1 ? d1 : m0->desk_head;
+    m0->desk_tail = d1 ? (d1->prev ? d1->prev : d1) : m0->desk_tail;
+
+    m1->desk = d0;
+    m1->desk_head = d0 ? d0 : m1->desk_head;
+    m1->desk_tail = d0 ? (d0->prev ? d0->prev : d0) : m1->desk_tail;
+
+    if (d0) {
+      for (desktop_t *d = d0; d != NULL; d = d->next)
+        d->output = m1;
+      d0->prev = NULL;
+      desktop_t *tail = d0;
+      for (; tail->next; tail = tail->next)
+        ;
+      tail->next = d1;
+      if (d1) d1->prev = tail;
+    }
+
+    if (d1)
+      for (desktop_t *d = d1; d != NULL; d = d->next)
+        d->output = m0;
+
+    if (server.focused_output == m0)
+      server.focused_output = m1;
+    else if (server.focused_output == m1)
+      server.focused_output = m0;
+
+    transaction_commit_dirty();
+    send_success(client_fd, "swapped\n");
+  } else if (streq("remove", subcmd) || streq("-r", subcmd) || streq("--remove", subcmd)) {
+    if (!mon->prev && !mon->next) {
+      send_failure(client_fd, "output remove: cannot remove the only output\n");
+      return;
+    }
+
+    if (mon->desk) {
+      send_failure(client_fd, "output remove: cannot remove output with desktops\n");
+      return;
+    }
+
+    struct bwm_output *prev = mon->prev;
+    struct bwm_output *next = mon->next;
+
+    if (prev)
+      prev->next = next;
+    else if (mon_head == mon)
+      mon_head = next;
+
+    if (next)
+      next->prev = prev;
+
+    if (server.focused_output == mon) {
+      server.focused_output = next ? next : prev;
+      if (server.focused_output) {
+        focus_node(server.focused_output, server.focused_output->desk,
+          server.focused_output->desk ? server.focused_output->desk->focus : NULL);
+      }
+    }
+
+    free(mon);
+    transaction_commit_dirty();
+    send_success(client_fd, "removed\n");
+  } else if (streq("rectangle", subcmd) || streq("-g", subcmd) || streq("--rectangle", subcmd)) {
+    if (num < 2) {
+      send_failure(client_fd, "output rectangle: missing rectangle\n");
+      return;
+    }
+    args++;
+    num--;
+
+    int x, y, width, height;
+    if (sscanf(*args, "%dx%d:%d,%d", &width, &height, &x, &y) != 4 &&
+        sscanf(*args, "%dx%d", &width, &height) == 2) {
+      x = mon->rectangle.x;
+      y = mon->rectangle.y;
+    } else if (sscanf(*args, "%d,%d,%d,%d", &x, &y, &width, &height) != 4) {
+      send_failure(client_fd, "output rectangle: invalid rectangle format\n");
+      return;
+    }
+
+    mon->rectangle.x = x;
+    mon->rectangle.y = y;
+    mon->rectangle.width = width;
+    mon->rectangle.height = height;
+
+    transaction_commit_dirty();
+    send_success(client_fd, "rectangle set\n");
+  } else if (streq("reorder-desktops", subcmd) || streq("-o", subcmd) || streq("--reorder-desktops", subcmd)) {
+    if (num < 2) {
+      send_failure(client_fd, "output reorder-desktops: missing desktop names\n");
+      return;
+    }
+    args++;
+    num--;
+
+    desktop_t *d = mon->desk;
+    while (d != NULL && num > 0) {
+      desktop_t *next = d->next;
+      for (int i = 0; i < num; i++) {
+        if (strcmp(d->name, args[i]) == 0) {
+          strncpy(d->name, args[i], SMALEN - 1);
+          d->name[SMALEN - 1] = '\0';
+          break;
+        }
+      }
+      d = next;
+    }
+
+    transaction_commit_dirty();
+    send_success(client_fd, "desktops reordered\n");
   } else {
     send_failure(client_fd, "output: unknown subcommand\n");
   }
@@ -1893,362 +2165,6 @@ struct bwm_output *find_output_by_name(const char *name) {
     if (strcmp(m->name, name) == 0)
       return m;
   return NULL;
-}
-
-static void ipc_cmd_monitor(char **args, int num, int client_fd) {
-  if (num < 1) {
-    send_failure(client_fd, "monitor: Missing arguments\n");
-    return;
-  }
-
-  struct bwm_output *mon = server.focused_output;
-  bool has_target = false;
-
-  if ((*args)[0] != '-') {
-    mon = find_output_by_name(*args);
-    if (!mon) {
-      send_failure(client_fd, "monitor: unknown monitor\n");
-      return;
-    }
-    has_target = true;
-    args++;
-    num--;
-  }
-
-  if (num < 1) {
-    send_failure(client_fd, "monitor: Missing command\n");
-    return;
-  }
-
-  if (streq("-f", *args) || streq("--focus", *args)) {
-    if (mon) {
-      server.focused_output = mon;
-      focus_node(mon, mon->desk, mon->desk ? mon->desk->focus : NULL);
-      send_success(client_fd, "focused\n");
-    } else {
-      send_failure(client_fd, "no monitor\n");
-    }
-  } else if (streq("-n", *args) || streq("--rename", *args)) {
-    if (!has_target) {
-      send_failure(client_fd, "monitor -n: no monitor specified\n");
-      return;
-    }
-    if (num < 2) {
-      send_failure(client_fd, "monitor -n: missing name argument\n");
-      return;
-    }
-    args++;
-    strncpy(mon->name, *args, SMALEN - 1);
-    mon->name[SMALEN - 1] = '\0';
-    transaction_commit_dirty();
-    send_success(client_fd, "renamed\n");
-  } else if (streq("-a", *args) || streq("--add-desktops", *args)) {
-    if (!has_target)
-      mon = server.focused_output;
-    if (!mon) {
-      send_failure(client_fd, "monitor -a: no monitor available\n");
-      return;
-    }
-    if (num < 2) {
-      send_failure(client_fd, "monitor -a: missing desktop names\n");
-      return;
-    }
-    args++;
-    num--;
-    while (num > 0) {
-      desktop_t *d = (desktop_t *)calloc(1, sizeof(desktop_t));
-      d->id = next_desktop_id++;
-      strncpy(d->name, *args, SMALEN - 1);
-      d->name[SMALEN - 1] = '\0';
-      d->layout = LAYOUT_TILED;
-      d->user_layout = LAYOUT_TILED;
-      d->window_gap = window_gap;
-      d->border_width = border_width;
-      d->padding = (padding_t){0};
-      d->root = NULL;
-      d->focus = NULL;
-
-      if (mon->desk_tail) {
-        d->prev = mon->desk_tail;
-        mon->desk_tail->next = d;
-        mon->desk_tail = d;
-      } else {
-        mon->desk = d;
-        mon->desk_head = d;
-        mon->desk_tail = d;
-      }
-      d->output = mon;
-
-      workspace_create_desktop(d->name);
-
-      args++;
-      num--;
-    }
-    transaction_commit_dirty();
-    send_success(client_fd, "desktops added\n");
-  } else if (streq("-d", *args) || streq("--reset-desktops", *args)) {
-    if (!has_target)
-      mon = server.focused_output;
-    if (!mon) {
-      send_failure(client_fd, "monitor -d: no monitor available\n");
-      return;
-    }
-    if (num < 2) {
-      send_failure(client_fd, "monitor -d: missing desktop names\n");
-      return;
-    }
-
-    desktop_t *d = mon->desk;
-    args++;
-    num--;
-
-    while (num > 0 && d != NULL) {
-      wlr_log(WLR_DEBUG, "IPC: renaming desktop to %s", *args);
-      strncpy(d->name, *args, SMALEN - 1);
-      d->name[SMALEN - 1] = '\0';
-      wlr_log(WLR_DEBUG, "IPC: calling workspace_create_desktop for %s", d->name);
-      workspace_create_desktop(d->name);
-      d = d->next;
-      args++;
-      num--;
-    }
-
-    while (num > 0) {
-      desktop_t *newd = (desktop_t *)calloc(1, sizeof(desktop_t));
-      newd->id = next_desktop_id++;
-      strncpy(newd->name, *args, SMALEN - 1);
-      newd->name[SMALEN - 1] = '\0';
-      newd->layout = LAYOUT_TILED;
-      newd->user_layout = LAYOUT_TILED;
-      newd->window_gap = window_gap;
-      newd->border_width = border_width;
-      newd->padding = (padding_t){0};
-      newd->root = NULL;
-      newd->focus = NULL;
-
-      if (mon->desk_tail) {
-        newd->prev = mon->desk_tail;
-        mon->desk_tail->next = newd;
-        mon->desk_tail = newd;
-      } else {
-        mon->desk = newd;
-        mon->desk_head = newd;
-        mon->desk_tail = newd;
-      }
-      newd->output = mon;
-
-      wlr_log(WLR_DEBUG, "IPC: creating workspace for new desktop %s", newd->name);
-      workspace_create_desktop(newd->name);
-      args++;
-      num--;
-    }
-
-    while (d != NULL) {
-      if (d == mon->desk) {
-        mon->desk = d->next;
-        if (mon->desk)
-          mon->desk->prev = NULL;
-        if (mon->desk_head == d)
-          mon->desk_head = d->next;
-        if (mon->desk_tail == d)
-          mon->desk_tail = d->prev;
-        if (mon->desk)
-          focus_node(mon, mon->desk, mon->desk->focus);
-      } else {
-        if (d->prev)
-          d->prev->next = d->next;
-        if (d->next)
-          d->next->prev = d->prev;
-        if (mon->desk_tail == d)
-          mon->desk_tail = d->prev;
-      }
-      desktop_t *next = d->next;
-     	d = next;
-      free(d);
-    }
-
-    transaction_commit_dirty();
-    workspace_sync();
-
-    if (mon->desk) {
-      focus_node(mon, mon->desk, mon->desk->focus);
-    }
-
-    send_success(client_fd, "desktops reset\n");
-  } else if (streq("-d", *args) || streq("--desktops", *args)) {
-    if (!has_target) {
-      send_failure(client_fd, "monitor -d: no monitor specified\n");
-      return;
-    }
-    char buf[BWM_BUFSIZ];
-    size_t offset = 0;
-
-    for (desktop_t *d = mon->desk; d != NULL; d = d->next) {
-      offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", d->name);
-    }
-    send_success(client_fd, buf);
-  } else if (streq("-l", *args) || streq("--list", *args)) {
-    char buf[BWM_BUFSIZ];
-    size_t offset = 0;
-    for (struct bwm_output *m = mon_head; m != NULL; m = m->next)
-      offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", m->name);
-    send_success(client_fd, buf);
-  } else if (streq("-s", *args) || streq("--swap", *args)) {
-    if (!has_target) {
-      send_failure(client_fd, "monitor -s: no source monitor specified\n");
-      return;
-    }
-    if (num < 2) {
-      send_failure(client_fd, "monitor -s: missing target monitor\n");
-      return;
-    }
-    args++;
-    num--;
-
-    struct bwm_output *target = find_output_by_name(*args);
-    if (!target) {
-      send_failure(client_fd, "monitor -s: target monitor not found\n");
-      return;
-    }
-
-    if (target == mon) {
-      send_failure(client_fd, "monitor -s: cannot swap with self\n");
-      return;
-    }
-
-    struct bwm_output *m0 = mon;
-    struct bwm_output *m1 = target;
-
-    desktop_t *d0 = m0->desk;
-    desktop_t *d1 = m1->desk;
-
-    m0->desk = d1;
-    m0->desk_head = d1 ? d1 : m0->desk_head;
-    m0->desk_tail = d1 ? (d1->prev ? d1->prev : d1) : m0->desk_tail;
-
-    m1->desk = d0;
-    m1->desk_head = d0 ? d0 : m1->desk_head;
-    m1->desk_tail = d0 ? (d0->prev ? d0->prev : d0) : m1->desk_tail;
-
-    if (d0) {
-      for (desktop_t *d = d0; d != NULL; d = d->next)
-        d->output = m1;
-      d0->prev = NULL;
-      desktop_t *tail = d0;
-      while (tail->next)
-        tail = tail->next;
-      tail->next = d1;
-      if (d1) d1->prev = tail;
-    }
-
-    if (d1)
-      for (desktop_t *d = d1; d != NULL; d = d->next)
-        d->output = m0;
-
-    if (server.focused_output == m0)
-      server.focused_output = m1;
-    else if (server.focused_output == m1)
-      server.focused_output = m0;
-
-    transaction_commit_dirty();
-    send_success(client_fd, "swapped\n");
-  } else if (streq("-r", *args) || streq("--remove", *args)) {
-    if (!has_target) {
-      send_failure(client_fd, "monitor -r: no monitor specified\n");
-      return;
-    }
-
-    if (!mon->prev && !mon->next) {
-      send_failure(client_fd, "monitor -r: cannot remove the only monitor\n");
-      return;
-    }
-
-    if (mon->desk) {
-      send_failure(client_fd, "monitor -r: cannot remove monitor with desktops\n");
-      return;
-    }
-
-    struct bwm_output *prev = mon->prev;
-    struct bwm_output *next = mon->next;
-
-    if (prev)
-      prev->next = next;
-    else if (mon_head == mon)
-      mon_head = next;
-
-    if (next)
-      next->prev = prev;
-
-    if (server.focused_output == mon) {
-      server.focused_output = next ? next : prev;
-      if (server.focused_output) {
-        focus_node(server.focused_output, server.focused_output->desk,
-          server.focused_output->desk ? server.focused_output->desk->focus : NULL);
-      }
-    }
-
-    free(mon);
-    transaction_commit_dirty();
-    send_success(client_fd, "removed\n");
-  } else if (streq("-g", *args) || streq("--rectangle", *args)) {
-    if (!has_target) {
-      send_failure(client_fd, "monitor -g: no monitor specified\n");
-      return;
-    }
-    if (num < 2) {
-      send_failure(client_fd, "monitor -g: missing rectangle\n");
-      return;
-    }
-    args++;
-    num--;
-
-    int x, y, width, height;
-    if (sscanf(*args, "%dx%d:%d,%d", &width, &height, &x, &y) != 4 &&
-        sscanf(*args, "%dx%d", &width, &height) == 2) {
-      x = mon->rectangle.x;
-      y = mon->rectangle.y;
-    } else if (sscanf(*args, "%d,%d,%d,%d", &x, &y, &width, &height) != 4) {
-      send_failure(client_fd, "monitor -g: invalid rectangle format\n");
-      return;
-    }
-
-    mon->rectangle.x = x;
-    mon->rectangle.y = y;
-    mon->rectangle.width = width;
-    mon->rectangle.height = height;
-
-    transaction_commit_dirty();
-    send_success(client_fd, "rectangle set\n");
-  } else if (streq("-o", *args) || streq("--reorder-desktops", *args)) {
-    if (!has_target) {
-      send_failure(client_fd, "monitor -o: no monitor specified\n");
-      return;
-    }
-    if (num < 2) {
-      send_failure(client_fd, "monitor -o: missing desktop names\n");
-      return;
-    }
-    args++;
-    num--;
-
-    desktop_t *d = mon->desk;
-    while (d != NULL && num > 0) {
-      desktop_t *next = d->next;
-      for (int i = 0; i < num; i++) {
-        if (strcmp(d->name, args[i]) == 0) {
-          strncpy(d->name, args[i], SMALEN - 1);
-          d->name[SMALEN - 1] = '\0';
-          break;
-        }
-      }
-      d = next;
-    }
-
-    transaction_commit_dirty();
-    send_success(client_fd, "desktops reordered\n");
-  } else {
-    send_failure(client_fd, "monitor: unknown command\n");
-  }
 }
 
 static void ipc_cmd_query(char **args, int num, int client_fd) {
@@ -4020,8 +3936,6 @@ static void process_ipc_message(char *msg, int msg_len, int client_fd) {
     ipc_cmd_node(++args, --num, client_fd);
   } else if (streq("desktop", *args)) {
     ipc_cmd_desktop(++args, --num, client_fd);
-  } else if (streq("monitor", *args)) {
-    ipc_cmd_monitor(++args, --num, client_fd);
   } else if (streq("query", *args)) {
     ipc_cmd_query(++args, --num, client_fd);
   } else if (streq("wm", *args)) {
