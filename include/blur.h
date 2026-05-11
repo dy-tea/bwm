@@ -26,6 +26,10 @@ extern int blur_passes;
 extern float blur_radius;
 extern int blur_downsample;
 
+extern float blur_vibrancy;
+extern float blur_vibrancy_darkness;
+extern float blur_noise_strength;
+
 extern bool mica_enabled;
 extern float mica_tint[4];
 extern float mica_tint_strength;
@@ -85,13 +89,13 @@ struct bwm_blur_ctx {
   GLuint prog_corner_mask;
 
   struct {
-  	GLint tex, halfpixel, offset;
+    GLint tex, halfpixel, offset, noise_strength;
   } u_kawase;
   struct {
-    GLint tex, texel_size, radius;
+    GLint tex, texel_size, radius, vibrancy, vibrancy_darkness;
   } u_gauss;
   struct {
-    GLint tex, texel_size, radius;
+    GLint tex, texel_size, radius, vibrancy, vibrancy_darkness;
   } u_box;
   struct {
     GLint tex;

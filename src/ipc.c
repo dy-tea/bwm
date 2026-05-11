@@ -3240,6 +3240,48 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       snprintf(buf, sizeof(buf), "%d\n", blur_downsample);
       send_success(client_fd, buf);
     }
+  } else if (streq("blur_vibrancy", *args)) {
+    if (num >= 2) {
+      float val = atof(args[1]);
+      if (val >= 0.0f && val <= 1.0f) {
+        blur_vibrancy = val;
+        send_success(client_fd, "blur_vibrancy set\n");
+      } else {
+        send_failure(client_fd, "config blur_vibrancy: value must be 0.0-1.0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.3f\n", blur_vibrancy);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("blur_vibrancy_darkness", *args)) {
+    if (num >= 2) {
+      float val = atof(args[1]);
+      if (val >= 0.0f && val <= 1.0f) {
+        blur_vibrancy_darkness = val;
+        send_success(client_fd, "blur_vibrancy_darkness set\n");
+      } else {
+        send_failure(client_fd, "config blur_vibrancy_darkness: value must be 0.0-1.0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.3f\n", blur_vibrancy_darkness);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("blur_noise_strength", *args)) {
+    if (num >= 2) {
+      float val = atof(args[1]);
+      if (val >= 0.0f && val <= 1.0f) {
+        blur_noise_strength = val;
+        send_success(client_fd, "blur_noise_strength set\n");
+      } else {
+        send_failure(client_fd, "config blur_noise_strength: value must be 0.0-1.0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.3f\n", blur_noise_strength);
+      send_success(client_fd, buf);
+    }
   } else if (streq("mica_enabled", *args)) {
     if (num >= 2) {
       mica_enabled = (strcmp(args[1], "true") == 0);

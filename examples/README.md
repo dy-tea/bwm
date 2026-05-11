@@ -740,6 +740,26 @@ bmsg config blur_downsample 4
 
 Sets the blur downsample, can be between 1-8 (default: 4).
 
+```
+bmsg config blur_vibrancy <value>
+```
+
+Enhances color saturation in blurred areas (0.0-1.0, default: 0.0). Supported for gaussian and box blur algorithms.
+Higher values create more vivid, saturated colors in the blur effect.
+
+```
+bmsg config blur_vibrancy_darkness <value>
+```
+
+Controls how much dark/dim colors are boosted by vibrancy (0.0-1.0, default: 0.5). Only applies when vibrancy is enabled.
+
+```
+bmsg config blur_noise_strength <value>
+```
+
+Adds noise dithering to reduce banding artifacts in smooth gradients (0.0-1.0, default: 0.0). Supported for kawase blur.
+Higher values add more visible noise/grain to reduce banding.
+
 ### Mica Settings
 
 Mica is a background effect that captures and tints the content behind windows.

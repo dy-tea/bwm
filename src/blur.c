@@ -54,6 +54,10 @@ int blur_passes = 1;
 float blur_radius = 5.0f;
 int blur_downsample = 4;
 
+float blur_vibrancy = 0.0f;
+float blur_vibrancy_darkness = 0.5f;
+float blur_noise_strength = 0.0f;
+
 bool mica_enabled = false;
 float mica_tint[4] = {0.12f, 0.12f, 0.14f, 1.0f};
 float mica_tint_strength = 0.35f;
@@ -286,6 +290,8 @@ static void blur_pass(GLuint src_tex, GLuint dst_fbo, int w, int h, int pass_ind
   glUniform1i(blur_ctx.u_kawase.tex, 0);
   glUniform2f(blur_ctx.u_kawase.halfpixel, 0.5f / (float)w, 0.5f / (float)h);
   glUniform1f(blur_ctx.u_kawase.offset, (float)(pass_index + 1));
+  if (blur_ctx.u_kawase.noise_strength >= 0)
+    glUniform1f(blur_ctx.u_kawase.noise_strength, blur_noise_strength);
 
   draw_quad();
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -360,6 +366,10 @@ static void box_pass(GLuint src_tex, GLuint ping_fbo, GLuint ping_tex,
   glUniform1i(blur_ctx.u_box.tex, 0);
   glUniform2f(blur_ctx.u_box.texel_size, 1.0f / w, 1.0f / h);
   glUniform1f(blur_ctx.u_box.radius, blur_radius);
+  if (blur_ctx.u_box.vibrancy >= 0)
+    glUniform1f(blur_ctx.u_box.vibrancy, blur_vibrancy);
+  if (blur_ctx.u_box.vibrancy_darkness >= 0)
+    glUniform1f(blur_ctx.u_box.vibrancy_darkness, blur_vibrancy_darkness);
   draw_quad();
 
   // V: ping_tex -> pong_fbo
@@ -369,6 +379,10 @@ static void box_pass(GLuint src_tex, GLuint ping_fbo, GLuint ping_tex,
   glUniform1i(blur_ctx.u_box.tex, 0);
   glUniform2f(blur_ctx.u_box.texel_size, 1.0f / w, 1.0f / h);
   glUniform1f(blur_ctx.u_box.radius, blur_radius);
+  if (blur_ctx.u_box.vibrancy >= 0)
+    glUniform1f(blur_ctx.u_box.vibrancy, blur_vibrancy);
+  if (blur_ctx.u_box.vibrancy_darkness >= 0)
+    glUniform1f(blur_ctx.u_box.vibrancy_darkness, blur_vibrancy_darkness);
   draw_quad();
 
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -377,7 +391,7 @@ static void box_pass(GLuint src_tex, GLuint ping_fbo, GLuint ping_tex,
 
 static void gaussian_pass(GLuint src_tex, GLuint ping_fbo, GLuint ping_tex,
     GLuint pong_fbo, int w, int h) {
-  // src_tex -> ping_fbo
+  // src_tex -> ping_fbo (horizontal pass)
   glBindFramebuffer(GL_FRAMEBUFFER, ping_fbo);
   glViewport(0, 0, w, h);
   glActiveTexture(GL_TEXTURE0);
@@ -386,15 +400,23 @@ static void gaussian_pass(GLuint src_tex, GLuint ping_fbo, GLuint ping_tex,
   glUniform1i(blur_ctx.u_gauss.tex, 0);
   glUniform2f(blur_ctx.u_gauss.texel_size, 1.0f/w, 1.0f/h);
   glUniform1f(blur_ctx.u_gauss.radius, blur_radius);
+  if (blur_ctx.u_gauss.vibrancy >= 0)
+    glUniform1f(blur_ctx.u_gauss.vibrancy, blur_vibrancy);
+  if (blur_ctx.u_gauss.vibrancy_darkness >= 0)
+    glUniform1f(blur_ctx.u_gauss.vibrancy_darkness, blur_vibrancy_darkness);
   draw_quad();
 
-  // ping_tex -> pong_fbo
+  // ping_tex -> pong_fbo (vertical pass)
   glBindFramebuffer(GL_FRAMEBUFFER, pong_fbo);
   glBindTexture(GL_TEXTURE_2D, ping_tex);
   glUseProgram(blur_ctx.prog_gauss_v);
   glUniform1i(blur_ctx.u_gauss.tex, 0);
   glUniform2f(blur_ctx.u_gauss.texel_size, 1.0f/w, 1.0f/h);
   glUniform1f(blur_ctx.u_gauss.radius, blur_radius);
+  if (blur_ctx.u_gauss.vibrancy >= 0)
+    glUniform1f(blur_ctx.u_gauss.vibrancy, blur_vibrancy);
+  if (blur_ctx.u_gauss.vibrancy_darkness >= 0)
+    glUniform1f(blur_ctx.u_gauss.vibrancy_darkness, blur_vibrancy_darkness);
   draw_quad();
 
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -479,14 +501,19 @@ bool blur_init(void) {
   blur_ctx.u_kawase.tex = glGetUniformLocation(blur_ctx.prog_kawase, "tex");
   blur_ctx.u_kawase.halfpixel = glGetUniformLocation(blur_ctx.prog_kawase, "halfpixel");
   blur_ctx.u_kawase.offset = glGetUniformLocation(blur_ctx.prog_kawase, "offset");
+  blur_ctx.u_kawase.noise_strength = glGetUniformLocation(blur_ctx.prog_kawase, "noise_strength");
 
   blur_ctx.u_gauss.tex = glGetUniformLocation(blur_ctx.prog_gauss_h, "tex");
   blur_ctx.u_gauss.texel_size = glGetUniformLocation(blur_ctx.prog_gauss_h, "texel_size");
   blur_ctx.u_gauss.radius = glGetUniformLocation(blur_ctx.prog_gauss_h, "radius");
+  blur_ctx.u_gauss.vibrancy = glGetUniformLocation(blur_ctx.prog_gauss_h, "vibrancy");
+  blur_ctx.u_gauss.vibrancy_darkness = glGetUniformLocation(blur_ctx.prog_gauss_h, "vibrancy_darkness");
 
   blur_ctx.u_box.tex = glGetUniformLocation(blur_ctx.prog_box_h, "tex");
   blur_ctx.u_box.texel_size = glGetUniformLocation(blur_ctx.prog_box_h, "texel_size");
   blur_ctx.u_box.radius = glGetUniformLocation(blur_ctx.prog_box_h, "radius");
+  blur_ctx.u_box.vibrancy = glGetUniformLocation(blur_ctx.prog_box_h, "vibrancy");
+  blur_ctx.u_box.vibrancy_darkness = glGetUniformLocation(blur_ctx.prog_box_h, "vibrancy_darkness");
 
   blur_ctx.u_blit.tex = glGetUniformLocation(blur_ctx.prog_blit, "tex");
 
