@@ -57,6 +57,8 @@ int blur_downsample = 4;
 float blur_vibrancy = 0.0f;
 float blur_vibrancy_darkness = 0.5f;
 float blur_noise_strength = 0.0f;
+float blur_brightness = 1.0f;
+float blur_contrast = 1.0f;
 
 bool mica_enabled = false;
 float mica_tint[4] = {0.12f, 0.12f, 0.14f, 1.0f};
@@ -195,9 +197,11 @@ static GLuint compile_shader(GLenum type, const char *src) {
   GLint ok;
   glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
   if (!ok) {
-    char log[512];
-    glGetShaderInfoLog(s, sizeof(log), NULL, log);
-    wlr_log(WLR_ERROR, "blur: shader compile error: %s", log);
+    char log[1024];
+    GLsizei len = 0;
+    glGetShaderInfoLog(s, sizeof(log), &len, log);
+    const char *shader_type = (type == GL_VERTEX_SHADER) ? "vertex" : "fragment";
+    wlr_log(WLR_ERROR, "blur: %s shader compilation error: %.*s", shader_type, len, log);
     glDeleteShader(s);
     return 0;
   }
@@ -222,9 +226,10 @@ static GLuint link_program(const char *frag_src) {
   GLint ok;
   glGetProgramiv(prog, GL_LINK_STATUS, &ok);
   if (!ok) {
-    char log[512];
-    glGetProgramInfoLog(prog, sizeof(log), NULL, log);
-    wlr_log(WLR_ERROR, "blur: program link error: %s", log);
+    char log[1024];
+    GLsizei len = 0;
+    glGetProgramInfoLog(prog, sizeof(log), &len, log);
+    wlr_log(WLR_ERROR, "blur: program linking error: %.*s", len, log);
     glDeleteProgram(prog);
     return 0;
   }
@@ -292,6 +297,14 @@ static void blur_pass(GLuint src_tex, GLuint dst_fbo, int w, int h, int pass_ind
   glUniform1f(blur_ctx.u_kawase.offset, (float)(pass_index + 1));
   if (blur_ctx.u_kawase.noise_strength >= 0)
     glUniform1f(blur_ctx.u_kawase.noise_strength, blur_noise_strength);
+  if (blur_ctx.u_kawase.vibrancy >= 0)
+    glUniform1f(blur_ctx.u_kawase.vibrancy, blur_vibrancy);
+  if (blur_ctx.u_kawase.vibrancy_darkness >= 0)
+    glUniform1f(blur_ctx.u_kawase.vibrancy_darkness, blur_vibrancy_darkness);
+  if (blur_ctx.u_kawase.brightness >= 0)
+    glUniform1f(blur_ctx.u_kawase.brightness, blur_brightness);
+  if (blur_ctx.u_kawase.contrast >= 0)
+    glUniform1f(blur_ctx.u_kawase.contrast, blur_contrast);
 
   draw_quad();
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -370,6 +383,10 @@ static void box_pass(GLuint src_tex, GLuint ping_fbo, GLuint ping_tex,
     glUniform1f(blur_ctx.u_box.vibrancy, blur_vibrancy);
   if (blur_ctx.u_box.vibrancy_darkness >= 0)
     glUniform1f(blur_ctx.u_box.vibrancy_darkness, blur_vibrancy_darkness);
+  if (blur_ctx.u_box.brightness >= 0)
+    glUniform1f(blur_ctx.u_box.brightness, blur_brightness);
+  if (blur_ctx.u_box.contrast >= 0)
+    glUniform1f(blur_ctx.u_box.contrast, blur_contrast);
   draw_quad();
 
   // V: ping_tex -> pong_fbo
@@ -383,6 +400,10 @@ static void box_pass(GLuint src_tex, GLuint ping_fbo, GLuint ping_tex,
     glUniform1f(blur_ctx.u_box.vibrancy, blur_vibrancy);
   if (blur_ctx.u_box.vibrancy_darkness >= 0)
     glUniform1f(blur_ctx.u_box.vibrancy_darkness, blur_vibrancy_darkness);
+  if (blur_ctx.u_box.brightness >= 0)
+    glUniform1f(blur_ctx.u_box.brightness, blur_brightness);
+  if (blur_ctx.u_box.contrast >= 0)
+    glUniform1f(blur_ctx.u_box.contrast, blur_contrast);
   draw_quad();
 
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -404,6 +425,10 @@ static void gaussian_pass(GLuint src_tex, GLuint ping_fbo, GLuint ping_tex,
     glUniform1f(blur_ctx.u_gauss.vibrancy, blur_vibrancy);
   if (blur_ctx.u_gauss.vibrancy_darkness >= 0)
     glUniform1f(blur_ctx.u_gauss.vibrancy_darkness, blur_vibrancy_darkness);
+  if (blur_ctx.u_gauss.brightness >= 0)
+    glUniform1f(blur_ctx.u_gauss.brightness, blur_brightness);
+  if (blur_ctx.u_gauss.contrast >= 0)
+    glUniform1f(blur_ctx.u_gauss.contrast, blur_contrast);
   draw_quad();
 
   // ping_tex -> pong_fbo (vertical pass)
@@ -417,6 +442,10 @@ static void gaussian_pass(GLuint src_tex, GLuint ping_fbo, GLuint ping_tex,
     glUniform1f(blur_ctx.u_gauss.vibrancy, blur_vibrancy);
   if (blur_ctx.u_gauss.vibrancy_darkness >= 0)
     glUniform1f(blur_ctx.u_gauss.vibrancy_darkness, blur_vibrancy_darkness);
+  if (blur_ctx.u_gauss.brightness >= 0)
+    glUniform1f(blur_ctx.u_gauss.brightness, blur_brightness);
+  if (blur_ctx.u_gauss.contrast >= 0)
+    glUniform1f(blur_ctx.u_gauss.contrast, blur_contrast);
   draw_quad();
 
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -502,18 +531,26 @@ bool blur_init(void) {
   blur_ctx.u_kawase.halfpixel = glGetUniformLocation(blur_ctx.prog_kawase, "halfpixel");
   blur_ctx.u_kawase.offset = glGetUniformLocation(blur_ctx.prog_kawase, "offset");
   blur_ctx.u_kawase.noise_strength = glGetUniformLocation(blur_ctx.prog_kawase, "noise_strength");
+  blur_ctx.u_kawase.vibrancy = glGetUniformLocation(blur_ctx.prog_kawase, "vibrancy");
+  blur_ctx.u_kawase.vibrancy_darkness = glGetUniformLocation(blur_ctx.prog_kawase, "vibrancy_darkness");
+  blur_ctx.u_kawase.brightness = glGetUniformLocation(blur_ctx.prog_kawase, "brightness");
+  blur_ctx.u_kawase.contrast = glGetUniformLocation(blur_ctx.prog_kawase, "contrast");
 
   blur_ctx.u_gauss.tex = glGetUniformLocation(blur_ctx.prog_gauss_h, "tex");
   blur_ctx.u_gauss.texel_size = glGetUniformLocation(blur_ctx.prog_gauss_h, "texel_size");
   blur_ctx.u_gauss.radius = glGetUniformLocation(blur_ctx.prog_gauss_h, "radius");
   blur_ctx.u_gauss.vibrancy = glGetUniformLocation(blur_ctx.prog_gauss_h, "vibrancy");
   blur_ctx.u_gauss.vibrancy_darkness = glGetUniformLocation(blur_ctx.prog_gauss_h, "vibrancy_darkness");
+  blur_ctx.u_gauss.brightness = glGetUniformLocation(blur_ctx.prog_gauss_h, "brightness");
+  blur_ctx.u_gauss.contrast = glGetUniformLocation(blur_ctx.prog_gauss_h, "contrast");
 
   blur_ctx.u_box.tex = glGetUniformLocation(blur_ctx.prog_box_h, "tex");
   blur_ctx.u_box.texel_size = glGetUniformLocation(blur_ctx.prog_box_h, "texel_size");
   blur_ctx.u_box.radius = glGetUniformLocation(blur_ctx.prog_box_h, "radius");
   blur_ctx.u_box.vibrancy = glGetUniformLocation(blur_ctx.prog_box_h, "vibrancy");
   blur_ctx.u_box.vibrancy_darkness = glGetUniformLocation(blur_ctx.prog_box_h, "vibrancy_darkness");
+  blur_ctx.u_box.brightness = glGetUniformLocation(blur_ctx.prog_box_h, "brightness");
+  blur_ctx.u_box.contrast = glGetUniformLocation(blur_ctx.prog_box_h, "contrast");
 
   blur_ctx.u_blit.tex = glGetUniformLocation(blur_ctx.prog_blit, "tex");
 

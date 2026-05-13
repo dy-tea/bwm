@@ -760,6 +760,18 @@ bmsg config blur_noise_strength <value>
 Adds noise dithering to reduce banding artifacts in smooth gradients (0.0-1.0, default: 0.0). Supported for kawase blur.
 Higher values add more visible noise/grain to reduce banding.
 
+```
+bmsg config blur_brightness <value>
+```
+
+Adjusts the brightness of blurred areas (0.5-2.0, default: 1.0).
+
+```
+bmsg config blur_contrast <value>
+```
+
+Adjusts the contrast of blurred areas (0.5-2.0, default: 1.0).
+
 ### Mica Settings
 
 Mica is a background effect that captures and tints the content behind windows.

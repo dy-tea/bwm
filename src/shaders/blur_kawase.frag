@@ -1,16 +1,15 @@
+#include "color_helpers.glsl"
+
 precision mediump float;
 uniform sampler2D tex;
 uniform vec2 halfpixel;
 uniform float offset;
 uniform float noise_strength;
+uniform float vibrancy;
+uniform float vibrancy_darkness;
+uniform float brightness;
+uniform float contrast;
 varying vec2 v_uv;
-
-// Simple hash function for noise generation
-float hash(vec2 p) {
-  vec3 p3 = fract(vec3(p.xyx) * 1689.1984);
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.x + p3.y) * p3.z);
-}
 
 void main() {
   vec2 uv = v_uv;
@@ -22,9 +21,14 @@ void main() {
   vec4 color = s / 8.0;
 
   if (noise_strength > 0.0) {
-    float noiseVal = hash(v_uv) - 0.5;
-    color.rgb += noiseVal * noise_strength * 0.5;
+    color.rgb = addNoise(color.rgb, v_uv, noise_strength * 0.5);
   }
+
+  if (vibrancy > 0.0) {
+    color.rgb = applyVibrancy(color.rgb, vibrancy, vibrancy_darkness, 1.0);
+  }
+
+  color.rgb = applyBrightnessContrast(color.rgb, brightness, contrast);
 
   gl_FragColor = color;
 }

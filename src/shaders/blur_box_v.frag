@@ -6,6 +6,8 @@ uniform vec2 texel_size;
 uniform float radius;
 uniform float vibrancy;
 uniform float vibrancy_darkness;
+uniform float brightness;
+uniform float contrast;
 varying vec2 v_uv;
 
 void main() {
@@ -17,14 +19,10 @@ void main() {
   color = color / count;
 
   if (vibrancy > 0.0) {
-    vec3 hsl = rgb2hsl(color.rgb);
-    float brightness = getPerceivedBrightness(color.rgb);
-
-    float boost = brightness * vibrancy * vibrancy_darkness;
-    hsl.y = clamp(hsl.y + (boost * 0.15), 0.0, 1.0);
-
-    color.rgb = hsl2rgb(hsl);
+    color.rgb = applyVibrancy(color.rgb, vibrancy, vibrancy_darkness, 2.0);
   }
+
+  color.rgb = applyBrightnessContrast(color.rgb, brightness, contrast);
 
   gl_FragColor = color;
 }

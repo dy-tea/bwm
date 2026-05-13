@@ -3290,6 +3290,34 @@ static void ipc_cmd_config(char **args, int num, int client_fd) {
       snprintf(buf, sizeof(buf), "%.3f\n", blur_noise_strength);
       send_success(client_fd, buf);
     }
+  } else if (streq("blur_brightness", *args)) {
+    if (num >= 2) {
+      float val = atof(args[1]);
+      if (val >= 0.5f && val <= 2.0f) {
+        blur_brightness = val;
+        send_success(client_fd, "blur_brightness set\n");
+      } else {
+        send_failure(client_fd, "config blur_brightness: value must be 0.5-2.0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.3f\n", blur_brightness);
+      send_success(client_fd, buf);
+    }
+  } else if (streq("blur_contrast", *args)) {
+    if (num >= 2) {
+      float val = atof(args[1]);
+      if (val >= 0.5f && val <= 2.0f) {
+        blur_contrast = val;
+        send_success(client_fd, "blur_contrast set\n");
+      } else {
+        send_failure(client_fd, "config blur_contrast: value must be 0.5-2.0\n");
+      }
+    } else {
+      char buf[64];
+      snprintf(buf, sizeof(buf), "%.3f\n", blur_contrast);
+      send_success(client_fd, buf);
+    }
   } else if (streq("mica_enabled", *args)) {
     if (num >= 2) {
       mica_enabled = (strcmp(args[1], "true") == 0);

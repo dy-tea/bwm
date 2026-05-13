@@ -3,9 +3,14 @@
 precision mediump float;
 
 // Perceived brightness weights (standard luminance coefficients)
+// Source: http://alienryderflex.com/hsp.html
 const mediump float LUM_R = 0.299;
 const mediump float LUM_G = 0.587;
 const mediump float LUM_B = 0.114;
+
+const mediump float VIBRANCY_A = 0.93;
+const mediump float VIBRANCY_B = 0.11;
+const mediump float VIBRANCY_C = 0.66;
 
 // Simple hash function for noise generation
 // From: https://www.shadertoy.com/view/4djSRW
@@ -13,6 +18,19 @@ mediump float hash(mediump vec2 p) {
   mediump vec3 p3 = fract(vec3(p.xyx) * 1689.1984);
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
+}
+
+// Double circle sigmoid curve function
+mediump float doubleCircleSigmoid(mediump float x, mediump float a) {
+  a = clamp(a, 0.0, 1.0);
+
+  mediump float y = 0.0;
+  if (x <= a) {
+    y = a - sqrt(max(a * a - x * x, 0.0));
+  } else {
+    y = a + sqrt(max(pow(1.0 - a, 2.0) - pow(x - 1.0, 2.0), 0.0));
+  }
+  return y;
 }
 
 // Helper for HSL to RGB conversion (must come before hsl2rgb which uses it)
@@ -81,31 +99,52 @@ mediump float getPerceivedBrightness(mediump vec3 rgb) {
 }
 
 // Add noise to reduce banding artifacts
-// strength: 0.0 to 1.0 range
 mediump vec3 addNoise(mediump vec3 color, mediump vec2 uv, mediump float strength) {
   mediump float noiseVal = hash(uv) - 0.5;
   return color + (noiseVal * strength);
 }
 
-// Boost saturation based on perceived brightness
-// vibrancy: 0.0 to 1.0, higher = more saturation boost
-// vibrancy_darkness: 0.0 to 1.0, controls how much dark colors are boosted
-mediump vec3 applyVibrancy(mediump vec3 rgb, mediump float vibrancy, mediump float vibrancy_darkness) {
+mediump vec3 applyVibrancy(mediump vec3 rgb, mediump float vibrancy, mediump float vibrancy_darkness, mediump float passes) {
   if (vibrancy <= 0.0) {
     return rgb;
   }
 
+  mediump float vibrancy_darkness1 = 1.0 - vibrancy_darkness;
   mediump vec3 hsl = rgb2hsl(rgb);
 
-  // Calculate perceived brightness to prevent over-saturation of dark colors
-  mediump float brightness = getPerceivedBrightness(rgb);
+  mediump float perceivedBrightness = doubleCircleSigmoid(
+      sqrt(rgb.r * rgb.r * LUM_R + rgb.g * rgb.g * LUM_G + rgb.b * rgb.b * LUM_B),
+      0.8 * vibrancy_darkness1
+    );
 
-  // Smooth transition based on vibrancy_darkness setting
-  // Higher vibrancy_darkness = boost dark colors more
-  mediump float boost = brightness * vibrancy * vibrancy_darkness;
+  mediump float b1 = VIBRANCY_B * vibrancy_darkness1;
+  mediump float boostBase = hsl[1] > 0.0 ?
+    smoothstep(b1 - VIBRANCY_C * 0.5, b1 + VIBRANCY_C * 0.5,
+      1.0 - (pow(1.0 - hsl[1] * cos(VIBRANCY_A), 2.0) +
+          pow(1.0 - perceivedBrightness * sin(VIBRANCY_A), 2.0))) : 0.0;
 
-  // Apply saturation boost with clamping
-  hsl.y = clamp(hsl.y + (boost * 0.15), 0.0, 1.0);
+  mediump float saturation = clamp(hsl[1] + (boostBase * vibrancy) / passes, 0.0, 1.0);
+  return hsl2rgb(vec3(hsl[0], saturation, hsl[2]));
+}
 
-  return hsl2rgb(hsl);
+mediump vec3 applyContrast(mediump vec3 rgb, mediump float contrast) {
+  if (contrast == 1.0) {
+    return rgb;
+  }
+
+  return (rgb - 0.5) * contrast + 0.5;
+}
+
+mediump vec3 applyBrightness(mediump vec3 rgb, mediump float brightness) {
+  if (brightness == 1.0) {
+    return rgb;
+  }
+
+  return rgb * brightness;
+}
+
+mediump vec3 applyBrightnessContrast(mediump vec3 rgb, mediump float brightness, mediump float contrast) {
+  rgb = applyBrightness(rgb, brightness);
+  rgb = applyContrast(rgb, contrast);
+  return rgb;
 }
