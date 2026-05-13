@@ -77,9 +77,9 @@ void main(void) {
     // Numerical gradient of the SDF gives the surface normal
     const float h = 1.0;
     vec2 gradient = vec2(
-      roundedRectangleDist(position + vec2(h, 0.0), halfRefractionRectSize, refraction_edge_size_pixels) - roundedRectangleDist(position - vec2(h, 0.0), halfRefractionRectSize, refraction_edge_size_pixels),
-      roundedRectangleDist(position + vec2(0.0, h), halfRefractionRectSize, refraction_edge_size_pixels) - roundedRectangleDist(position - vec2(0.0, h), halfRefractionRectSize, refraction_edge_size_pixels)
-    );
+        roundedRectangleDist(position + vec2(h, 0.0), halfRefractionRectSize, refraction_edge_size_pixels) - roundedRectangleDist(position - vec2(h, 0.0), halfRefractionRectSize, refraction_edge_size_pixels),
+        roundedRectangleDist(position + vec2(0.0, h), halfRefractionRectSize, refraction_edge_size_pixels) - roundedRectangleDist(position - vec2(0.0, h), halfRefractionRectSize, refraction_edge_size_pixels)
+      );
 
     vec2 normal = length(gradient) > 1e-6 ? -normalize(gradient) : vec2(0.0, 1.0);
 
