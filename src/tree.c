@@ -1047,11 +1047,13 @@ bool focus_node(struct bwm_output *m, desktop_t *d, node_t *n) {
   }
 
   // pointer follows focus
-  if (pointer_follows_focus && n != NULL && n->client != NULL) {
+  if (pointer_follows_focus && n != NULL && n->client != NULL && !server.focus_from_click) {
     int center_x = n->rectangle.x + n->rectangle.width / 2;
     int center_y = n->rectangle.y + n->rectangle.height / 2;
     wlr_cursor_warp(server.cursor, NULL, center_x, center_y);
   }
+
+  server.focus_from_click = false;
 
   return true;
 }

@@ -580,6 +580,7 @@ void cursor_button(struct wl_listener *listener, void *data) {
           continue;
         node_t *tab_leaf = tabs_hit_test_desktop(d, server.cursor->x, server.cursor->y);
         if (tab_leaf != NULL) {
+          server.focus_from_click = true;
           focus_node(m, d, tab_leaf);
           arrange(m, d, true);
           server.cursor_buttons |= 1 << (event->button - 272);
@@ -611,6 +612,7 @@ void cursor_button(struct wl_listener *listener, void *data) {
 	        desktop_t *d = m ? m->desk : NULL;
 	        if (d)
 	          d->focus = xwayland_view->node;
+	        server.focus_from_click = true;
 	        focus_node(m, d, xwayland_view->node);
 	      }
     	} else {

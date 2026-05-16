@@ -157,6 +157,7 @@ struct bwm_server {
   struct wlr_box grab_geobox;
   uint32_t resize_edges;
   uint32_t cursor_buttons;
+  bool focus_from_click;
 
   // tiled resize state
   struct node_t *tiled_resize_node;
