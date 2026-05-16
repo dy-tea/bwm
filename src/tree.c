@@ -14,6 +14,7 @@
 #include <wlr/util/log.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_cursor.h>
 
 // global settings
 automatic_scheme_t automatic_scheme = SCHEME_SPIRAL;
@@ -1043,6 +1044,13 @@ bool focus_node(struct bwm_output *m, desktop_t *d, node_t *n) {
                             node->client->xwayland_view->border_rects, node->client);
       }
     }
+  }
+
+  // pointer follows focus
+  if (pointer_follows_focus && n != NULL && n->client != NULL) {
+    int center_x = n->rectangle.x + n->rectangle.width / 2;
+    int center_y = n->rectangle.y + n->rectangle.height / 2;
+    wlr_cursor_warp(server.cursor, NULL, center_x, center_y);
   }
 
   return true;

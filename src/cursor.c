@@ -458,6 +458,28 @@ static void process_cursor_motion(uint32_t time, double dx, double dy, double dx
   if (surface) {
     wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
     wlr_seat_pointer_notify_motion(seat, time, sx, sy);
+
+    // focus follows pointer
+    if (focus_follows_pointer && type != NULL) {
+      node_t *node = NULL;
+
+      struct wlr_xdg_surface *xdg_surface = wlr_xdg_surface_try_from_wlr_surface(surface);
+      if (xdg_surface != NULL && xdg_surface->role != WLR_XDG_SURFACE_ROLE_POPUP) {
+        struct bwm_toplevel *toplevel = type;
+        if (toplevel && toplevel->node)
+          node = toplevel->node;
+      } else {
+        struct wlr_xwayland_surface *xwayland_surface = wlr_xwayland_surface_try_from_wlr_surface(surface);
+        if (xwayland_surface != NULL) {
+          struct bwm_xwayland_view *xwayland_view = type;
+          if (xwayland_view && xwayland_view->node)
+            node = xwayland_view->node;
+        }
+      }
+
+      if (node && node->output && node->desktop)
+        focus_node(node->output, node->desktop, node);
+    }
   } else {
     wlr_seat_pointer_clear_focus(seat);
   }
