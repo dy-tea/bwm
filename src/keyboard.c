@@ -648,11 +648,7 @@ void toggle_floating(void) {
 		wlr_scene_node_reparent(&scene_tree->node, server.float_tree);
 
 		// restore focus
-		mon->desk->focus = n;
-		if (n->client->toplevel)
-			focus_toplevel(n->client->toplevel);
-		else if (n->client->xwayland_view)
-			xwayland_view_set_activated(n->client->xwayland_view, true);
+		focus_node(mon, mon->desk, n);
 
 		set_state(mon, mon->desk, n, STATE_FLOATING);
 

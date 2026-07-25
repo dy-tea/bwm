@@ -16,7 +16,6 @@
 - Better HDR handling (might have a broken implementation)
 - Rework the docs to be easier to use
 - Figure out why foot is undersized and if undersized logic is needed
-- Better FOWA (focus is sometimes lost to toplevels in other workspaces)
 
 # Potential
 - Per desktop rules

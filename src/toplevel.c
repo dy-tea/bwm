@@ -814,11 +814,11 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
 
 		// focus handling after removing node
 		if (d->focus != NULL && d->focus->client != NULL) {
-			focus_node(m, d, d->focus);
+			focus_node(d->output ? d->output : m, d, d->focus);
 		} else if (d->root != NULL) {
 			d->focus = first_extrema(d->root);
 			if (d->focus != NULL)
-				focus_node(m, d, d->focus);
+				focus_node(d->output ? d->output : m, d, d->focus);
 		}
 	}
 
@@ -1225,6 +1225,13 @@ void toplevel_set_app_id(struct wl_listener *listener, void *data) {
 void focus_toplevel(struct toplevel_t *toplevel) {
 	if (toplevel == NULL || toplevel->xdg_toplevel == NULL)
 		return;
+
+	// never steal keyboard focus to a window on a non-visible desktop
+	if (toplevel->node && toplevel->node->desktop && toplevel->node->output &&
+			toplevel->node->desktop != toplevel->node->output->desk) {
+		toplevel->node->desktop->focus = toplevel->node;
+		return;
+	}
 
 	struct wlr_seat *seat = server.seat;
 	struct wlr_surface *surface = toplevel->xdg_toplevel->base->surface;

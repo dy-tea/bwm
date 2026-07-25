@@ -87,8 +87,8 @@ void scratchpad_add(node_t *n) {
 		if (d->focus == n || d->focus == NULL) {
 			if (d->root) {
 				d->focus = first_extrema(d->root);
-				if (d->focus && d->focus->client && d->focus->client->toplevel)
-					focus_toplevel(d->focus->client->toplevel);
+				if (d->focus && d->focus->client)
+					focus_node(d->output, d, d->focus);
 			} else {
 				d->focus = NULL;
 			}
@@ -253,8 +253,8 @@ void scratchpad_hide(node_t *n) {
 			if (d->focus == n || d->focus == NULL) {
 				if (d->root) {
 					d->focus = first_extrema(d->root);
-					if (d->focus && d->focus->client && d->focus->client->toplevel)
-						focus_toplevel(d->focus->client->toplevel);
+					if (d->focus && d->focus->client)
+						focus_node(d->output, d, d->focus);
 				} else {
 					d->focus = NULL;
 				}
@@ -296,8 +296,8 @@ void scratchpad_hide(node_t *n) {
 			if (d->focus == n || d->focus == NULL) {
 				if (d->root) {
 					d->focus = first_extrema(d->root);
-					if (d->focus && d->focus->client && d->focus->client->toplevel)
-						focus_toplevel(d->focus->client->toplevel);
+					if (d->focus && d->focus->client)
+						focus_node(out, d, d->focus);
 				} else {
 					d->focus = NULL;
 				}

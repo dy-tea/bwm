@@ -1061,8 +1061,8 @@ void remove_node(desktop_t *d, node_t *n) {
 				d->focus = b;
 
 			// give kb focus to new node
-			if (d->focus != NULL && d->focus->client != NULL && d->focus->client->toplevel != NULL)
-				focus_toplevel(d->focus->client->toplevel);
+			if (d->focus != NULL && d->focus->client != NULL)
+				focus_node(d->output ? d->output : mon, d, d->focus);
 		}
 	}
 
@@ -1121,7 +1121,18 @@ static bool focus_node_impl(output_t *m, desktop_t *d, node_t *n, bool give_keyb
 	server.focused_output = m;
 
 	bool is_current_desktop = (m->desk == d);
-	if (is_current_desktop && d->layout == LAYOUT_MONOCLE && d->root != NULL) {
+
+	if (!is_current_desktop) {
+		if (give_keyboard_focus) {
+			ipc_put_status(SUB_MASK_REPORT, NULL);
+			ipc_put_status(SUB_MASK_NODE_FOCUS, "node_focus[%s,%s,%u]\n",
+				n->client && n->client->app_id[0] ? n->client->app_id : "?",
+				n->client && n->client->title[0] ? n->client->title : "?", n->id);
+		}
+		return true;
+	}
+
+	if (d->layout == LAYOUT_MONOCLE && d->root != NULL) {
 		// update visibility state and scene graph for all nodes
 		for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root)) {
 			if (node->client == NULL)
@@ -1132,7 +1143,7 @@ static bool focus_node_impl(output_t *m, desktop_t *d, node_t *n, bool give_keyb
 			if (scene_tree)
 				wlr_scene_node_set_enabled(&scene_tree->node, should_show);
 		}
-	} else if (is_current_desktop && d->layout == LAYOUT_SCROLLER && d->root != NULL) {
+	} else if (d->layout == LAYOUT_SCROLLER && d->root != NULL) {
 		for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
 			if (node->client != NULL)
 				node->client->shown = true;
@@ -1144,11 +1155,11 @@ static bool focus_node_impl(output_t *m, desktop_t *d, node_t *n, bool give_keyb
 		} else {
 			wlr_log(WLR_DEBUG, "focus_node: scroller layout, skipping arrange (initial map)");
 		}
-	} else if (is_current_desktop && d->root != NULL) {
+	} else if (d->root != NULL) {
 		for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
 			if (node->client != NULL)
 				node->client->shown = true;
-	} else if (is_current_desktop) {
+	} else {
 		// mark all windows as shown in tiled mode, but only for current desktop
 		if (d->root != NULL)
 			for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
@@ -1183,7 +1194,7 @@ static bool focus_node_impl(output_t *m, desktop_t *d, node_t *n, bool give_keyb
 	}
 
 	// update border colors for all visible clients on this desktop
-	if (is_current_desktop && d->root != NULL) {
+	if (d->root != NULL) {
 		for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root)) {
 			if (node->client == NULL)
 				continue;

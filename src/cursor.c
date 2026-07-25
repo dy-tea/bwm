@@ -599,7 +599,7 @@ static void process_cursor_motion(uint32_t time, double dx, double dy, double dx
 				}
 			}
 
-			if (node && node->output && node->desktop)
+			if (node && node->output && node->desktop && node->desktop == node->output->desk)
 				focus_node(node->output, node->desktop, node);
 		} else if (focus_follows_mouse == FOLLOWS_ALWAYS) {
 			wlr_seat_keyboard_notify_clear_focus(seat);
@@ -748,8 +748,8 @@ void cursor_button(struct wl_listener *listener, void *data) {
 				xwayland_toplevel_t *xwayland_view = type;
 				if (xwayland_view && xwayland_view->node) {
 					output_t *m = xwayland_view->node->output;
-					desktop_t *d = m ? m->desk : NULL;
-					if (d)
+					desktop_t *d = xwayland_view->node->desktop;
+					if (d && d != (m ? m->desk : NULL))
 						d->focus = xwayland_view->node;
 					server.focus_from_click = true;
 					focus_node(m, d, xwayland_view->node);
@@ -758,10 +758,10 @@ void cursor_button(struct wl_listener *listener, void *data) {
 				toplevel_t *toplevel = type;
 				if (toplevel && toplevel->node) {
 					output_t *m = toplevel->node->output;
-					desktop_t *d = m ? m->desk : NULL;
-					if (d)
-						d->focus = toplevel->node;
-					focus_toplevel(toplevel);
+					desktop_t *d = toplevel->node->desktop;
+					if (!d)
+						d = m ? m->desk : NULL;
+					focus_node(m, d, toplevel->node);
 				}
 			}
 		}
