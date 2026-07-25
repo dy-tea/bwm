@@ -302,3 +302,5 @@ extern struct output_t *mon_tail;
 extern uint32_t next_node_id;
 extern uint32_t next_desktop_id;
 extern uint32_t next_monitor_id;
+extern desktop_t *orphan_desk_head;
+extern desktop_t *orphan_desk_tail;

@@ -396,9 +396,33 @@ static void handle_output_destroy(struct wl_listener *listener, void *data) {
 	desktop_t *d = output->desk_head;
 	while (d) {
 		desktop_t *next = d->next;
-		free(d);
+
+		if (d->root) {
+			node_t *n = first_extrema(d->root);
+			while (n) {
+				n->output = NULL;
+				n = next_leaf(n, d->root);
+			}
+		}
+
+		d->output = NULL;
+		d->prev = NULL;
+		d->next = NULL;
+
+		if (!orphan_desk_head) {
+			orphan_desk_head = d;
+			orphan_desk_tail = d;
+		} else {
+			orphan_desk_tail->next = d;
+			d->prev = orphan_desk_tail;
+			orphan_desk_tail = d;
+		}
+
 		d = next;
 	}
+	output->desk_head = NULL;
+	output->desk_tail = NULL;
+	output->desk = NULL;
 
 	ipc_put_status(SUB_MASK_MONITOR_REMOVE, "monitor_remove[%s]\n", output->name);
 	free(output);
@@ -435,23 +459,51 @@ void handle_new_output(struct wl_listener *listener, void *data) {
 		1080
 	};
 
-	// create default workspace for output
-	desktop_t *d = calloc(1, sizeof(desktop_t));
-	if (d) {
-		d->id = next_desktop_id++;
-		strncpy(d->name, "default", SMALEN - 1);
-		d->layout = LAYOUT_TILED;
-		d->user_layout = LAYOUT_TILED;
-		d->window_gap = window_gap;
-		d->master_stack_count = 1;
-		d->padding = (padding_t){0};
-		d->root = NULL;
-		d->focus = NULL;
-		d->output = output;
+	// restore orphaned desktops or create default workspace
+	if (orphan_desk_head) {
+		output->desk = orphan_desk_head;
+		output->desk_head = orphan_desk_head;
+		output->desk_tail = orphan_desk_tail;
 
-		output->desk = d;
-		output->desk_head = d;
-		output->desk_tail = d;
+		output->desk_head->prev = NULL;
+
+		desktop_t *d = orphan_desk_head;
+		while (d) {
+			d->output = output;
+			if (d->root) {
+				node_t *n = first_extrema(d->root);
+				while (n) {
+					n->output = output;
+					n = next_leaf(n, d->root);
+				}
+			}
+			d = d->next;
+		}
+
+		orphan_desk_head = NULL;
+		orphan_desk_tail = NULL;
+
+		if (output->desk->root && output->desk->focus)
+			focus_node(output, output->desk, output->desk->focus);
+		arrange(output, output->desk, true);
+	} else {
+		desktop_t *d = calloc(1, sizeof(desktop_t));
+		if (d) {
+			d->id = next_desktop_id++;
+			strncpy(d->name, "default", SMALEN - 1);
+			d->layout = LAYOUT_TILED;
+			d->user_layout = LAYOUT_TILED;
+			d->window_gap = window_gap;
+			d->master_stack_count = 1;
+			d->padding = (padding_t){0};
+			d->root = NULL;
+			d->focus = NULL;
+			d->output = output;
+
+			output->desk = d;
+			output->desk_head = d;
+			output->desk_tail = d;
+		}
 	}
 
 	// add to monitor linked list

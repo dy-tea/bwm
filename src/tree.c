@@ -103,6 +103,8 @@ output_t *mon_tail = NULL;
 uint32_t next_node_id = 1;
 uint32_t next_desktop_id = 1;
 uint32_t next_monitor_id = 1;
+desktop_t *orphan_desk_head = NULL;
+desktop_t *orphan_desk_tail = NULL;
 static uint64_t next_master_stack_order = 1;
 
 node_t *make_node(uint32_t id) {

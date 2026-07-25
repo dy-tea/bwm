@@ -10,7 +10,6 @@
 # Layout
 - Better tab grouping (see sway or Hyprland for reference)
 - Better scrolling layout from niri (not using bsp tree)
-- Workspace memory / monitor hotplug
 
 # Misc
 - Better HDR handling (might have a broken implementation)

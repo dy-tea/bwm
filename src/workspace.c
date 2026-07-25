@@ -92,20 +92,24 @@ void workspace_sync(void) {
 	if (!mon_head)
 		return;
 
-	desktop_t *d = mon_head->desk_head;
-	while (d != NULL) {
-		struct wlr_ext_workspace_handle_v1 *workspace =
-			wlr_ext_workspace_handle_v1_create(server.workspace_manager, NULL, 0);
-		if (!workspace) {
-			wlr_log(WLR_ERROR, "Failed to create workspace: %s", d->name);
+	output_t *m = mon_head;
+	while (m) {
+		desktop_t *d = m->desk_head;
+		while (d != NULL) {
+			struct wlr_ext_workspace_handle_v1 *workspace =
+				wlr_ext_workspace_handle_v1_create(server.workspace_manager, NULL, 0);
+			if (!workspace) {
+				wlr_log(WLR_ERROR, "Failed to create workspace: %s", d->name);
+				d = d->next;
+				continue;
+			}
+
+			wlr_ext_workspace_handle_v1_set_name(workspace, d->name);
+			wlr_ext_workspace_handle_v1_set_group(workspace, group);
+
 			d = d->next;
-			continue;
 		}
-
-		wlr_ext_workspace_handle_v1_set_name(workspace, d->name);
-		wlr_ext_workspace_handle_v1_set_group(workspace, group);
-
-		d = d->next;
+		m = m->next;
 	}
 
 	struct wlr_ext_workspace_handle_v1 *active = find_workspace_by_name(mon_head->desk->name);
