@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gesture.h"
+#include "types.h"
 
 #include <stdint.h>
 #include <wayland-server.h>
@@ -9,7 +10,6 @@
 #define MAX_KEYBINDS 256
 #define MAX_GESTUREBINDS 64
 #define MAX_HOTCORNERBINDS 16
-#define MAXLEN 256
 
 typedef struct submap submap_t;
 

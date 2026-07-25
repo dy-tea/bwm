@@ -139,6 +139,86 @@ uint32_t parse_keycode(const char *name) {
 	return 0;
 }
 
+typedef struct {
+	const char *cmd;
+	const char *subcmd;
+	const char *subsubcmd;
+	bind_action_t action;
+} action_entry_t;
+
+#define ENTRY(c, s, ss, a) { c, s, ss, a }
+#define ENTRY2(c, s, a)    { c, s, NULL, a }
+#define ENTRY1(c, a)       { c, NULL, NULL, a }
+
+static const action_entry_t action_table[] = {
+	ENTRY2("focus", "west", BIND_FOCUS_WEST),
+	ENTRY2("focus", "south", BIND_FOCUS_SOUTH),
+	ENTRY2("focus", "north", BIND_FOCUS_NORTH),
+	ENTRY2("focus", "east", BIND_FOCUS_EAST),
+	ENTRY2("swap", "west", BIND_SWAP_WEST),
+	ENTRY2("swap", "south", BIND_SWAP_SOUTH),
+	ENTRY2("swap", "north", BIND_SWAP_NORTH),
+	ENTRY2("swap", "east", BIND_SWAP_EAST),
+	ENTRY2("presel", "west", BIND_PRESEL_WEST),
+	ENTRY2("presel", "south", BIND_PRESEL_SOUTH),
+	ENTRY2("presel", "north", BIND_PRESEL_NORTH),
+	ENTRY2("presel", "east", BIND_PRESEL_EAST),
+	ENTRY2("presel", "cancel", BIND_PRESEL_CANCEL),
+	ENTRY2("resize", "left", BIND_RESIZE_LEFT),
+	ENTRY2("resize", "right", BIND_RESIZE_RIGHT),
+	ENTRY2("resize", "up", BIND_RESIZE_UP),
+	ENTRY2("resize", "down", BIND_RESIZE_DOWN),
+	ENTRY2("toggle", "floating", BIND_TOGGLE_FLOATING),
+	ENTRY2("toggle", "fullscreen", BIND_TOGGLE_FULLSCREEN),
+	ENTRY2("toggle", "pseudo_tiled", BIND_TOGGLE_PSEUDO_TILED),
+	ENTRY2("toggle", "monocle", BIND_TOGGLE_MONOCLE),
+	ENTRY2("node", "-c", BIND_NODE_CLOSE),
+	ENTRY2("node", "--close", BIND_NODE_CLOSE),
+	ENTRY2("node", "-f", BIND_NODE_FOCUS),
+	ENTRY2("node", "--focus", BIND_NODE_FOCUS),
+	ENTRY2("node", "interactive_move", BIND_INTERACTIVE_MOVE),
+	ENTRY2("node", "interactive_resize", BIND_INTERACTIVE_RESIZE),
+	ENTRY2("node", "tiling_drag", BIND_TILING_DRAG),
+	ENTRY("node", "-t", "tiled", BIND_NODE_STATE_TILED),
+	ENTRY("node", "-t", "floating", BIND_NODE_STATE_FLOATING),
+	ENTRY("node", "-t", "fullscreen", BIND_NODE_STATE_FULLSCREEN),
+	ENTRY("node", "-t", "pseudo_tiled", BIND_TOGGLE_PSEUDO_TILED),
+	ENTRY("node", "--state", "tiled", BIND_NODE_STATE_TILED),
+	ENTRY("node", "--state", "floating", BIND_NODE_STATE_FLOATING),
+	ENTRY("node", "--state", "fullscreen", BIND_NODE_STATE_FULLSCREEN),
+	ENTRY("node", "--state", "pseudo_tiled", BIND_TOGGLE_PSEUDO_TILED),
+	ENTRY("desktop", "-l", "tiled", BIND_DESKTOP_LAYOUT_TILED),
+	ENTRY("desktop", "-l", "monocle", BIND_DESKTOP_LAYOUT_MONOCLE),
+	ENTRY("desktop", "-l", "master_stack", BIND_DESKTOP_LAYOUT_MASTER_STACK),
+	ENTRY("desktop", "--layout", "tiled", BIND_DESKTOP_LAYOUT_TILED),
+	ENTRY("desktop", "--layout", "monocle", BIND_DESKTOP_LAYOUT_MONOCLE),
+	ENTRY("desktop", "--layout", "master_stack", BIND_DESKTOP_LAYOUT_MASTER_STACK),
+	ENTRY2("desktop", "last", BIND_DESKTOP_LAST),
+	ENTRY1("quit", BIND_QUIT),
+};
+
+
+#undef ENTRY
+#undef ENTRY2
+#undef ENTRY1
+
+static bind_action_t lookup_action(const char *args[3], int argc) {
+	for (size_t i = 0; i < sizeof(action_table) / sizeof(action_table[0]); i++) {
+		const action_entry_t *e = &action_table[i];
+		if (strcmp(args[0], e->cmd) != 0)
+			continue;
+		if (e->subcmd == NULL)
+			return e->action;
+		if (argc < 2 || strcmp(args[1], e->subcmd) != 0)
+			continue;
+		if (e->subsubcmd == NULL)
+			return e->action;
+		if (argc >= 3 && strcmp(args[2], e->subsubcmd) == 0)
+			return e->action;
+	}
+	return BIND_NONE;
+}
+
 bind_action_t parse_action(const char *cmd, int *desktop_index, char *submap_name) {
 	*desktop_index = 0;
 	if (submap_name)
@@ -155,142 +235,51 @@ bind_action_t parse_action(const char *cmd, int *desktop_index, char *submap_nam
 		return BIND_ENTER_SUBMAP;
 	}
 
-	if (strncmp(cmd, "doorsctl ", 9) == 0) {
-		char buf[MAXLEN];
-		snprintf(buf, sizeof(buf), "%s", cmd + 9);
+	if (strncmp(cmd, "doorsctl ", 9) != 0)
+		return BIND_EXTERNAL;
 
-		char *args[16];
-		int argc = 0;
-		char *saveptr;
-		char *token = strtok_r(buf, " \t", &saveptr);
-		while (token && argc < 16) {
-			args[argc++] = token;
-			token = strtok_r(NULL, " \t", &saveptr);
-		}
+	char buf[MAXLEN];
+	snprintf(buf, sizeof(buf), "%s", cmd + 9);
 
-		if (argc == 0)
-			return BIND_NONE;
+	char *args[16];
+	int argc = 0;
+	char *saveptr;
+	char *token = strtok_r(buf, " \t", &saveptr);
+	while (token && argc < 16) {
+		args[argc++] = token;
+		token = strtok_r(NULL, " \t", &saveptr);
+	}
 
-		if (strcmp(args[0], "quit") == 0)
-			return BIND_QUIT;
+	if (argc == 0)
+		return BIND_NONE;
 
-		if (strcmp(args[0], "focus") == 0 && argc >= 2) {
-			if (strcmp(args[1], "west") == 0)
-				return BIND_FOCUS_WEST;
-			if (strcmp(args[1], "south") == 0)
-				return BIND_FOCUS_SOUTH;
-			if (strcmp(args[1], "north") == 0)
-				return BIND_FOCUS_NORTH;
-			if (strcmp(args[1], "east") == 0)
-				return BIND_FOCUS_EAST;
-		}
+	// dispatch table lookup first
+	bind_action_t action = lookup_action((const char **)args, argc);
+	if (action != BIND_NONE)
+		return action;
 
-		if (strcmp(args[0], "swap") == 0 && argc >= 2) {
-			if (strcmp(args[1], "west") == 0)
-				return BIND_SWAP_WEST;
-			if (strcmp(args[1], "south") == 0)
-				return BIND_SWAP_SOUTH;
-			if (strcmp(args[1], "north") == 0)
-				return BIND_SWAP_NORTH;
-			if (strcmp(args[1], "east") == 0)
-				return BIND_SWAP_EAST;
-		}
-
-		if (strcmp(args[0], "presel") == 0 && argc >= 2) {
-			if (strcmp(args[1], "west") == 0)
-				return BIND_PRESEL_WEST;
-			if (strcmp(args[1], "south") == 0)
-				return BIND_PRESEL_SOUTH;
-			if (strcmp(args[1], "north") == 0)
-				return BIND_PRESEL_NORTH;
-			if (strcmp(args[1], "east") == 0)
-				return BIND_PRESEL_EAST;
-			if (strcmp(args[1], "cancel") == 0)
-				return BIND_PRESEL_CANCEL;
-		}
-
-		if (strcmp(args[0], "resize") == 0 && argc >= 2) {
-			if (strcmp(args[1], "left") == 0)
-				return BIND_RESIZE_LEFT;
-			if (strcmp(args[1], "right") == 0)
-				return BIND_RESIZE_RIGHT;
-			if (strcmp(args[1], "up") == 0)
-				return BIND_RESIZE_UP;
-			if (strcmp(args[1], "down") == 0)
-				return BIND_RESIZE_DOWN;
-		}
-
-		if (strcmp(args[0], "toggle") == 0 && argc >= 2) {
-			if (strcmp(args[1], "floating") == 0)
-				return BIND_TOGGLE_FLOATING;
-			if (strcmp(args[1], "fullscreen") == 0)
-				return BIND_TOGGLE_FULLSCREEN;
-			if (strcmp(args[1], "pseudo_tiled") == 0)
-				return BIND_TOGGLE_PSEUDO_TILED;
-			if (strcmp(args[1], "monocle") == 0)
-				return BIND_TOGGLE_MONOCLE;
-		}
-
-		if (strcmp(args[0], "node") == 0 && argc >= 2) {
-			if (strcmp(args[1], "-c") == 0 || strcmp(args[1], "--close") == 0)
-				return BIND_NODE_CLOSE;
-
-			if (strcmp(args[1], "-f") == 0 || strcmp(args[1], "--focus") == 0)
-				return BIND_NODE_FOCUS;
-
-			if ((strcmp(args[1], "-t") == 0 || strcmp(args[1], "--state") == 0) && argc >= 3) {
-				if (strcmp(args[2], "tiled") == 0)
-					return BIND_NODE_STATE_TILED;
-				if (strcmp(args[2], "floating") == 0)
-					return BIND_NODE_STATE_FLOATING;
-				if (strcmp(args[2], "fullscreen") == 0)
-					return BIND_NODE_STATE_FULLSCREEN;
-				if (strcmp(args[2], "pseudo_tiled") == 0)
-					return BIND_TOGGLE_PSEUDO_TILED;
-			}
-
-			if (strcmp(args[1], "-d") == 0 || strcmp(args[1], "--to-desktop") == 0) {
-				if (argc >= 3) {
-					int d = atoi(args[2]);
-					if (d >= 1 && d <= 10) {
-						*desktop_index = d;
-						return BIND_SEND_TO_DESKTOP_1;
-					}
+	// special cases that need extra logic
+	if (strcmp(args[0], "node") == 0 && argc >= 2) {
+		if (strcmp(args[1], "-d") == 0 || strcmp(args[1], "--to-desktop") == 0) {
+			if (argc >= 3) {
+				int d = atoi(args[2]);
+				if (d >= 1 && d <= 10) {
+					*desktop_index = d;
+					return BIND_SEND_TO_DESKTOP_1;
 				}
-				return BIND_NODE_TO_DESKTOP;
 			}
-
-			if (strcmp(args[1], "interactive_move") == 0)
-				return BIND_INTERACTIVE_MOVE;
-
-			if (strcmp(args[1], "interactive_resize") == 0)
-				return BIND_INTERACTIVE_RESIZE;
-
-			if (strcmp(args[1], "tiling_drag") == 0)
-				return BIND_TILING_DRAG;
+			return BIND_NODE_TO_DESKTOP;
 		}
+	}
 
-		if (strcmp(args[0], "desktop") == 0 && argc >= 2) {
-			if (strcmp(args[1], "last") == 0)
-				return BIND_DESKTOP_LAST;
+	if (strcmp(args[0], "desktop") == 0 && argc >= 2) {
+		if (strcmp(args[1], "-f") == 0 || strcmp(args[1], "--focus") == 0)
+			return (argc >= 3 && strcmp(args[2], "last") == 0) ? BIND_DESKTOP_LAST : BIND_DESKTOP_FOCUS;
 
-			if (strcmp(args[1], "-f") == 0 || strcmp(args[1], "--focus") == 0)
-				return (argc >= 3 && strcmp(args[2], "last") == 0) ? BIND_DESKTOP_LAST : BIND_DESKTOP_FOCUS;
-
-			if ((strcmp(args[1], "-l") == 0 || strcmp(args[1], "--layout") == 0) && argc >= 3) {
-				if (strcmp(args[2], "tiled") == 0)
-					return BIND_DESKTOP_LAYOUT_TILED;
-				if (strcmp(args[2], "monocle") == 0)
-					return BIND_DESKTOP_LAYOUT_MONOCLE;
-				if (strcmp(args[2], "master_stack") == 0)
-					return BIND_DESKTOP_LAYOUT_MASTER_STACK;
-			}
-
-			int d = atoi(args[1]);
-			if (d >= 1 && d <= 10) {
-				*desktop_index = d;
-				return BIND_DESKTOP_1;
-			}
+		int d = atoi(args[1]);
+		if (d >= 1 && d <= 10) {
+			*desktop_index = d;
+			return BIND_DESKTOP_1;
 		}
 	}
 
@@ -1356,7 +1345,7 @@ void execute_gesturebind(const gesturebind_t *gb) {
 	if (!gb)
 		return;
 	if (gb->action == BIND_ENTER_SUBMAP)
-		return; // FIXME: support this?
+		return; // submap entry from gestures not supported
 	bind_t bind = {
 		.action = gb->action,
 		.desktop_index = gb->desktop_index,
@@ -1388,7 +1377,7 @@ void execute_hotcornerbind(const hotcornerbind_t *hc) {
 	if (!hc)
 		return;
 	if (hc->action == BIND_ENTER_SUBMAP)
-		return; // FIXME: support this?
+		return; // submap entry from hotcorners not supported
 	bind_t bind = {
 		.action = hc->action,
 		.desktop_index = hc->desktop_index,

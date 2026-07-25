@@ -56,6 +56,9 @@ extern hotcornerbind_t *hotcorner_bind_match(int corner_x, int corner_y);
 extern void execute_hotcornerbind(const hotcornerbind_t *hc);
 extern bool gapless_monocle;
 
+#define RESIZE_RATIO_MIN 0.1
+#define RESIZE_RATIO_MAX 0.9
+
 // touch event handlers
 static void handle_touch_down(struct wl_listener *listener, void *data);
 static void handle_touch_up(struct wl_listener *listener, void *data);
@@ -181,11 +184,7 @@ static void update_scene_positions(node_t *n, struct wlr_box rect, desktop_t *d)
 			struct wlr_box r = rect;
 			unsigned int bw = effective_border_width(d);
 			int wg = (gapless_monocle && d->layout == LAYOUT_MONOCLE) ? 0 : compute_window_gap(d);
-			int bleed = wg + 2 * bw;
-			r.x += bw;
-			r.y += bw;
-			r.width = (bleed < r.width ? r.width - bleed : 0);
-			r.height = (bleed < r.height ? r.height - bleed : 0);
+			r = apply_bleed(r, bw, wg);
 
 			n->client->tiled_rectangle = r;
 			n->client->committed_tiled_rectangle = r;
@@ -282,10 +281,10 @@ static void process_cursor_tiled_resize(void) {
 		double new_ratio = server.tiled_resize_initial_ratio_v + ratio_delta;
 
 		// clamp to valid range
-		if (new_ratio < 0.1)
-			new_ratio = 0.1;
-		if (new_ratio > 0.9)
-			new_ratio = 0.9;
+		if (new_ratio < RESIZE_RATIO_MIN)
+			new_ratio = RESIZE_RATIO_MIN;
+		if (new_ratio > RESIZE_RATIO_MAX)
+			new_ratio = RESIZE_RATIO_MAX;
 
 		parent->split_ratio = new_ratio;
 		parent->pending.split_ratio = new_ratio;
@@ -309,10 +308,10 @@ static void process_cursor_tiled_resize(void) {
 		double new_ratio = server.tiled_resize_initial_ratio_h + ratio_delta;
 
 		// clamp to valid range
-		if (new_ratio < 0.1)
-			new_ratio = 0.1;
-		if (new_ratio > 0.9)
-			new_ratio = 0.9;
+		if (new_ratio < RESIZE_RATIO_MIN)
+			new_ratio = RESIZE_RATIO_MIN;
+		if (new_ratio > RESIZE_RATIO_MAX)
+			new_ratio = RESIZE_RATIO_MAX;
 
 		parent->split_ratio = new_ratio;
 		parent->pending.split_ratio = new_ratio;

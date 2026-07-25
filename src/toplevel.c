@@ -434,6 +434,25 @@ void xdg_dialog_handle_new(struct wl_listener *listener, void *data) {
 	toplevel->is_dialog = true;
 }
 
+static void toplevel_set_floating(toplevel_t *toplevel, node_t *n, output_t *output) {
+	wlr_scene_node_reparent(&toplevel->scene_tree->node, server.float_tree);
+	struct wlr_box mon_rect = output->rectangle;
+	struct wlr_box base_rect = n->client->toplevel->xdg_toplevel->base->geometry;
+	n->client->floating_rectangle = (struct wlr_box){
+		.x = mon_rect.x + (mon_rect.width - base_rect.width) / 2,
+		.y = mon_rect.y + (mon_rect.height - base_rect.height) / 2,
+		.width = base_rect.width,
+		.height = base_rect.height
+	};
+	wlr_scene_node_set_position(&toplevel->scene_tree->node, n->client->floating_rectangle.x,
+		n->client->floating_rectangle.y);
+	n->client->last_state = STATE_TILED;
+	n->client->state = STATE_FLOATING;
+	n->hidden = true;
+	n->client->shown = true;
+	wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
+}
+
 void toplevel_map(struct wl_listener *listener, void *data) {
 	(void)data;
 	toplevel_t *toplevel = wl_container_of(listener, toplevel, map);
@@ -615,22 +634,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
 
 	// center to output if floating, also ensure it does not tile
 	if (rule && rule->state == STATE_FLOATING) {
-		wlr_scene_node_reparent(&toplevel->scene_tree->node, server.float_tree);
-		struct wlr_box mon_rect = target_output->rectangle;
-		struct wlr_box base_rect = n->client->toplevel->xdg_toplevel->base->geometry;
-		n->client->floating_rectangle = (struct wlr_box){
-			.x = mon_rect.x + (mon_rect.width - base_rect.width) / 2,
-			.y = mon_rect.y + (mon_rect.height - base_rect.height) / 2,
-			.width = base_rect.width,
-			.height = base_rect.height
-		};
-		wlr_scene_node_set_position(&toplevel->scene_tree->node, n->client->floating_rectangle.x,
-			n->client->floating_rectangle.y);
-		n->client->last_state = STATE_TILED;
-		n->client->state = STATE_FLOATING;
-		n->hidden = true;
-		n->client->shown = true;
-		wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
+		toplevel_set_floating(toplevel, n, target_output);
 	} else if (rule && rule->state == STATE_PSEUDO_TILED) {
 		struct wlr_box base_rect = n->client->toplevel->xdg_toplevel->base->geometry;
 		n->client->floating_rectangle = (struct wlr_box){
@@ -641,22 +645,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
 		};
 		n->client->state = STATE_PSEUDO_TILED;
 	} else if (auto_float_dialogs && toplevel->is_dialog) {
-		wlr_scene_node_reparent(&toplevel->scene_tree->node, server.float_tree);
-		struct wlr_box mon_rect = target_output->rectangle;
-		struct wlr_box base_rect = n->client->toplevel->xdg_toplevel->base->geometry;
-		n->client->floating_rectangle = (struct wlr_box){
-			.x = mon_rect.x + (mon_rect.width - base_rect.width) / 2,
-			.y = mon_rect.y + (mon_rect.height - base_rect.height) / 2,
-			.width = base_rect.width,
-			.height = base_rect.height
-		};
-		wlr_scene_node_set_position(&toplevel->scene_tree->node, n->client->floating_rectangle.x,
-			n->client->floating_rectangle.y);
-		n->client->last_state = STATE_TILED;
-		n->client->state = STATE_FLOATING;
-		n->hidden = true;
-		n->client->shown = true;
-		wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
+		toplevel_set_floating(toplevel, n, target_output);
 	}
 
 	// notify wlr_foreign_toplevel clients about the output association

@@ -55,6 +55,27 @@ static void begin_xwayland_interactive(struct xwayland_toplevel_t *xwayland_view
 	enum cursor_mode mode, uint32_t edges);
 static void handle_xwayland_outputs_update(struct wl_listener *listener, void *data);
 
+static void xwayland_relative_to_absolute(struct wlr_xwayland_surface *parent, int child_x,
+		int child_y, int *abs_x, int *abs_y) {
+	if (parent && !parent->override_redirect && parent->data) {
+		xwayland_toplevel_t *parent_view = parent->data;
+		if (parent_view->xwayland_surface && parent_view->node) {
+			int x_offset = child_x - parent_view->xwayland_surface->x;
+			int y_offset = child_y - parent_view->xwayland_surface->y;
+			if (parent_view->node->client && parent_view->node->client->state == STATE_FLOATING) {
+				*abs_x = parent_view->node->client->floating_rectangle.x + x_offset;
+				*abs_y = parent_view->node->client->floating_rectangle.y + y_offset;
+			} else if (parent_view->node) {
+				*abs_x = parent_view->node->rectangle.x + x_offset;
+				*abs_y = parent_view->node->rectangle.y + y_offset;
+			}
+			return;
+		}
+	}
+	*abs_x += parent ? parent->x : 0;
+	*abs_y += parent ? parent->y : 0;
+}
+
 static void unmanaged_handle_request_configure(struct wl_listener *listener, void *data) {
 	xwayland_unmanaged_t *surface = wl_container_of(listener, surface, request_configure);
 	struct wlr_xwayland_surface *xsurface = surface->xwayland_surface;
@@ -65,29 +86,8 @@ static void unmanaged_handle_request_configure(struct wl_listener *listener, voi
 	if (surface->surface_scene) {
 		int abs_x = ev->x;
 		int abs_y = ev->y;
-
-		if (xsurface->parent) {
-			if (!xsurface->parent->override_redirect && xsurface->parent->data) {
-				xwayland_toplevel_t *parent_view = xsurface->parent->data;
-				if (parent_view->xwayland_surface && parent_view->node) {
-					int x_offset = ev->x - parent_view->xwayland_surface->x;
-					int y_offset = ev->y - parent_view->xwayland_surface->y;
-					if (parent_view->node->client && parent_view->node->client->state == STATE_FLOATING) {
-						abs_x = parent_view->node->client->floating_rectangle.x + x_offset;
-						abs_y = parent_view->node->client->floating_rectangle.y + y_offset;
-					} else if (parent_view->node) {
-						abs_x = parent_view->node->rectangle.x + x_offset;
-						abs_y = parent_view->node->rectangle.y + y_offset;
-					}
-				} else
-					goto add_abs;
-			} else {
-			add_abs:
-				abs_x += xsurface->parent->x;
-				abs_y += xsurface->parent->y;
-			}
-		}
-
+		if (xsurface->parent)
+			xwayland_relative_to_absolute(xsurface->parent, ev->x, ev->y, &abs_x, &abs_y);
 		wlr_scene_node_set_position(&surface->surface_scene->buffer->node, abs_x, abs_y);
 	}
 }
@@ -99,30 +99,8 @@ static void unmanaged_handle_set_geometry(struct wl_listener *listener, void *da
 
 	int abs_x = xsurface->x;
 	int abs_y = xsurface->y;
-
-	if (xsurface->parent) {
-		if (!xsurface->parent->override_redirect && xsurface->parent->data) {
-			xwayland_toplevel_t *parent_view = xsurface->parent->data;
-			if (parent_view->xwayland_surface && parent_view->node) {
-				// convert from X11 space to screen space
-				int x_offset = xsurface->x - parent_view->xwayland_surface->x;
-				int y_offset = xsurface->y - parent_view->xwayland_surface->y;
-				if (parent_view->node->client && parent_view->node->client->state == STATE_FLOATING) {
-					abs_x = parent_view->node->client->floating_rectangle.x + x_offset;
-					abs_y = parent_view->node->client->floating_rectangle.y + y_offset;
-				} else if (parent_view->node) {
-					abs_x = parent_view->node->rectangle.x + x_offset;
-					abs_y = parent_view->node->rectangle.y + y_offset;
-				}
-			} else
-				goto add_abs;
-		} else {
-		add_abs:
-			abs_x += xsurface->parent->x;
-			abs_y += xsurface->parent->y;
-		}
-	}
-
+	if (xsurface->parent)
+		xwayland_relative_to_absolute(xsurface->parent, xsurface->x, xsurface->y, &abs_x, &abs_y);
 	wlr_scene_node_set_position(&surface->surface_scene->buffer->node, abs_x, abs_y);
 }
 
@@ -146,38 +124,10 @@ static void unmanaged_handle_map(struct wl_listener *listener, void *data) {
 				xsurface->parent->override_redirect, xsurface->parent->data);
 
 			// if parent is a managed window, use its X11 coordinates
-			if (!xsurface->parent->override_redirect && xsurface->parent->data) {
-				xwayland_toplevel_t *parent_view = xsurface->parent->data;
-				wlr_log(WLR_INFO, "Parent view found: scene_tree=%p node=%p", (void *)parent_view->scene_tree,
-					(void *)parent_view->node);
-
-				if (parent_view->xwayland_surface && parent_view->node) {
-					// convert from X11 space to screen space
-					int x_offset = xsurface->x - parent_view->xwayland_surface->x;
-					int y_offset = xsurface->y - parent_view->xwayland_surface->y;
-					if (parent_view->node->client && parent_view->node->client->state == STATE_FLOATING) {
-						abs_x = parent_view->node->client->floating_rectangle.x + x_offset;
-						abs_y = parent_view->node->client->floating_rectangle.y + y_offset;
-					} else if (parent_view->node) {
-						abs_x = parent_view->node->rectangle.x + x_offset;
-						abs_y = parent_view->node->rectangle.y + y_offset;
-					}
-
-					wlr_log(WLR_INFO, "Parent X11 at (%d,%d), node at (%d,%d), popup X11 at (%d,%d), offset "
-						"(%d,%d), final: (%d,%d)", parent_view->xwayland_surface->x, parent_view->xwayland_surface->y,
-							parent_view->node->rectangle.x, parent_view->node->rectangle.y, xsurface->x, xsurface->y,
-							x_offset, y_offset, abs_x, abs_y);
-				} else
-					goto add_abs;
-			} else {
-			add_abs:
-				abs_x += xsurface->parent->x;
-				abs_y += xsurface->parent->y;
-			}
+			xwayland_relative_to_absolute(xsurface->parent, xsurface->x, xsurface->y, &abs_x, &abs_y);
 		} else {
 			xwayland_toplevel_t *focused_view = server.last_focused_xwayland_view;
 
-			// probably should remove this, not sure
 			if (!focused_view) {
 				wlr_log(WLR_INFO, "last_focused is NULL, searching for any mapped xwayland window");
 				output_t *mon = server.focused_output ? server.focused_output : mon_head;
@@ -224,20 +174,10 @@ static void unmanaged_handle_map(struct wl_listener *listener, void *data) {
 				}
 			}
 
-			// cursed
 			if (focused_view && focused_view != (xwayland_toplevel_t *)1 && focused_view->mapped &&
 					focused_view->node && focused_view->node->client) {
-				struct wlr_xwayland_surface *parent_xsurface = focused_view->xwayland_surface;
-
-				int x_offset = xsurface->x - parent_xsurface->x;
-				int y_offset = xsurface->y - parent_xsurface->y;
-				if (focused_view->node->client->state == STATE_FLOATING) {
-					abs_x = focused_view->node->client->floating_rectangle.x + x_offset;
-					abs_y = focused_view->node->client->floating_rectangle.y + y_offset;
-				} else {
-					abs_x = focused_view->node->rectangle.x + x_offset;
-					abs_y = focused_view->node->rectangle.y + y_offset;
-				}
+				xwayland_relative_to_absolute(focused_view->xwayland_surface, xsurface->x, xsurface->y, &abs_x,
+					&abs_y);
 			}
 		}
 

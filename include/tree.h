@@ -121,6 +121,11 @@ output_t *find_output_by_name(const char *name);
 #define IS_FLOATING(c) (is_floating(c))
 #define IS_RECEPTACLE(n) ((n) != NULL && (n)->client == NULL && is_leaf(n))
 
+// Client dispatch: unify toplevel/xwayland_view access
+#define CLIENT_DISPATCH(client, field) \
+	((client)->toplevel ? (client)->toplevel->field : \
+	 (client)->xwayland_view ? (client)->xwayland_view->field : NULL)
+
 static inline int effective_border_width(desktop_t *d) {
 	if (smart_borders && d && visible_tiled_count(d) <= 1)
 		return 0;
@@ -131,4 +136,13 @@ static inline int compute_window_gap(desktop_t *d) {
 	if (smart_gaps && visible_tiled_count(d) <= 1)
 		return 0;
 	return d->window_gap;
+}
+
+static inline struct wlr_box apply_bleed(struct wlr_box r, int bw, int wg) {
+	int bleed = wg + 2 * bw;
+	r.x += bw;
+	r.y += bw;
+	r.width = (bleed < r.width ? r.width - bleed : 0);
+	r.height = (bleed < r.height ? r.height - bleed : 0);
+	return r;
 }

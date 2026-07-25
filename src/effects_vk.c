@@ -392,9 +392,8 @@ static bool vk_create_image(int w, int h, VkFormat fmt, VkImageUsageFlags usage,
 	VkMemoryAllocateInfo ai = {
 		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
 		.allocationSize = mr.size,
-		.memoryTypeIndex = vk_find_mem_type(vk->phys_dev,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		mr.memoryTypeBits),
+		.memoryTypeIndex = vk_find_mem_type(vk->phys_dev, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			mr.memoryTypeBits),
 	};
 	if (vkAllocateMemory(vk->device, &ai, NULL, &out->memory) != VK_SUCCESS) {
 		vkDestroyImage(vk->device, out->image, NULL);
@@ -766,14 +765,6 @@ static bool vk_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 	}
 	vk->frame_cb = vk->frame_cb_bufs[0];
 
-	VkAttachmentDescription att = {
-		.format = vk->vk_fmt,
-		.samples = VK_SAMPLE_COUNT_1_BIT,
-		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-		.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-		.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-	};
 	VkAttachmentReference ar = {
 		.attachment = 0,
 		.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
@@ -786,64 +777,39 @@ static bool vk_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 	VkRenderPassCreateInfo rpci = {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
 		.attachmentCount = 1,
-		.pAttachments = &att,
+		.pAttachments = NULL,
 		.subpassCount = 1,
 		.pSubpasses = &sp,
 	};
-	if (vkCreateRenderPass(vk->device, &rpci, NULL, &vk->render_pass) != VK_SUCCESS) {
-		vkDestroyCommandPool(vk->device, vk->cmd_pool, NULL);
-		free(vk);
-		vk = NULL;
-		return false;
-	}
 
-	VkAttachmentDescription no_clear_att = {
-		.format = vk->vk_fmt,
-		.samples = VK_SAMPLE_COUNT_1_BIT,
-		.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-		.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-		.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-	};
-	rpci.pAttachments = &no_clear_att;
-	rpci.attachmentCount = 1;
-	if (vkCreateRenderPass(vk->device, &rpci, NULL, &vk->no_clear_render_pass) != VK_SUCCESS) {
-		vkDestroyCommandPool(vk->device, vk->cmd_pool, NULL);
-		free(vk);
-		vk = NULL;
-		return false;
-	}
-
-	VkAttachmentDescription color_clear_att = {
-		.format = vk->vk_fmt,
-		.samples = VK_SAMPLE_COUNT_1_BIT,
-		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-		.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-		.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-	};
-	rpci.pAttachments = &color_clear_att;
-	if (vkCreateRenderPass(vk->device, &rpci, NULL, &vk->color_clear_render_pass) != VK_SUCCESS) {
-		vkDestroyCommandPool(vk->device, vk->cmd_pool, NULL);
-		free(vk);
-		vk = NULL;
-		return false;
-	}
-
-	VkAttachmentDescription overlay_att = {
-		.format = vk->vk_fmt,
-		.samples = VK_SAMPLE_COUNT_1_BIT,
-		.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-		.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-		.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-	};
-	rpci.pAttachments = &overlay_att;
-	if (vkCreateRenderPass(vk->device, &rpci, NULL, &vk->overlay_render_pass) != VK_SUCCESS) {
-		vkDestroyCommandPool(vk->device, vk->cmd_pool, NULL);
-		free(vk);
-		vk = NULL;
-		return false;
+	for (int i = 0; i < 4; i++) {
+		VkAttachmentLoadOp loadOp = (VkAttachmentLoadOp[]){
+			VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_ATTACHMENT_LOAD_OP_LOAD,
+		} [i];
+		VkRenderPass *dest = (VkRenderPass * []){
+			&vk->render_pass,
+			&vk->no_clear_render_pass,
+			&vk->color_clear_render_pass,
+			&vk->overlay_render_pass,
+		} [i];
+		VkAttachmentDescription att = {
+			.format = vk->vk_fmt,
+			.samples = VK_SAMPLE_COUNT_1_BIT,
+			.loadOp = loadOp,
+			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+			.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		};
+		rpci.pAttachments = &att;
+		if (vkCreateRenderPass(vk->device, &rpci, NULL, dest) != VK_SUCCESS) {
+			vkDestroyCommandPool(vk->device, vk->cmd_pool, NULL);
+			free(vk);
+			vk = NULL;
+			return false;
+		}
 	}
 
 	VkSamplerCreateInfo sci = {
@@ -904,38 +870,57 @@ static bool vk_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 
 	// compile shaders
 	vk->vert_module = vk_compile_shader(vk_effect_tex_vert_src, VK_SHADER_STAGE_VERTEX_BIT);
-	vk->frag_blit = vk_compile_shader(vk_blit_frag_src, VK_SHADER_STAGE_FRAGMENT_BIT);
-	vk->frag_kawase = vk_compile_shader(vk_blur_kawase_frag_src, VK_SHADER_STAGE_FRAGMENT_BIT);
-	vk->frag_gauss_h = vk_compile_shader(vk_blur_gauss_h_frag_src, VK_SHADER_STAGE_FRAGMENT_BIT);
-	vk->frag_gauss_v = vk_compile_shader(vk_blur_gauss_v_frag_src, VK_SHADER_STAGE_FRAGMENT_BIT);
-	vk->frag_box_h = vk_compile_shader(vk_blur_box_h_frag_src, VK_SHADER_STAGE_FRAGMENT_BIT);
-	vk->frag_box_v = vk_compile_shader(vk_blur_box_v_frag_src, VK_SHADER_STAGE_FRAGMENT_BIT);
-	vk->frag_mica = vk_compile_shader(vk_blur_mica_frag_src, VK_SHADER_STAGE_FRAGMENT_BIT);
-	vk->frag_acrylic = vk_compile_shader(vk_blur_acrylic_frag_src, VK_SHADER_STAGE_FRAGMENT_BIT);
-	vk->frag_refraction = vk_compile_shader(vk_blur_refraction_frag_src, VK_SHADER_STAGE_FRAGMENT_BIT);
-	vk->frag_shadow = vk_compile_shader(vk_shadow_frag_src, VK_SHADER_STAGE_FRAGMENT_BIT);
-	vk->frag_border = vk_compile_shader(vk_border_frag_src, VK_SHADER_STAGE_FRAGMENT_BIT);
-	vk->frag_corner_mask = vk_compile_shader(vk_border_corner_mask_frag_src,
-		VK_SHADER_STAGE_FRAGMENT_BIT);
+
+	typedef struct {
+		const char *src;
+		VkShaderModule *dest;
+	} shader_entry_t;
+	shader_entry_t frag_shaders[] = {
+		{vk_blit_frag_src, &vk->frag_blit},
+		{vk_blur_kawase_frag_src, &vk->frag_kawase},
+		{vk_blur_gauss_h_frag_src, &vk->frag_gauss_h},
+		{vk_blur_gauss_v_frag_src, &vk->frag_gauss_v},
+		{vk_blur_box_h_frag_src, &vk->frag_box_h},
+		{vk_blur_box_v_frag_src, &vk->frag_box_v},
+		{vk_blur_mica_frag_src, &vk->frag_mica},
+		{vk_blur_acrylic_frag_src, &vk->frag_acrylic},
+		{vk_blur_refraction_frag_src, &vk->frag_refraction},
+		{vk_shadow_frag_src, &vk->frag_shadow},
+		{vk_border_frag_src, &vk->frag_border},
+		{vk_border_corner_mask_frag_src, &vk->frag_corner_mask},
+	};
+	for (size_t i = 0; i < sizeof(frag_shaders) / sizeof(frag_shaders[0]); i++)
+		*frag_shaders[i].dest = vk_compile_shader(frag_shaders[i].src, VK_SHADER_STAGE_FRAGMENT_BIT);
 
 	if (!vk->vert_module || !vk->frag_blit || !vk->frag_kawase || !vk->frag_corner_mask) {
 		wlr_log(WLR_ERROR, "vk: shaders failed to compile");
 		return false;
 	}
 
-	vk->pipe_blit = vk_create_pipe(vk->frag_blit, false, false);
-	vk->pipe_kawase = vk_create_pipe(vk->frag_kawase, false, false);
-	vk->pipe_gauss_h = vk_create_pipe(vk->frag_gauss_h, false, false);
-	vk->pipe_gauss_v = vk_create_pipe(vk->frag_gauss_v, false, false);
-	vk->pipe_box_h = vk_create_pipe(vk->frag_box_h, false, false);
-	vk->pipe_box_v = vk_create_pipe(vk->frag_box_v, false, false);
-	vk->pipe_mica = vk_create_pipe(vk->frag_mica, false, false);
-	vk->pipe_acrylic = vk_create_pipe(vk->frag_acrylic, false, false);
-	vk->pipe_refraction = vk_create_pipe(vk->frag_refraction, false, false);
-	vk->pipe_shadow = vk_create_pipe(vk->frag_shadow, false, false);
-	vk->pipe_border = vk_create_pipe(vk->frag_border, true, false);
-	vk->pipe_corner_mask = vk_create_pipe(vk->frag_corner_mask, false, true);
-	vk->pipe_corner_mask_clear = vk_create_pipe(vk->frag_corner_mask, false, false);
+	typedef struct {
+		VkShaderModule frag;
+		VkPipeline *dest;
+		bool border_layout;
+		bool corner_mask;
+	} pipe_entry_t;
+	pipe_entry_t pipelines[] = {
+		{vk->frag_blit, &vk->pipe_blit, false, false},
+		{vk->frag_kawase, &vk->pipe_kawase, false, false},
+		{vk->frag_gauss_h, &vk->pipe_gauss_h, false, false},
+		{vk->frag_gauss_v, &vk->pipe_gauss_v, false, false},
+		{vk->frag_box_h, &vk->pipe_box_h, false, false},
+		{vk->frag_box_v, &vk->pipe_box_v, false, false},
+		{vk->frag_mica, &vk->pipe_mica, false, false},
+		{vk->frag_acrylic, &vk->pipe_acrylic, false, false},
+		{vk->frag_refraction, &vk->pipe_refraction, false, false},
+		{vk->frag_shadow, &vk->pipe_shadow, false, false},
+		{vk->frag_border, &vk->pipe_border, true, false},
+		{vk->frag_corner_mask, &vk->pipe_corner_mask, false, true},
+		{vk->frag_corner_mask, &vk->pipe_corner_mask_clear, false, false},
+	};
+	for (size_t i = 0; i < sizeof(pipelines) / sizeof(pipelines[0]); i++)
+		*pipelines[i].dest = vk_create_pipe(pipelines[i].frag, pipelines[i].border_layout,
+			pipelines[i].corner_mask);
 
 	if (!vk->pipe_blit || !vk->pipe_kawase || !vk->pipe_corner_mask || !vk->pipe_corner_mask_clear) {
 		wlr_log(WLR_ERROR, "vk: pipelines failed to create");
@@ -956,8 +941,7 @@ static bool vk_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
 		.allocationSize = bmr.size,
 		.memoryTypeIndex = vk_find_mem_type(vk->phys_dev,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		bmr.memoryTypeBits),
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, bmr.memoryTypeBits),
 	};
 	if (vkAllocateMemory(vk->device, &bai, NULL, &vk->border_ubo_mem) != VK_SUCCESS) {
 		vkDestroyBuffer(vk->device, vk->border_ubo, NULL);
@@ -1041,9 +1025,8 @@ static bool vk_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 	VkMemoryAllocateInfo dai = {
 		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
 		.allocationSize = dmr.size,
-		.memoryTypeIndex = vk_find_mem_type(vk->phys_dev,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		dmr.memoryTypeBits),
+		.memoryTypeIndex = vk_find_mem_type(vk->phys_dev, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			dmr.memoryTypeBits),
 	};
 	if (vkAllocateMemory(vk->device, &dai, NULL, &vk->dummy_img_mem) != VK_SUCCESS)
 		return false;
@@ -1219,54 +1202,55 @@ static void vk_fini(void) {
 		return;
 	vkQueueWaitIdle(vk->queue);
 
-#define DESTROY_PIPE(p)                                                                                                \
-	do {                                                                                                                 \
-		if (p) {                                                                                                           \
-			vkDestroyPipeline(vk->device, p, NULL);                                                                          \
-			p = VK_NULL_HANDLE;                                                                                              \
-		}                                                                                                                  \
-	} while (0)
-#define DESTROY_MOD(m)                                                                                                 \
-	do {                                                                                                                 \
-		if (m) {                                                                                                           \
-			vkDestroyShaderModule(vk->device, m, NULL);                                                                      \
-			m = VK_NULL_HANDLE;                                                                                              \
-		}                                                                                                                  \
-	} while (0)
 	if (vk->screen_shader_pipe) {
 		vkDestroyPipeline(vk->device, vk->screen_shader_pipe, NULL);
 	}
 	if (vk->screen_shader_module) {
 		vkDestroyShaderModule(vk->device, vk->screen_shader_module, NULL);
 	}
-	DESTROY_PIPE(vk->pipe_blit);
-	DESTROY_PIPE(vk->pipe_kawase);
-	DESTROY_PIPE(vk->pipe_gauss_h);
-	DESTROY_PIPE(vk->pipe_gauss_v);
-	DESTROY_PIPE(vk->pipe_box_h);
-	DESTROY_PIPE(vk->pipe_box_v);
-	DESTROY_PIPE(vk->pipe_mica);
-	DESTROY_PIPE(vk->pipe_acrylic);
-	DESTROY_PIPE(vk->pipe_refraction);
-	DESTROY_PIPE(vk->pipe_shadow);
-	DESTROY_PIPE(vk->pipe_border);
-	DESTROY_PIPE(vk->pipe_corner_mask);
-	DESTROY_PIPE(vk->pipe_corner_mask_clear);
-	DESTROY_MOD(vk->vert_module);
-	DESTROY_MOD(vk->frag_blit);
-	DESTROY_MOD(vk->frag_kawase);
-	DESTROY_MOD(vk->frag_gauss_h);
-	DESTROY_MOD(vk->frag_gauss_v);
-	DESTROY_MOD(vk->frag_box_h);
-	DESTROY_MOD(vk->frag_box_v);
-	DESTROY_MOD(vk->frag_mica);
-	DESTROY_MOD(vk->frag_acrylic);
-	DESTROY_MOD(vk->frag_refraction);
-	DESTROY_MOD(vk->frag_shadow);
-	DESTROY_MOD(vk->frag_border);
-	DESTROY_MOD(vk->frag_corner_mask);
-#undef DESTROY_PIPE
-#undef DESTROY_MOD
+
+	VkPipeline *destroy_pipes[] = {
+		&vk->pipe_blit,
+		&vk->pipe_kawase,
+		&vk->pipe_gauss_h,
+		&vk->pipe_gauss_v,
+		&vk->pipe_box_h,
+		&vk->pipe_box_v,
+		&vk->pipe_mica,
+		&vk->pipe_acrylic,
+		&vk->pipe_refraction,
+		&vk->pipe_shadow,
+		&vk->pipe_border,
+		&vk->pipe_corner_mask,
+		&vk->pipe_corner_mask_clear,
+	};
+	VkShaderModule *destroy_mods[] = {
+		&vk->vert_module,
+		&vk->frag_blit,
+		&vk->frag_kawase,
+		&vk->frag_gauss_h,
+		&vk->frag_gauss_v,
+		&vk->frag_box_h,
+		&vk->frag_box_v,
+		&vk->frag_mica,
+		&vk->frag_acrylic,
+		&vk->frag_refraction,
+		&vk->frag_shadow,
+		&vk->frag_border,
+		&vk->frag_corner_mask,
+	};
+	for (size_t i = 0; i < sizeof(destroy_pipes) / sizeof(destroy_pipes[0]); i++) {
+		if (*destroy_pipes[i]) {
+			vkDestroyPipeline(vk->device, *destroy_pipes[i], NULL);
+			*destroy_pipes[i] = VK_NULL_HANDLE;
+		}
+	}
+	for (size_t i = 0; i < sizeof(destroy_mods) / sizeof(destroy_mods[0]); i++) {
+		if (*destroy_mods[i]) {
+			vkDestroyShaderModule(vk->device, *destroy_mods[i], NULL);
+			*destroy_mods[i] = VK_NULL_HANDLE;
+		}
+	}
 
 	if (vk->dummy_view)
 		vkDestroyImageView(vk->device, vk->dummy_view, NULL);

@@ -387,13 +387,7 @@ static void render_leaf(output_t *m, desktop_t *d, node_t *n, struct wlr_box rec
 		r = root_rect;
 		slot = root_rect;
 		use_centering = true;
-		int wg = gapless_monocle ? 0 : compute_window_gap(d);
-		int bleed = wg + 2 * bw;
-
-		r.x += bw;
-		r.y += bw;
-		r.width = (bleed < r.width ? r.width - bleed : 0);
-		r.height = (bleed < r.height ? r.height - bleed : 0);
+		r = apply_bleed(r, bw, gapless_monocle ? 0 : compute_window_gap(d));
 	} else {
 		r = rect;
 		slot = rect;
@@ -405,11 +399,7 @@ static void render_leaf(output_t *m, desktop_t *d, node_t *n, struct wlr_box rec
 		else
 			wg = (gapless_monocle && d->layout == LAYOUT_MONOCLE) ? 0 : compute_window_gap(d);
 
-		int bleed = wg + 2 * bw;
-		r.x += bw;
-		r.y += bw;
-		r.width = (bleed < r.width ? r.width - bleed : 0);
-		r.height = (bleed < r.height ? r.height - bleed : 0);
+		r = apply_bleed(r, bw, wg);
 	}
 
 	// pseudo tile
@@ -1155,7 +1145,6 @@ static bool focus_node_impl(output_t *m, desktop_t *d, node_t *n, bool give_keyb
 			wlr_log(WLR_DEBUG, "focus_node: scroller layout, skipping arrange (initial map)");
 		}
 	} else if (is_current_desktop && d->root != NULL) {
-		// FIXME: maybe refactor this?
 		for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
 			if (node->client != NULL)
 				node->client->shown = true;
@@ -1579,43 +1568,25 @@ void node_set_pending_hidden(node_t *n, bool hidden) {
 struct wlr_scene_tree *client_get_scene_tree(client_t *client) {
 	if (!client)
 		return NULL;
-
-	if (client->toplevel)
-		return client->toplevel->scene_tree;
-	if (client->xwayland_view)
-		return client->xwayland_view->scene_tree;
-
-	return NULL;
+	return CLIENT_DISPATCH(client, scene_tree);
 }
 
 struct wlr_scene_tree *client_get_content_tree(client_t *client) {
 	if (!client)
 		return NULL;
-	if (client->toplevel)
-		return client->toplevel->content_tree;
-	if (client->xwayland_view)
-		return client->xwayland_view->content_tree;
-	return NULL;
+	return CLIENT_DISPATCH(client, content_tree);
 }
 
 surface_rounded_t *client_get_rounded(client_t *client) {
 	if (!client)
 		return NULL;
-	if (client->toplevel)
-		return client->toplevel->rounded;
-	if (client->xwayland_view)
-		return client->xwayland_view->rounded;
-	return NULL;
+	return CLIENT_DISPATCH(client, rounded);
 }
 
 node_t *client_get_node(client_t *client) {
 	if (!client)
 		return NULL;
-	if (client->toplevel)
-		return client->toplevel->node;
-	if (client->xwayland_view)
-		return client->xwayland_view->node;
-	return NULL;
+	return CLIENT_DISPATCH(client, node);
 }
 
 output_t *client_get_output(client_t *client) {
@@ -1635,21 +1606,13 @@ border_state_t get_border_state(client_t *client) {
 struct wlr_scene_tree *client_border_tree(client_t *client) {
 	if (!client)
 		return NULL;
-	if (client->toplevel)
-		return client->toplevel->border_tree;
-	if (client->xwayland_view)
-		return client->xwayland_view->border_tree;
-	return NULL;
+	return CLIENT_DISPATCH(client, border_tree);
 }
 
 struct wlr_scene_rect **client_border_rects(client_t *client) {
 	if (!client)
 		return NULL;
-	if (client->toplevel)
-		return client->toplevel->border_rects;
-	if (client->xwayland_view)
-		return client->xwayland_view->border_rects;
-	return NULL;
+	return CLIENT_DISPATCH(client, border_rects);
 }
 
 void print_tree(node_t *n, int depth) {
