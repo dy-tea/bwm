@@ -753,6 +753,13 @@ bool animation_apply_geometry_from(node_t *node, struct wlr_scene_tree *scene_tr
 	if (!node || !scene_tree)
 		return false;
 
+	// if the size changes, delegate to the resize animation system
+	if ((from.width != target.width || from.height != target.height) && node->client &&
+			node->client->toplevel && from.width > 0 && from.height > 0) {
+		if (animation_start_resize(node->client->toplevel, from, target))
+			return true;
+	}
+
 	output_t *output = node->output;
 	if (!animate || !enable_animations || !output || !output->enabled || !node->client ||
 			!node->client->shown) {
@@ -970,8 +977,16 @@ bool animation_update_output(output_t *output, struct timespec now) {
 			int y = (int)(entry->from.y + (entry->to.y - entry->from.y) * entry->eased);
 			wlr_scene_node_set_position(&entry->scene_tree->node, x, y);
 
-			if (entry->workspace_switch)
+			if (entry->workspace_switch) {
 				update_blur_for_slide_animation(output, entry);
+				if (entry->node && entry->node->client && entry->node->client->toplevel) {
+					toplevel_t *tl = entry->node->client->toplevel;
+					if (tl->rounded && tl->rounded->corner_mask_node) {
+						tl->rounded->corner_mask_dirty = true;
+						tl->rounded->border_dirty = true;
+					}
+				}
+			}
 
 			if (is_entry_done(entry)) {
 				if (entry->from_opacity != entry->to_opacity) {

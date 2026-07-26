@@ -1221,6 +1221,9 @@ static struct wlr_box get_animated_client_rect(toplevel_t *tl) {
 			r.width = 1;
 		if (r.height < 1)
 			r.height = 1;
+	} else if (tl->node && tl->node->output && animation_workspace_switch_active(tl->node->output)) {
+		r.x = tl->scene_tree->node.x;
+		r.y = tl->scene_tree->node.y;
 	}
 	return r;
 }

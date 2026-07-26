@@ -1,8 +1,8 @@
 # Animations
 - Per-window animation overrides
-- Ensure animations and blur work together without visual artifacts (corner masks missing during animations)
+- Ensure animations and blur work together without visual artifacts
 - Custom animation shaders for windows (e.g. open/close animations)
-- Resize animations are imperfect (tiled resize)
+- Tiled resize does not have stable position (edge(s) that should not move does not have stable position)
 
 # Effects
 - Effects per window state (e.g. unfocused, focused, ...)
@@ -15,7 +15,6 @@
 # Misc
 - Rework the docs to be easier to use
 - Minimum sizes are currently always respected, clipping may be preferred in most cases
-- Let more than 1 rule match a given client
 - Improve the README (include video, images, better info)
 
 # Potential

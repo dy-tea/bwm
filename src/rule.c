@@ -206,28 +206,45 @@ static bool match_string(const char *pattern, const char *value) {
 }
 
 rule_consequence_t *find_matching_rule(const char *app_id, const char *title, const char *tag) {
-	rule_t *r = rule_head;
-	rule_t *matched = NULL;
+	static rule_consequence_t merged;
+	memset(&merged, 0, sizeof(merged));
 
+	rule_t *r = rule_head;
 	while (r != NULL) {
+		rule_t *next = r->next;
+
 		bool app_id_matches = match_string(r->match.app_id, app_id);
 		bool title_matches = match_string(r->match.title, title);
 		bool tag_matches = match_string(r->match.tag, tag);
 
 		if (app_id_matches && title_matches && tag_matches) {
-			matched = r;
-			break;
+			rule_type_t bits = r->consequence.has;
+			merged.has |= bits;
+			merged.flags = (merged.flags & ~bits) | (r->consequence.flags & bits);
+
+			if (bits & RULE_TYPE_DESKTOP)
+				strncpy(merged.desktop, r->consequence.desktop, SMALEN);
+			if (bits & RULE_TYPE_MONITOR)
+				strncpy(merged.monitor, r->consequence.monitor, SMALEN);
+			if (bits & RULE_TYPE_STATE)
+				merged.state = r->consequence.state;
+			if (bits & RULE_TYPE_SCROLLER_PROPORTION)
+				merged.scroller_proportion = r->consequence.scroller_proportion;
+			if (bits & RULE_TYPE_SCROLLER_PROPORTION_SINGLE)
+				merged.scroller_proportion_single = r->consequence.scroller_proportion_single;
+			if (bits & RULE_TYPE_BORDER_RADIUS)
+				merged.border_radius = r->consequence.border_radius;
+			if (bits & RULE_TYPE_OPACITY)
+				merged.opacity = r->consequence.opacity;
+
+			if (r->match.one_shot)
+				remove_rule(r);
 		}
-		r = r->next;
+
+		r = next;
 	}
 
-	if (matched == NULL)
-		return NULL;
-
-	if (matched->match.one_shot)
-		remove_rule(matched);
-
-	return &matched->consequence;
+	return merged.has ? &merged : NULL;
 }
 
 void rule_apply_consequence(node_t *node, client_t *client, const rule_consequence_t *rule) {
