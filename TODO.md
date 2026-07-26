@@ -1,6 +1,6 @@
 # Animations
 - Per-window animation overrides
-- Ensure animations and blur work together without visual artifacts
+- Ensure animations and blur work together without visual artifacts (corner masks missing during animations)
 - Custom animation shaders for windows (e.g. open/close animations)
 - Resize animations are imperfect (tiled resize)
 
@@ -13,9 +13,7 @@
 - Better scrolling layout from niri (not using bsp tree)
 
 # Misc
-- Better HDR handling (might have a broken implementation)
 - Rework the docs to be easier to use
-- Figure out why foot is undersized and if undersized logic is needed
 - Minimum sizes are currently always respected, clipping may be preferred in most cases
 - Let more than 1 rule match a given client
 - Improve the README (include video, images, better info)
