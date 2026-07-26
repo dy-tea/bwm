@@ -1207,23 +1207,15 @@ static struct wlr_box get_client_rect(toplevel_t *tl) {
 		return c->tiled_rectangle;
 }
 
-// interpolate client rect with active resize animation progress
+// interpolate client rect with active animation progress (resize, move, or slide)
 static struct wlr_box get_animated_client_rect(toplevel_t *tl) {
 	struct wlr_box r = get_client_rect(tl);
-	double progress = 1.0;
-	struct wlr_box anim_from, anim_to;
-	if (animation_get_toplevel_resize_progress(tl, &progress, &anim_from, &anim_to)) {
-		r.x = (int)(anim_from.x + (anim_to.x - anim_from.x) * progress);
-		r.y = (int)(anim_from.y + (anim_to.y - anim_from.y) * progress);
-		r.width = (int)(anim_from.width + (anim_to.width - anim_from.width) * progress);
-		r.height = (int)(anim_from.height + (anim_to.height - anim_from.height) * progress);
-		if (r.width < 1)
-			r.width = 1;
-		if (r.height < 1)
-			r.height = 1;
-	} else if (tl->node && tl->node->output && animation_workspace_switch_active(tl->node->output)) {
-		r.x = tl->scene_tree->node.x;
-		r.y = tl->scene_tree->node.y;
+	struct wlr_box anim;
+	if (animation_get_geometry_progress(tl, &anim)) {
+		r.x = anim.x;
+		r.y = anim.y;
+		r.width = anim.width;
+		r.height = anim.height;
 	}
 	return r;
 }

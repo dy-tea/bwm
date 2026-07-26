@@ -887,10 +887,14 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
 					if (c->tiled_rectangle.width > 0 && c->tiled_rectangle.height > 0 &&
 							(toplevel->geometry.width != c->tiled_rectangle.width ||
 							toplevel->geometry.height != c->tiled_rectangle.height)) {
-						wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, c->tiled_rectangle.width,
-							c->tiled_rectangle.height);
-						node_set_dirty(toplevel->node);
-						transaction_commit_dirty_client();
+						if (!(toplevel->last_requested.width > 0 &&
+								toplevel->geometry.width == toplevel->last_requested.width &&
+								toplevel->geometry.height == toplevel->last_requested.height)) {
+							wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, c->tiled_rectangle.width,
+								c->tiled_rectangle.height);
+							node_set_dirty(toplevel->node);
+							transaction_commit_dirty_client();
+						}
 					}
 				}
 			}
@@ -912,7 +916,8 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
 		if (toplevel->saved_surface_tree && !successful)
 			toplevel_send_frame_done(toplevel);
 
-		toplevel_center_and_clip_surface(toplevel);
+		if (!animation_is_resizing(toplevel->node))
+			toplevel_center_and_clip_surface(toplevel);
 	}
 
 	// check ext_background_effect_v1 state

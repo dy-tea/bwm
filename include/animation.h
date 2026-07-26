@@ -65,3 +65,8 @@ bool animation_get_toplevel_resize_progress(toplevel_t *toplevel, double *progre
 
 // Check if a node currently has an active resize animation
 bool animation_is_resizing(node_t *node);
+
+// Get the interpolated client rectangle for any geometry animation (resize or position).
+// Returns true if the toplevel has an active geometry animation, and fills *out with
+// the interpolated rectangle.
+bool animation_get_geometry_progress(toplevel_t *toplevel, struct wlr_box *out);

@@ -128,7 +128,7 @@ typedef struct client_t {
 	bool urgent, shown, freed;
 	client_state_t state, last_state;
 	stack_layer_t layer, last_layer;
-	struct wlr_box floating_rectangle, tiled_rectangle, committed_tiled_rectangle;
+	struct wlr_box floating_rectangle, tiled_rectangle, committed_tiled_rectangle, arranged_rectangle;
 	struct toplevel_t *toplevel;
 	struct xwayland_toplevel_t *xwayland_view;
 

@@ -91,10 +91,9 @@ static void copy_node_state(node_t *node, transaction_inst_t *instruction) {
 	if (node->client) {
 		instruction->previous_tiled_rectangle = node->client->committed_tiled_rectangle;
 		instruction->state = node->client->state;
-		instruction->tiled_rectangle = node->client->tiled_rectangle;
+		instruction->tiled_rectangle = node->client->arranged_rectangle;
 		instruction->floating_rectangle = node->client->floating_rectangle;
 		instruction->content_rect = node->pending.rectangle;
-
 		instruction->scene_tree = client_get_scene_tree(node->client);
 	}
 }
@@ -577,6 +576,7 @@ static void transaction_commit(transaction_t *txn) {
 				wlr_log(WLR_DEBUG, "Sent configure to node %u: serial=%u size=(%dx%d) waiting=%d", node->id,
 					instruction->serial, rect->width, rect->height, instruction->waiting);
 
+				toplevel_save_buffer(node->client->toplevel);
 				toplevel_send_frame_done(node->client->toplevel);
 			}
 		}

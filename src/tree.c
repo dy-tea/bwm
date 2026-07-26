@@ -431,7 +431,7 @@ static void render_leaf(output_t *m, desktop_t *d, node_t *n, struct wlr_box rec
 	if (r.height < MIN_HEIGHT)
 		r.height = MIN_HEIGHT;
 
-	n->client->tiled_rectangle = r;
+	n->client->arranged_rectangle = r;
 }
 
 static void validate_split_children(node_t *n) {
