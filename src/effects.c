@@ -736,7 +736,6 @@ static void push_blur_to_toplevels(output_t *output) {
 		if (tl->blur->blur_node->buffer != tl->blur->blur_buf)
 			wlr_scene_buffer_set_buffer(tl->blur->blur_node, tl->blur->blur_buf);
 
-		client_t *c = tl->node->client;
 		if (tl->blur && !pixman_region32_empty(&tl->blur->blur_region)) {
 			int lx = 0, ly = 0;
 			wlr_scene_node_coords(&tl->scene_tree->node, &lx, &ly);
@@ -768,13 +767,7 @@ static void push_blur_to_toplevels(output_t *output) {
 			wlr_scene_buffer_set_source_box(tl->blur->blur_node, &src);
 			wlr_scene_buffer_set_dest_size(tl->blur->blur_node, dw, dh);
 		} else {
-			struct wlr_box r;
-			if (c->state == STATE_FULLSCREEN && tl->node->output)
-				r = tl->node->output->rectangle;
-			else if (c->state == STATE_FLOATING)
-				r = c->floating_rectangle;
-			else
-				r = c->tiled_rectangle;
+			struct wlr_box r = get_animated_client_rect(tl);
 
 			struct wlr_fbox src;
 			int dw, dh;
@@ -1112,14 +1105,7 @@ static void push_acrylic_to_toplevels(output_t *output) {
 		if (tl->blur->acrylic_node->buffer != tl->blur->acrylic_buf)
 			wlr_scene_buffer_set_buffer(tl->blur->acrylic_node, tl->blur->acrylic_buf);
 
-		client_t *c = tl->node->client;
-		struct wlr_box r;
-		if (c->state == STATE_FULLSCREEN && tl->node->output)
-			r = tl->node->output->rectangle;
-		else if (c->state == STATE_FLOATING)
-			r = c->floating_rectangle;
-		else
-			r = c->tiled_rectangle;
+		struct wlr_box r = get_animated_client_rect(tl);
 
 		struct wlr_fbox src;
 		int dw, dh;
@@ -1193,14 +1179,7 @@ static void push_mica_to_toplevels(output_t *output) {
 		if (tl->blur->mica_node->buffer != buf)
 			wlr_scene_buffer_set_buffer(tl->blur->mica_node, buf);
 
-		client_t *c = tl->node->client;
-		struct wlr_box r;
-		if (c->state == STATE_FULLSCREEN && tl->node->output)
-			r = tl->node->output->rectangle;
-		else if (c->state == STATE_FLOATING)
-			r = c->floating_rectangle;
-		else
-			r = c->tiled_rectangle;
+		struct wlr_box r = get_animated_client_rect(tl);
 
 		struct wlr_fbox src;
 		int dw, dh;
@@ -1820,10 +1799,41 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 	bool workspace_switch = animation_workspace_switch_active(output);
 	bool workspace_warmup = workspace_switch && workspace_effect_buffers_missing(output);
 
-	// Hidden workspaces have their effect buffers evicted. Rebuild them once as
-	// they enter, then keep the cached result for the rest of the slide.
-	if (workspace_switch && !workspace_warmup)
-		return;
+	// check if layer blur surfaces need rendering
+	bool has_layer_blur = false;
+	if (blur_enabled) {
+		for (int i = 0; i < 4 && !has_layer_blur; i++) {
+			layer_surface_t *ls;
+			wl_list_for_each(ls, &output->layers[i], link)
+				if (ls->blur_node && ls->mapped) {
+					has_layer_blur = true;
+				break;
+			}
+		}
+	}
+
+	// check if corner masks need rendering
+	bool any_cm = false;
+	bool any_cm_dirty = false;
+	{
+		toplevel_t *tl;
+		wl_list_for_each(tl, &server.toplevels, link) {
+			if (tl->rounded && tl->rounded->corner_mask_node && tl->node && tl->node->client &&
+					tl->node->client->border_radius > 0.0f && tl->node->client->state != STATE_FULLSCREEN &&
+					tl->node->output && tl->node->output == output) {
+				any_cm = true;
+				if (tl->rounded->corner_mask_dirty)
+					any_cm_dirty = true;
+			}
+		}
+	}
+
+	// layer blur and corner masks still need updating each frame during the slide.
+	if (workspace_switch && !workspace_warmup) {
+		if (!has_layer_blur && !any_cm)
+			return;
+		goto layer_only_frame;
+	}
 
 	if (ctx->width != output->width || ctx->height != output->height)
 		effects_output_resize(ctx, output->width, output->height, output);
@@ -1880,36 +1890,6 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 			blur_render_shadow(tl);
 			tl->shadow->shadow_dirty = false;
 			tl->shadow->shadow_geometry_dirty = false;
-		}
-	}
-
-	// check if layer blur surfaces need rendering
-	bool has_layer_blur = false;
-	if (blur_enabled) {
-		for (int i = 0; i < 4 && !has_layer_blur; i++) {
-			layer_surface_t *ls;
-			wl_list_for_each(ls, &output->layers[i], link) {
-				if (ls->blur_node && ls->mapped) {
-					has_layer_blur = true;
-					break;
-				}
-			}
-		}
-	}
-
-	// check if corner masks need rendering
-	bool any_cm = false;
-	bool any_cm_dirty = false;
-	{
-		toplevel_t *tl;
-		wl_list_for_each(tl, &server.toplevels, link) {
-			if (tl->rounded && tl->rounded->corner_mask_node && tl->node && tl->node->client &&
-					tl->node->client->border_radius > 0.0f && tl->node->client->state != STATE_FULLSCREEN &&
-					tl->node->output && tl->node->output == output) {
-				any_cm = true;
-				if (tl->rounded->corner_mask_dirty)
-					any_cm_dirty = true;
-			}
 		}
 	}
 
@@ -2084,6 +2064,78 @@ after_capture:
 
 	if (screen_shader_enabled)
 		handle_screen_shader_frame(output);
+
+	effects_backend->frame_end();
+	return;
+
+layer_only_frame:
+	if (ctx->width != output->width || ctx->height != output->height)
+		effects_output_resize(ctx, output->width, output->height, output);
+
+	effects_backend->frame_begin();
+
+	// apply corner masks and layer blur if needed
+	uint64_t cm_bg_tex_lo = 0;
+	if (has_layer_blur) {
+		bool any_layer_needs_blur = false;
+		if (blur_enabled) {
+			pixman_region32_t *damage = &scene_output->damage_ring.current;
+			for (int i = 0; i < 4 && !any_layer_needs_blur; i++) {
+				layer_surface_t *ls;
+				wl_list_for_each(ls, &output->layers[i], link) {
+					if (!ls->blur_node || !ls->mapped)
+						continue;
+					if (!ls->blur_buf) {
+						any_layer_needs_blur = true;
+						break;
+					}
+					if (pixman_region32_empty(damage))
+						continue;
+					int nboxes;
+					pixman_box32_t *boxes = pixman_region32_rectangles(&ls->blur_region, &nboxes);
+					if (nboxes == 0)
+						continue;
+					int lx, ly;
+					if (!wlr_scene_node_coords(&ls->scene_tree->node, &lx, &ly))
+						continue;
+					int out_lx = lx - output->lx, out_ly = ly - output->ly;
+					pixman_region32_clear(&ctx->scratch_region_a);
+					pixman_region32_union_rect(&ctx->scratch_region_a, &ctx->scratch_region_a, boxes[0].x1 + out_lx,
+						boxes[0].y1 + out_ly, boxes[0].x2 - boxes[0].x1, boxes[0].y2 - boxes[0].y1);
+					for (int b = 1; b < nboxes; b++)
+						pixman_region32_union_rect(&ctx->scratch_region_a, &ctx->scratch_region_a,
+							boxes[b].x1 + out_lx, boxes[b].y1 + out_ly, boxes[b].x2 - boxes[b].x1,
+							boxes[b].y2 - boxes[b].y1);
+					pixman_region32_intersect(&ctx->scratch_region_b, damage, &ctx->scratch_region_a);
+					if (!pixman_region32_empty(&ctx->scratch_region_b))
+						any_layer_needs_blur = true;
+				}
+			}
+		}
+
+		if (any_layer_needs_blur && any_cm) {
+			uint64_t bg_tex = capture_bg_combined(output, ctx);
+			if (bg_tex && blur_enabled) {
+				rebuild_live_blur_layers(output, bg_tex, &scene_output->damage_ring.current);
+				push_blur_to_layers(output);
+			} else if (blur_enabled) {
+				rebuild_live_blur_layers(output, 0, &scene_output->damage_ring.current);
+				push_blur_to_layers(output);
+			}
+			goto cm_bg_tex_lo_cap;
+		} else if (any_layer_needs_blur) {
+			rebuild_live_blur_layers(output, 0, &scene_output->damage_ring.current);
+			push_blur_to_layers(output);
+		} else if (any_cm)
+			goto cm_bg_tex_lo_cap;
+	} else if (any_cm) {
+	cm_bg_tex_lo_cap:
+		if (any_cm_dirty) {
+			cm_bg_tex_lo = capture_bg_to_tex1(output, ctx, true, NULL, NULL);
+			rebuild_corner_masks(output, cm_bg_tex_lo);
+		}
+		push_corner_masks_to_toplevels(output, any_cm_dirty);
+	}
 
 	effects_backend->frame_end();
 }

@@ -7,7 +7,6 @@
 # Effects
 - Effects per window state (e.g. unfocused, focused, ...)
 - Inner glow effects on borders
-- Blur surfaces don't update immediately on workspace switch
 
 # Layout
 - Better tab grouping (see sway or Hyprland for reference)

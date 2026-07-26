@@ -7,6 +7,7 @@
 #include "toplevel.h"
 #include "tree.h"
 #include "types.h"
+#include <pixman.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <wlr/types/wlr_output.h>
@@ -641,6 +642,18 @@ static void update_resize_entry(animation_entry_t *entry) {
 	};
 	wlr_scene_subsurface_tree_set_clip(&entry->toplevel->content_tree->node, &clip);
 
+	// update content centering for undersized surfaces
+	if (entry->node && entry->node->client) {
+		client_t *c = entry->node->client;
+		if (IS_TILED(c) || c->state == STATE_FLOATING || c->state == STATE_FULLSCREEN) {
+			int center_x = (width - (int)entry->toplevel->geometry.width) / 2;
+			int center_y = (height - (int)entry->toplevel->geometry.height) / 2;
+			int cx = center_x > 0 ? center_x : 0;
+			int cy = center_y > 0 ? center_y : 0;
+			wlr_scene_node_set_position(&entry->toplevel->content_tree->node, cx, cy);
+		}
+	}
+
 	// update borders to follow the animated size
 	if (entry->toplevel->border_tree) {
 		unsigned int bw = 0;
@@ -668,13 +681,21 @@ static void update_resize_entry(animation_entry_t *entry) {
 		int cy = entry->toplevel->content_tree->node.y;
 		if (cx > 0 || cy > 0)
 			wlr_scene_node_set_position(&entry->toplevel->border_tree->node, cx - (int)bw, cy - (int)bw);
+		else
+			wlr_scene_node_set_position(&entry->toplevel->border_tree->node, -(int)bw, -(int)bw);
+
+		update_border_colors(entry->node->client);
 
 		// update rounded corner shader buffer to match animated size
-		if (entry->toplevel->rounded && entry->toplevel->rounded->border_shader_node && bw > 0) {
-			int new_fw = bwidth + 2 * (int)bw;
-			int new_fh = bheight + 2 * (int)bw;
-			if (new_fw > 0 && new_fh > 0)
-				wlr_scene_buffer_set_dest_size(entry->toplevel->rounded->border_shader_node, new_fw, new_fh);
+		if (entry->toplevel->rounded) {
+			if (entry->toplevel->rounded->border_shader_node && bw > 0) {
+				int new_fw = bwidth + 2 * (int)bw;
+				int new_fh = bheight + 2 * (int)bw;
+				if (new_fw > 0 && new_fh > 0)
+					wlr_scene_buffer_set_dest_size(entry->toplevel->rounded->border_shader_node, new_fw, new_fh);
+			}
+			entry->toplevel->rounded->border_dirty = true;
+			entry->toplevel->rounded->corner_mask_dirty = true;
 		}
 	}
 }
@@ -779,6 +800,94 @@ bool animation_apply_geometry_from(node_t *node, struct wlr_scene_tree *scene_tr
 	return true;
 }
 
+static void update_blur_for_slide_animation(output_t *output, animation_entry_t *entry) {
+	if (!output || !entry->node || !entry->node->client)
+		return;
+
+	toplevel_t *tl = entry->node->client->toplevel;
+	if (!tl)
+		return;
+	if (!tl->blur || !tl->blur->blur_node)
+		return;
+	if (!pixman_region32_empty(&tl->blur->blur_region))
+		return;
+	if (!tl->blur->blur_buf)
+		return;
+
+	client_t *c = entry->node->client;
+
+	double e = entry->eased;
+	int x = (int)(entry->from.x + (entry->to.x - entry->from.x) * e);
+	int y = (int)(entry->from.y + (entry->to.y - entry->from.y) * e);
+
+	struct wlr_box r;
+	if (c->state == STATE_FULLSCREEN)
+		r = output->rectangle;
+	else if (c->state == STATE_FLOATING)
+		r = c->floating_rectangle;
+	else
+		r = c->tiled_rectangle;
+
+	r.x = x;
+	r.y = y;
+
+	float bw = (float)output->width;
+	float bh = (float)output->height;
+	float sx = (float)(r.x - output->lx);
+	float sy = (float)(r.y - output->ly);
+	float sw = (float)r.width;
+	float sh = (float)r.height;
+
+	if (sx < 0.0f) {
+		sw += sx;
+		sx = 0.0f;
+	}
+	if (sy < 0.0f) {
+		sh += sy;
+		sy = 0.0f;
+	}
+	if (sx >= bw || sy >= bh || sw <= 0.0f || sh <= 0.0f)
+		return;
+	if (sx + sw > bw)
+		sw = bw - sx;
+	if (sy + sh > bh)
+		sh = bh - sy;
+	if (sw <= 0.0f || sh <= 0.0f)
+		return;
+
+	struct wlr_fbox src = {
+		.x = sx,
+		.y = sy,
+		.width = sw,
+		.height = sh
+	};
+	int dw = (int)sw, dh = (int)sh;
+
+	int node_ox = (r.x < output->lx) ? (output->lx - r.x) : 0;
+	int node_oy = (r.y < output->ly) ? (output->ly - r.y) : 0;
+
+	wlr_scene_node_set_position(&tl->blur->blur_node->node, node_ox, node_oy);
+	wlr_scene_buffer_set_source_box(tl->blur->blur_node, &src);
+	wlr_scene_buffer_set_dest_size(tl->blur->blur_node, dw, dh);
+}
+
+void animation_update_slide_blur(output_t *output) {
+	if (!output)
+		return;
+
+	animation_entry_t *entry;
+	wl_list_for_each(entry, &animations, link) {
+		if (!entry->workspace_switch)
+			continue;
+		if (entry->node && entry->node->output != output)
+			continue;
+		if (!entry->node || !entry->output || entry->output != output)
+			continue;
+
+		update_blur_for_slide_animation(output, entry);
+	}
+}
+
 bool animation_update_output(output_t *output, struct timespec now) {
 	bool active = false;
 	animation_entry_t *entry, *tmp;
@@ -860,6 +969,9 @@ bool animation_update_output(output_t *output, struct timespec now) {
 			int x = (int)(entry->from.x + (entry->to.x - entry->from.x) * entry->eased);
 			int y = (int)(entry->from.y + (entry->to.y - entry->from.y) * entry->eased);
 			wlr_scene_node_set_position(&entry->scene_tree->node, x, y);
+
+			if (entry->workspace_switch)
+				update_blur_for_slide_animation(output, entry);
 
 			if (is_entry_done(entry)) {
 				if (entry->from_opacity != entry->to_opacity) {
