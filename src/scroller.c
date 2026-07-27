@@ -504,18 +504,56 @@ bool scroller_focus_up(desktop_t *d) {
 }
 
 void scroller_center_window(desktop_t *d, client_t *client) {
-	scroller_state_t *s = d->scroller_state;
-	if (!s || !client)
-		return;
+    scroller_state_t *s = d->scroller_state;
+    if (!s || !client)
+        return;
 
-	int col_idx, tile_idx;
-	if (!find_tile(s, client, &col_idx, &tile_idx))
-		return;
+    int col_idx, tile_idx;
+    if (!find_tile(s, client, &col_idx, &tile_idx))
+        return;
 
-	s->active_column_idx = col_idx;
-	s->columns[col_idx].active_tile_idx = tile_idx;
-	s->view_offset = 0.0;
-	apply_active_focus(d);
+    s->active_column_idx = col_idx;
+    s->columns[col_idx].active_tile_idx = tile_idx;
+    s->view_offset = 0.0;
+    apply_active_focus(d);
+}
+
+// ── Consume / Expel ────────────────────────────────────────────────────────
+
+bool scroller_consume_into_column(desktop_t *d) {
+    scroller_state_t *s = d ? d->scroller_state : NULL;
+    if (!s || s->column_count < 2) return false;
+
+    int col = s->active_column_idx;
+    if (col == 0) return false;
+
+    scroller_column_t *src = &s->columns[col];
+    if (src->tile_count == 0) return false;
+
+    client_t *cl = src->tiles[src->active_tile_idx].client;
+    if (!cl) return false;
+
+    scroller_remove_tile(s, cl, NULL);
+
+    int target_col = col - 1;
+    if (target_col >= s->column_count) return false;
+
+    return scroller_add_tile_to_column(s, cl, target_col, true);
+}
+
+bool scroller_expel_from_column(desktop_t *d) {
+    scroller_state_t *s = d ? d->scroller_state : NULL;
+    if (!s || s->column_count == 0) return false;
+
+    int col = s->active_column_idx;
+    scroller_column_t *src = &s->columns[col];
+    if (src->tile_count < 2) return false;
+
+    client_t *cl = src->tiles[src->active_tile_idx].client;
+    if (!cl) return false;
+
+    scroller_remove_tile(s, cl, NULL);
+    return scroller_add_tile(s, cl, true);
 }
 
 bool scroller_is_tiled(const client_t *c) {

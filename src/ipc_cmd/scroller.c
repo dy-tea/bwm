@@ -72,25 +72,11 @@ void ipc_cmd_scroller(char **args, int num, int client_fd) {
 			return;
 		}
 
-		node_t *target = prev_leaf(desk->focus, desk->root);
-		if (!target || !target->client) {
-			send_failure(client_fd, "scroller stack: no target to stack with\n");
+		if (!scroller_consume_into_column(desk)) {
+			send_failure(client_fd, "scroller stack: nothing to stack into\n");
 			return;
 		}
 
-		// find target's column and move focused client into it
-		if (!s) {
-			send_failure(client_fd, "scroller stack: not in scroller layout\n");
-			return;
-		}
-
-		int target_col, target_tile;
-		if (!find_focused_tile(desk, &target_col, &target_tile)) {
-			send_failure(client_fd, "scroller stack: find focused failed\n");
-			return;
-		}
-
-		// TODO: proper consume or expel window logic
 		arrange(mon, desk, true);
 		send_success(client_fd, "stacked\n");
 	} else if (streq("unstack", *args)) {
@@ -99,7 +85,11 @@ void ipc_cmd_scroller(char **args, int num, int client_fd) {
 			return;
 		}
 
-		// TODO: proper unstack (remove from column, create new column).
+		if (!scroller_expel_from_column(desk)) {
+			send_failure(client_fd, "scroller unstack: nothing to unstack\n");
+			return;
+		}
+
 		arrange(mon, desk, true);
 		send_success(client_fd, "unstacked\n");
 	} else if (streq("resize", *args)) {

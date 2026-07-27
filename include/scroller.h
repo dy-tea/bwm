@@ -61,6 +61,9 @@ bool scroller_focus_down(desktop_t *d);
 bool scroller_focus_up(desktop_t *d);
 void scroller_center_window(desktop_t *d, client_t *client);
 
+bool scroller_consume_into_column(desktop_t *d);
+bool scroller_expel_from_column(desktop_t *d);
+
 bool scroller_is_tiled(const client_t *c);
 void scroller_apply_client_rules(client_t *c, float rule_proportion, float rule_proportion_single);
 
