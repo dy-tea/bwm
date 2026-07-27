@@ -15,6 +15,7 @@ struct output_t;
 struct toplevel_t;
 struct xwayland_toplevel_t;
 struct tab_bar_t;
+struct scroller_state_t;
 
 struct output_t *output_at(double x, double y);
 
@@ -151,16 +152,8 @@ typedef struct client_t {
 	struct toplevel_t *toplevel;
 	struct xwayland_toplevel_t *xwayland_view;
 
-	// Scroller layout properties
-	float scroller_proportion, scroller_proportion_single;
-	float stack_proportion;
-	struct client_t *next_in_stack, *prev_in_stack;
-
 	// Master-stack layout properties
 	uint64_t master_stack_order;
-
-	// Resize state for scroller
-	float old_scroller_proportion, old_stack_proportion;
 
 	// Visual effects
 	float border_radius;
@@ -207,6 +200,7 @@ typedef struct desktop_t {
 	uint32_t id;
 	layout_t layout, user_layout;
 	node_t *root, *focus;
+	struct scroller_state_t *scroller_state;
 	struct desktop_t *prev, *next;
 	padding_t padding;
 	int window_gap;

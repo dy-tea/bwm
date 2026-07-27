@@ -9,12 +9,12 @@
 #include <wlr/util/log.h>
 
 static void tiled_arrange(output_t *m, desktop_t *d, struct wlr_box available) {
-    int wg = compute_window_gap(d);
-    available.x += wg;
-    available.y += wg;
-    available.width -= wg;
-    available.height -= wg;
-    apply_layout(m, d, d->root, available, available);
+	int wg = compute_window_gap(d);
+	available.x += wg;
+	available.y += wg;
+	available.width -= wg;
+	available.height -= wg;
+	apply_layout(m, d, d->root, available, available);
 }
 
 static void monocle_arrange(output_t *m, desktop_t *d, struct wlr_box available) {
@@ -50,14 +50,31 @@ static void monocle_on_focus(output_t *m, desktop_t *d, node_t *n) {
 }
 
 static void scroller_on_focus(output_t *m, desktop_t *d, node_t *n) {
-	if (!d->root)
+	if (!d)
 		return;
 
-	for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
-		if (node->client != NULL)
-			node->client->flags.shown = true;
+	if (!d->scroller_state)
+		d->scroller_state = scroller_create();
 
-	if (n != NULL && n->client != NULL && n->client->toplevel && n->client->toplevel->configured) {
+	scroller_state_t *s = d->scroller_state;
+	if (!s)
+		return;
+
+	if (s->column_count == 0 && d->root) {
+		for (node_t *leaf = first_extrema(d->root); leaf; leaf = next_leaf(leaf, d->root))
+			if (leaf->client)
+				leaf->client->flags.shown = true;
+	} else {
+		for (int i = 0; i < s->column_count; i++) {
+			for (int j = 0; j < s->columns[i].tile_count; j++) {
+				client_t *c = s->columns[i].tiles[j].client;
+				if (c)
+					c->flags.shown = true;
+			}
+		}
+	}
+
+	if (n != NULL && n->client->toplevel && n->client->toplevel->configured) {
 		wlr_log(WLR_DEBUG, "scroller_on_focus: triggering arrange");
 		arrange(m, d, true);
 	} else {
@@ -91,8 +108,8 @@ static int tiled_collect(desktop_t *d, node_t ***out_nodes) {
 	return count;
 }
 
-static int scroller_collect(desktop_t *d, node_t ***out_nodes) {
-	return scroller_collect_nodes(d, out_nodes);
+static int scroller_collect_fn(desktop_t *d, node_t ***out_nodes) {
+	return scroller_collect(d, out_nodes);
 }
 
 static bool scroller_focus(desktop_t *d, direction_t dir) {
@@ -167,8 +184,8 @@ static const layout_impl_t scroller_impl = {
 	.on_focus = scroller_on_focus,
 	.focus = scroller_focus,
 	.swap = NULL,
-	.init_client = scroller_init_client,
-	.collect = scroller_collect,
+	.init_client = NULL,
+	.collect = scroller_collect_fn,
 	.single_visible = false,
 	.has_directional_nav = true,
 };
@@ -201,6 +218,13 @@ const layout_impl_t *layout_get_impl(layout_t layout) {
 void layout_set(desktop_t *d, layout_t new_layout) {
 	if (!d)
 		return;
+
+	// destroy scroller state when leaving scroller layout
+	if (d->layout == LAYOUT_SCROLLER && new_layout != LAYOUT_SCROLLER) {
+		scroller_destroy(d->scroller_state);
+		d->scroller_state = NULL;
+	}
+
 	d->layout = new_layout;
 }
 

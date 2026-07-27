@@ -9,6 +9,26 @@
 #include <limits.h>
 #include <stdlib.h>
 
+// find column and tile index for a focused client in the scroller state
+static bool find_focused_tile(desktop_t *desk, int *out_col, int *out_tile) {
+	scroller_state_t *s = desk ? desk->scroller_state : NULL;
+	if (!s || !desk->focus || !desk->focus->client)
+		return false;
+
+	for (int i = 0; i < s->column_count; i++) {
+		for (int j = 0; j < s->columns[i].tile_count; j++) {
+			if (s->columns[i].tiles[j].client == desk->focus->client) {
+				if (out_col)
+					*out_col = i;
+				if (out_tile)
+					*out_tile = j;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 void ipc_cmd_scroller(char **args, int num, int client_fd) {
 	if (num < 1) {
 		send_failure(client_fd, "scroller: missing arguments\n");
@@ -22,6 +42,7 @@ void ipc_cmd_scroller(char **args, int num, int client_fd) {
 	}
 
 	desktop_t *desk = mon->desk;
+	scroller_state_t *s = desk->scroller_state;
 
 	if (streq("proportion", *args)) {
 		if (num < 2) {
@@ -29,8 +50,9 @@ void ipc_cmd_scroller(char **args, int num, int client_fd) {
 			return;
 		}
 
-		if (!desk->focus || !desk->focus->client) {
-			send_failure(client_fd, "scroller proportion: no focused client\n");
+		int col;
+		if (!find_focused_tile(desk, &col, NULL)) {
+			send_failure(client_fd, "scroller proportion: no focused tiled window\n");
 			return;
 		}
 
@@ -40,8 +62,8 @@ void ipc_cmd_scroller(char **args, int num, int client_fd) {
 			return;
 		}
 
-		client_t *head = scroller_get_stack_head(desk->focus->client);
-		head->scroller_proportion = value;
+		s->columns[col].width.type = SCROLLER_WIDTH_PROPORTION;
+		s->columns[col].width.value = (double)value;
 		arrange(mon, desk, true);
 		send_success(client_fd, "proportion set\n");
 	} else if (streq("stack", *args)) {
@@ -56,8 +78,19 @@ void ipc_cmd_scroller(char **args, int num, int client_fd) {
 			return;
 		}
 
-		client_t *head = scroller_get_stack_head(target->client);
-		scroller_stack_push(head, desk->focus->client);
+		// find target's column and move focused client into it
+		if (!s) {
+			send_failure(client_fd, "scroller stack: not in scroller layout\n");
+			return;
+		}
+
+		int target_col, target_tile;
+		if (!find_focused_tile(desk, &target_col, &target_tile)) {
+			send_failure(client_fd, "scroller stack: find focused failed\n");
+			return;
+		}
+
+		// TODO: proper consume or expel window logic
 		arrange(mon, desk, true);
 		send_success(client_fd, "stacked\n");
 	} else if (streq("unstack", *args)) {
@@ -66,7 +99,7 @@ void ipc_cmd_scroller(char **args, int num, int client_fd) {
 			return;
 		}
 
-		scroller_stack_remove(desk->focus->client);
+		// TODO: proper unstack (remove from column, create new column).
 		arrange(mon, desk, true);
 		send_success(client_fd, "unstacked\n");
 	} else if (streq("resize", *args)) {
@@ -75,13 +108,20 @@ void ipc_cmd_scroller(char **args, int num, int client_fd) {
 			return;
 		}
 
-		if (!desk->focus || !desk->focus->client) {
-			send_failure(client_fd, "scroller resize: no focused client\n");
+		int col;
+		if (!find_focused_tile(desk, &col, NULL)) {
+			send_failure(client_fd, "scroller resize: no focused tiled window\n");
 			return;
 		}
 
 		float delta = atof(args[1]);
-		scroller_resize_width(desk->focus->client, delta);
+		double prop = s->columns[col].width.value + (double)delta;
+		if (prop < 0.1)
+			prop = 0.1;
+		if (prop > 1.0)
+			prop = 1.0;
+		s->columns[col].width.type = SCROLLER_WIDTH_PROPORTION;
+		s->columns[col].width.value = prop;
 		arrange(mon, desk, true);
 		send_success(client_fd, "resized\n");
 	} else if (streq("set_proportion", *args)) {
@@ -90,27 +130,47 @@ void ipc_cmd_scroller(char **args, int num, int client_fd) {
 			return;
 		}
 
-		if (!desk->focus || !desk->focus->client) {
-			send_failure(client_fd, "scroller set_proportion: no focused client\n");
+		int col;
+		if (!find_focused_tile(desk, &col, NULL)) {
+			send_failure(client_fd, "scroller set_proportion: no focused tiled window\n");
 			return;
 		}
 
 		float value = atof(args[1]);
-		scroller_set_proportion(desk->focus->client, value);
-		arrange(mon, desk, true);
-		send_success(client_fd, "proportion set\n");
-	} else if (streq("cycle_preset", *args)) {
-		if (!desk->focus || !desk->focus->client) {
-			send_failure(client_fd, "scroller cycle_preset: no focused client\n");
+		if (value < 0.1f || value > 1.0f) {
+			send_failure(client_fd, "scroller set_proportion: value must be between 0.1 and 1.0\n");
 			return;
 		}
 
-		if (scroller_proportion_preset_count == 0) {
+		s->columns[col].width.type = SCROLLER_WIDTH_PROPORTION;
+		s->columns[col].width.value = (double)value;
+		arrange(mon, desk, true);
+		send_success(client_fd, "proportion set\n");
+	} else if (streq("cycle_preset", *args)) {
+		if (!scroller_proportion_preset || scroller_proportion_preset_count == 0) {
 			send_failure(client_fd, "scroller cycle_preset: no presets configured\n");
 			return;
 		}
 
-		scroller_cycle_proportion_preset(desk->focus->client);
+		int col;
+		if (!find_focused_tile(desk, &col, NULL)) {
+			send_failure(client_fd, "scroller cycle_preset: no focused tiled window\n");
+			return;
+		}
+
+		double cur = s->columns[col].width.value;
+		int next = 0;
+		for (int i = 0; i < scroller_proportion_preset_count; i++) {
+			if (fabs(scroller_proportion_preset[i] - cur) < 0.01f) {
+				next = i + 1;
+				break;
+			}
+		}
+		if (next >= scroller_proportion_preset_count)
+			next = 0;
+
+		s->columns[col].width.type = SCROLLER_WIDTH_PROPORTION;
+		s->columns[col].width.value = (double)scroller_proportion_preset[next];
 		arrange(mon, desk, true);
 		send_success(client_fd, "cycled to next preset\n");
 	} else if (streq("center", *args)) {

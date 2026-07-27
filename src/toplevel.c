@@ -10,6 +10,7 @@
 #include "render_unfocused.h"
 #include "rule.h"
 #include "scratchpad.h"
+#include "scroller.h"
 #include "seat.h"
 #include "server.h"
 #include "surface.h"
@@ -664,6 +665,11 @@ void toplevel_map(struct wl_listener *listener, void *data) {
 	node_t *focus = target_desktop->focus;
 	insert_node(target_desktop, n, focus);
 
+	// in scroller layout, also track the window in the scroller state.
+	if (target_desktop->layout == LAYOUT_SCROLLER && target_desktop->scroller_state &&
+		IS_TILED(n->client))
+		scroller_add_tile(target_desktop->scroller_state, n->client, should_focus);
+
 	// notify client of scale
 	if (target_output && target_output->wlr_output) {
 		float scale = target_output->wlr_output->scale;
@@ -804,6 +810,10 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
 				n->client && n->client->app_id[0] ? n->client->app_id : "?",
 				n->client && n->client->title[0] ? n->client->title : "?", n->id);
 		}
+		// in scroller layout, remove from scroller state first
+		if (d->layout == LAYOUT_SCROLLER && d->scroller_state && n->client)
+			scroller_remove_tile(d->scroller_state, n->client, m);
+
 		remove_node(d, n);
 
 		if (n)

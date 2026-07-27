@@ -4,7 +4,6 @@
 #include "layout.h"
 #include "output.h"
 #include "scratchpad.h"
-#include "scroller.h"
 #include "server.h"
 #include "tabs.h"
 #include "toplevel.h"
@@ -171,9 +170,6 @@ client_t *make_client(void) {
 	c->shadow_offset_x = shadow_offset_x;
 	c->shadow_offset_y = shadow_offset_y;
 	memcpy(c->shadow_color, shadow_color, sizeof(shadow_color));
-
-	// initialize scroller properties
-	scroller_init_client(c);
 
 	return c;
 }
