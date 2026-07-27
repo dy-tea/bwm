@@ -1,10 +1,6 @@
 #include "animation.h"
 #include "effects.h"
 #include "effects_backend.h"
-#include "gl_grayscale_frag_src.h"
-#include "gl_invert_frag_src.h"
-#include "gl_nightlight_frag_src.h"
-#include "gl_sepia_frag_src.h"
 #include "layer.h"
 #include "output.h"
 #include "server.h"
@@ -2179,16 +2175,7 @@ bool screen_shader_set(const char *name) {
 		return true;
 	}
 
-	const char *frag_src = NULL;
-	if (strcmp(name, "grayscale") == 0) {
-		frag_src = gl_grayscale_frag_src;
-	} else if (strcmp(name, "invert") == 0) {
-		frag_src = gl_invert_frag_src;
-	} else if (strcmp(name, "sepia") == 0) {
-		frag_src = gl_sepia_frag_src;
-	} else if (strcmp(name, "nightlight") == 0) {
-		frag_src = gl_nightlight_frag_src;
-	}
+	const char *frag_src = effects_backend->get_screen_shader_source(name);
 
 	if (!frag_src)
 		return false;

@@ -154,6 +154,7 @@ typedef struct effects_backend_t {
 	bool (*capture_readback)(struct wlr_buffer *capture_buffer, be_output_state_t *state,
 		uint64_t dst_fbo, int dst_w, int dst_h, int src_w, int src_h, uint64_t *out_tex);
 
+	const char *(*get_screen_shader_source)(const char *name);
 	bool (*compile_screen_shader)(const char *frag_src);
 	void (*destroy_screen_shader)(void);
 } effects_backend_t;

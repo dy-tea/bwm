@@ -66,6 +66,12 @@ vk_shaders = [
 
 	# Shadows
 	'shadow.frag',
+
+	# Fullscreen effects
+	'grayscale.frag',
+	'invert.frag',
+	'nightlight.frag',
+	'sepia.frag',
 ]
 
 foreach shader : vk_shaders

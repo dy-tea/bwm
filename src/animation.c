@@ -897,8 +897,6 @@ static void update_blur_for_slide_animation(output_t *output, animation_entry_t 
 		return;
 	if (!tl->blur || !tl->blur->blur_node)
 		return;
-	if (!pixman_region32_empty(&tl->blur->blur_region))
-		return;
 	if (!tl->blur->blur_buf)
 		return;
 
@@ -907,6 +905,54 @@ static void update_blur_for_slide_animation(output_t *output, animation_entry_t 
 	double e = entry->eased;
 	int x = (int)(entry->from.x + (entry->to.x - entry->from.x) * e);
 	int y = (int)(entry->from.y + (entry->to.y - entry->from.y) * e);
+
+	if (!pixman_region32_empty(&tl->blur->blur_region)) {
+		int blur_r_x = tl->blur->blur_region.extents.x1;
+		int blur_r_y = tl->blur->blur_region.extents.y1;
+		int blur_r_w = tl->blur->blur_region.extents.x2 - blur_r_x;
+		int blur_r_h = tl->blur->blur_region.extents.y2 - blur_r_y;
+
+		int r_x = x + blur_r_x, r_y = y + blur_r_y;
+
+		float bw = (float)output->width;
+		float bh = (float)output->height;
+		float sx = (float)(r_x - output->lx);
+		float sy = (float)(r_y - output->ly);
+		float sw = (float)blur_r_w, sh = (float)blur_r_h;
+
+		if (sx < 0.0f) {
+			sw += sx;
+			sx = 0.0f;
+		}
+		if (sy < 0.0f) {
+			sh += sy;
+			sy = 0.0f;
+		}
+		if (sx >= bw || sy >= bh || sw <= 0.0f || sh <= 0.0f)
+			return;
+		if (sx + sw > bw)
+			sw = bw - sx;
+		if (sy + sh > bh)
+			sh = bh - sy;
+		if (sw <= 0.0f || sh <= 0.0f)
+			return;
+
+		struct wlr_fbox src = {
+			.x = sx,
+			.y = sy,
+			.width = sw,
+			.height = sh
+		};
+		int dw = (int)sw, dh = (int)sh;
+
+		int offset_x = (r_x < output->lx) ? (output->lx - r_x) : 0;
+		int offset_y = (r_y < output->ly) ? (output->ly - r_y) : 0;
+
+		wlr_scene_node_set_position(&tl->blur->blur_node->node, blur_r_x + offset_x, blur_r_y + offset_y);
+		wlr_scene_buffer_set_source_box(tl->blur->blur_node, &src);
+		wlr_scene_buffer_set_dest_size(tl->blur->blur_node, dw, dh);
+		return;
+	}
 
 	struct wlr_box r;
 	if (c->state == STATE_FULLSCREEN)

@@ -227,12 +227,12 @@ static void output_repaint(output_t *output) {
 	clock_gettime(CLOCK_MONOTONIC, &now);
 	bool animating = animation_update_output(output, now);
 
-	if (effects_state.available && (fs_effects || !has_fs))
-		effects_output_frame(output, scene_output);
-
 	// ensure blur nodes track animated window positions during workspace slide
 	if (animating)
 		animation_update_slide_blur(output);
+
+	if (effects_state.available && (fs_effects || !has_fs))
+		effects_output_frame(output, scene_output);
 
 	if (has_fs && !fs_effects && output_try_direct_scanout(output)) {
 		clock_gettime(CLOCK_MONOTONIC, &now);

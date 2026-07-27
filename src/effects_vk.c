@@ -18,6 +18,11 @@
 #include <wlr/render/wlr_texture.h>
 #include <wlr/types/wlr_buffer.h>
 
+#include "vk_grayscale_frag_src.h"
+#include "vk_invert_frag_src.h"
+#include "vk_nightlight_frag_src.h"
+#include "vk_sepia_frag_src.h"
+
 const struct wlr_drm_format_set *wlr_renderer_get_render_formats(struct wlr_renderer *renderer);
 
 #include "vk_blit_frag_src.h"
@@ -2245,6 +2250,18 @@ static void vk_destroy_screen_shader(void) {
 	}
 }
 
+static const char *vk_get_screen_shader_source(const char *name) {
+	if (strcmp(name, "grayscale") == 0)
+		return vk_grayscale_frag_src;
+	if (strcmp(name, "invert") == 0)
+		return vk_invert_frag_src;
+	if (strcmp(name, "sepia") == 0)
+		return vk_sepia_frag_src;
+	if (strcmp(name, "nightlight") == 0)
+		return vk_nightlight_frag_src;
+	return NULL;
+}
+
 const effects_backend_t vk_backend = {
 	.init = vk_init,
 	.fini = vk_fini,
@@ -2264,6 +2281,7 @@ const effects_backend_t vk_backend = {
 	.apply_corner_mask = vk_apply_corner_mask,
 	.apply_screen_shader = vk_apply_screen_shader,
 	.capture_readback = vk_capture_readback,
+	.get_screen_shader_source = vk_get_screen_shader_source,
 	.compile_screen_shader = vk_compile_screen_shader,
 	.destroy_screen_shader = vk_destroy_screen_shader,
 };

@@ -6,6 +6,7 @@
 #include <GLES2/gl2ext.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <wlr/config.h>
 #include <wlr/render/allocator.h>
@@ -15,6 +16,11 @@
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/util/log.h>
+
+#include "gl_grayscale_frag_src.h"
+#include "gl_invert_frag_src.h"
+#include "gl_nightlight_frag_src.h"
+#include "gl_sepia_frag_src.h"
 
 #ifdef WLR_HAS_GLES2_RENDERER
 const struct wlr_drm_format_set *wlr_renderer_get_render_formats(struct wlr_renderer *renderer);
@@ -1061,6 +1067,18 @@ static void gles2_destroy_screen_shader(void) {
 	g->screen_shader_u_time = -1;
 }
 
+static const char *gles2_get_screen_shader_source(const char *name) {
+	if (strcmp(name, "grayscale") == 0)
+		return gl_grayscale_frag_src;
+	if (strcmp(name, "invert") == 0)
+		return gl_invert_frag_src;
+	if (strcmp(name, "sepia") == 0)
+		return gl_sepia_frag_src;
+	if (strcmp(name, "nightlight") == 0)
+		return gl_nightlight_frag_src;
+	return NULL;
+}
+
 const effects_backend_t gles2_backend = {
 	.init = gles2_init,
 	.fini = gles2_fini,
@@ -1080,6 +1098,7 @@ const effects_backend_t gles2_backend = {
 	.apply_corner_mask = gles2_apply_corner_mask,
 	.apply_screen_shader = gles2_apply_screen_shader,
 	.capture_readback = gles2_capture_readback,
+	.get_screen_shader_source = gles2_get_screen_shader_source,
 	.compile_screen_shader = gles2_compile_screen_shader,
 	.destroy_screen_shader = gles2_destroy_screen_shader,
 };
