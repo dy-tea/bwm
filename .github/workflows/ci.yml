@@ -3,7 +3,7 @@ name: Build
 on: [push]
 
 jobs:
-  build:
+  arch:
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
@@ -34,4 +34,78 @@ jobs:
         run: |
           cd arch/
           chown -R builder:builder .
-          sudo -u builder makepkg -s --noconfirm
+          sudo -u builder makepkg -si --noconfirm
+
+  alpine:
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:edge
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apk add --no-cache git gcc musl-dev cairo-dev eudev-dev gdk-pixbuf-dev \
+            libdisplay-info-dev libevdev-dev libinput-dev libseat-dev libxcb-dev \
+            libxkbcommon-dev mesa-dev meson pango-dev pcre2-dev pixman-dev \
+            wayland-dev wayland-protocols xcb-util-image-dev xcb-util-wm-dev \
+            xwayland-dev hwdata-dev shaderc-dev vulkan-headers vulkan-loader-dev \
+            xcb-util-cursor xcb-util-renderutil-dev glslang
+
+      - name: Build wlroots
+        run: |
+          git clone --depth 1 https://gitlab.freedesktop.org/wlroots/wlroots.git /tmp/wlroots
+          meson setup /tmp/wlroots /tmp/wlroots/build -Dexamples=false -Dtests=false \
+            -Dxwayland=enabled -Drenderers=gles2,vulkan -Dbackends=drm,libinput,x11
+          ninja -C /tmp/wlroots/build
+          meson install -C /tmp/wlroots/build
+          rm -rf /tmp/wlroots
+
+      - name: Build
+        run: |
+          meson setup build
+          ninja -C build
+
+  freebsd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build on FreeBSD
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: "14.2"
+          usesh: true
+          prepare: |
+            pkg install -y meson ninja pkgconf git wayland wayland-protocols \
+              libxkbcommon pixman cairo libdrm libinput libevdev seatd libepoll-shim \
+              pango shaderc vulkan-headers vulkan-loader xcb-util-wm xcb-util-errors hwdata \
+              xcb-util-renderutil xcb-util-cursor xcb-util-image json-c lcms2 evdev-proto freetype2 \
+              libepoll-shim libinotify mesa-libs mesa-devel egl-x11 egl-wayland libudev-devd \
+              gdk-pixbuf2 glslang xwayland libX11 libdisplay-info libliftoff bzip2
+          run: |
+            # Force-install libinotify: the VM image stripped the base .so,
+            # but pkg skips it unless forced.
+            pkg install -fy libinotify
+
+            # bzip2 stub for freetype2
+            cat > /usr/local/libdata/pkgconfig/bzip2.pc << 'EOF'
+            prefix=/usr/local
+            exec_prefix=${prefix}
+            libdir=${exec_prefix}/lib
+            includedir=${prefix}/include
+
+            Name: bzip2
+            Description: bzip2 compression library
+            Version: 1.0.8
+            Libs: -L${libdir} -lbz2
+            Cflags: -I${includedir}
+            EOF
+
+            git clone --depth 1 https://gitlab.freedesktop.org/wlroots/wlroots.git /tmp/wlroots
+            meson setup /tmp/wlroots /tmp/wlroots/build \
+              -Dexamples=false -Dtests=false \
+              -Dxwayland=enabled -Drenderers=gles2,vulkan -Dbackends=drm,libinput,x11
+            ninja -C /tmp/wlroots/build
+            meson install -C /tmp/wlroots/build
+            rm -rf /tmp/wlroots
+            meson setup build
+            ninja -C build

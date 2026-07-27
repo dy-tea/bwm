@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <string.h>
 
 static subscriber_t *make_subscriber(int client_fd, char *fifo_path, subscriber_mask_t mask,
 		int count) {

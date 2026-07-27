@@ -34,6 +34,10 @@ libs = [
 	wayland_protos,
 ]
 
+if host_machine.system() == 'freebsd'
+  libs += declare_dependency(link_args: ['/usr/local/lib/libinotify.so', '-lpthread'])
+endif
+
 wl_protocol_dir = wayland_protos.get_variable('pkgdatadir')
 
 wayland_scanner_dep = dependency('wayland-scanner', native: true)
