@@ -125,6 +125,12 @@ Controls how window decorations (titlebars, borders) are displayed:
 Clients that do not support `xdg-decoration` keep their own client-side decorations in `none` and `tabs` modes.
 
 ```
+doorsctl config hide_lone_tab true|false
+```
+
+When true, the tab bar is hidden when a tabbed container has only one window.
+
+```
 doorsctl config edge_scroller_pointer_focus true|false
 ```
 

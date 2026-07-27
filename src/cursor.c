@@ -727,6 +727,22 @@ void cursor_button(struct wl_listener *listener, void *data) {
 			}
 		}
 
+		// middle-click on tab bar closes the tab
+		if (event->button == BTN_MIDDLE) {
+			for (output_t *m = mon_head; m != NULL; m = m->next) {
+				desktop_t *d = m->desk;
+				if (d == NULL)
+					continue;
+
+				node_t *tab_leaf = tabs_hit_test_desktop(d, server.cursor->x, server.cursor->y);
+				if (tab_leaf != NULL) {
+					kill_node(d, tab_leaf);
+					server.cursor_buttons |= 1 << (event->button - 272);
+					return;
+				}
+			}
+		}
+
 		double sx, sy;
 		struct wlr_surface *surface = NULL;
 		void *type = desktop_type_at(server.cursor->x, server.cursor->y, &surface, &sx, &sy);
@@ -931,6 +947,33 @@ void cursor_button(struct wl_listener *listener, void *data) {
 void cursor_axis(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_pointer_axis_event *event = data;
+
+	// cycle through tabs when cursor is over a tab bar
+	for (output_t *m = mon_head; m != NULL; m = m->next) {
+		desktop_t *d = m->desk;
+		if (d == NULL)
+			continue;
+
+		node_t *tab_leaf = tabs_hit_test_desktop(d, server.cursor->x, server.cursor->y);
+		if (tab_leaf != NULL) {
+			node_t *tab_node = tabbed_ancestor(tab_leaf);
+			if (tab_node != NULL) {
+				node_t *next;
+				double delta = event->delta_discrete != 0 ? (double)event->delta_discrete : event->delta;
+				if (delta < 0)
+					next = tab_prev_leaf(tab_node, d->focus);
+				else
+					next = tab_next_leaf(tab_node, d->focus);
+
+				if (next != NULL && next != d->focus) {
+					focus_node(m, d, next);
+					arrange(m, d, true);
+				}
+			}
+			return;
+		}
+	}
+
 	wlr_seat_pointer_notify_axis(server.seat, event->time_msec, event->orientation, event->delta,
 		event->delta_discrete, event->source, event->relative_direction);
 	wlr_idle_notifier_v1_notify_activity(server.idle_notifier, server.seat);

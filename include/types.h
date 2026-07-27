@@ -237,6 +237,7 @@ extern bool allow_tearing;
 extern bool auto_float_dialogs;
 extern decoration_mode_t decoration_mode;
 extern bool enable_animations;
+extern bool hide_lone_tab;
 extern workspace_anim_direction_t workspace_anim_direction;
 extern bool workspace_anim_slide_up;
 extern int mapping_events_count;

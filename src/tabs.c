@@ -56,7 +56,9 @@ float color_tab_sep[4] = {
 	1.0f
 };
 
-int tab_bar_height(void) {
+int tab_bar_height(node_t *n) {
+	if (hide_lone_tab && n && tabbed_leaf_count(n) <= 1)
+		return 0;
 	return TAB_BAR_HEIGHT;
 }
 
@@ -88,7 +90,7 @@ static size_t collect_leaves(node_t *n, node_t **out, size_t cap) {
 	return used;
 }
 
-static size_t count_leaves(node_t *n) {
+size_t tabbed_leaf_count(node_t *n) {
 	return collect_leaves(n, NULL, 0);
 }
 
@@ -112,7 +114,7 @@ node_t *tab_focus_leaf(node_t *tabbed_node, node_t *focus) {
 node_t *tab_next_leaf(node_t *tabbed_node, node_t *focus) {
 	if (tabbed_node == NULL)
 		return NULL;
-	size_t n = count_leaves(tabbed_node);
+	size_t n = tabbed_leaf_count(tabbed_node);
 	if (n == 0)
 		return NULL;
 	node_t **arr = calloc(n, sizeof(node_t *));
@@ -134,7 +136,7 @@ node_t *tab_next_leaf(node_t *tabbed_node, node_t *focus) {
 node_t *tab_prev_leaf(node_t *tabbed_node, node_t *focus) {
 	if (tabbed_node == NULL)
 		return NULL;
-	size_t n = count_leaves(tabbed_node);
+	size_t n = tabbed_leaf_count(tabbed_node);
 	if (n == 0)
 		return NULL;
 	node_t **arr = calloc(n, sizeof(node_t *));
@@ -177,7 +179,7 @@ static void destroy_entries(struct tab_bar_t *bar) {
 static void build_entries(struct tab_bar_t *bar) {
 	destroy_entries(bar);
 
-	size_t count = count_leaves(bar->owner);
+	size_t count = tabbed_leaf_count(bar->owner);
 	if (count == 0)
 		return;
 

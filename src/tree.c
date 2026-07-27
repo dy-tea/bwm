@@ -38,6 +38,7 @@ bool allow_tearing = false;
 bool auto_float_dialogs = false;
 decoration_mode_t decoration_mode = DECORATION_ALWAYS;
 bool enable_animations = false;
+bool hide_lone_tab = false;
 workspace_anim_direction_t workspace_anim_direction = WORKSPACE_ANIM_VERTICAL;
 bool workspace_anim_slide_up = false;
 int mapping_events_count = 0;
@@ -621,8 +622,7 @@ void apply_layout(output_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
 		bool show_deco = decoration_mode == DECORATION_ALWAYS || decoration_mode == DECORATION_TABS;
 
 		if (show_deco) {
-			int bar_h = tab_bar_height();
-
+			int bar_h = tab_bar_height(n);
 			int wg = compute_window_gap(d);
 			struct wlr_box bar_rect = {
 				.x = rect.x,
@@ -642,7 +642,7 @@ void apply_layout(output_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
 
 		struct wlr_box content_rect = rect;
 		if (show_deco) {
-			int bar_h = tab_bar_height();
+			int bar_h = tab_bar_height(n);
 			content_rect.y += bar_h;
 			content_rect.height = (bar_h < content_rect.height) ? content_rect.height - bar_h : 0;
 		}

@@ -34,7 +34,8 @@ extern float color_tab_text[4];
 extern float color_tab_text_active[4];
 extern float color_tab_sep[4];
 
-int tab_bar_height(void);
+size_t tabbed_leaf_count(node_t *n);
+int tab_bar_height(node_t *n);
 
 void tabs_create(node_t *n);
 void tabs_destroy(node_t *n);

@@ -113,6 +113,8 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 			snprintf(buf, sizeof(buf), "%s\n", mode);
 			send_success(client_fd, buf);
 		}
+	} else if (streq("hide_lone_tab", *args)) {
+		ipc_handle_bool(args, num, client_fd, &hide_lone_tab, IPC_FLAG_COMMIT);
 	} else if (streq("gapless_monocle", *args)) {
 		ipc_handle_bool(args, num, client_fd, &gapless_monocle, IPC_FLAG_COMMIT);
 	} else if (streq("decoration_mode", *args)) {

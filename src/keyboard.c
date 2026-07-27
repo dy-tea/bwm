@@ -10,6 +10,7 @@
 #include "scroller.h"
 #include "seat.h"
 #include "server.h"
+#include "tabs.h"
 #include "toplevel.h"
 #include "transaction.h"
 #include "tree.h"
@@ -288,6 +289,18 @@ void focus_west(void) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
 
+	// cycle to previous tab
+	node_t *tab_anc = tabbed_ancestor(mon->desk->focus);
+	if (tab_anc != NULL) {
+		node_t *prev = tab_prev_leaf(tab_anc, mon->desk->focus);
+		if (prev != NULL && prev != mon->desk->focus) {
+			focus_node(mon, mon->desk, prev);
+			arrange(mon, mon->desk, true);
+			wlr_log(WLR_DEBUG, "Focused previous tab");
+		}
+		return;
+	}
+
 	if (mon->desk->layout == LAYOUT_SCROLLER) {
 		if (scroller_focus_prev(mon->desk)) {
 			focus_node(mon, mon->desk, mon->desk->focus);
@@ -326,6 +339,18 @@ void focus_west(void) {
 void focus_east(void) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
+
+	// cycle to next tab
+	node_t *tab_anc = tabbed_ancestor(mon->desk->focus);
+	if (tab_anc != NULL) {
+		node_t *next = tab_next_leaf(tab_anc, mon->desk->focus);
+		if (next != NULL && next != mon->desk->focus) {
+			focus_node(mon, mon->desk, next);
+			arrange(mon, mon->desk, true);
+			wlr_log(WLR_DEBUG, "Focused next tab");
+		}
+		return;
+	}
 
 	if (mon->desk->layout == LAYOUT_SCROLLER) {
 		if (scroller_focus_next(mon->desk)) {
