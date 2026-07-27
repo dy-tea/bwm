@@ -117,6 +117,7 @@ executable(
 		'src' / 'input_method.c',
 		'src' / 'keyboard.c',
 		'src' / 'launcher.c',
+		'src' / 'layout.c',
 		'src' / 'layer.c',
 		'src' / 'lock.c',
 		'src' / 'log.c',

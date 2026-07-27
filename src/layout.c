@@ -1,0 +1,233 @@
+#include "layout.h"
+#include "master_stack.h"
+#include "scroller.h"
+#include "toplevel.h"
+#include "tree.h"
+#include "types.h"
+#include <stdlib.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/util/log.h>
+
+static void tiled_arrange(output_t *m, desktop_t *d, struct wlr_box available) {
+    int wg = compute_window_gap(d);
+    available.x += wg;
+    available.y += wg;
+    available.width -= wg;
+    available.height -= wg;
+    apply_layout(m, d, d->root, available, available);
+}
+
+static void monocle_arrange(output_t *m, desktop_t *d, struct wlr_box available) {
+	available.x += monocle_padding.left;
+	available.y += monocle_padding.top;
+	available.width -= monocle_padding.left + monocle_padding.right;
+	available.height -= monocle_padding.top + monocle_padding.bottom;
+	if (!gapless_monocle) {
+		int wg = compute_window_gap(d);
+		available.x += wg;
+		available.y += wg;
+		available.width -= 2 * wg;
+		available.height -= 2 * wg;
+	}
+	apply_layout(m, d, d->root, available, available);
+}
+
+static void monocle_on_focus(output_t *m, desktop_t *d, node_t *n) {
+	(void)m;
+	if (!d->root)
+		return;
+
+	for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root)) {
+		if (!node->client)
+			continue;
+
+		bool should_show = (node == n);
+		node->client->flags.shown = should_show;
+		struct wlr_scene_tree *st = client_get_scene_tree(node->client);
+		if (st)
+			wlr_scene_node_set_enabled(&st->node, should_show);
+	}
+}
+
+static void scroller_on_focus(output_t *m, desktop_t *d, node_t *n) {
+	if (!d->root)
+		return;
+
+	for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
+		if (node->client != NULL)
+			node->client->flags.shown = true;
+
+	if (n != NULL && n->client != NULL && n->client->toplevel && n->client->toplevel->configured) {
+		wlr_log(WLR_DEBUG, "scroller_on_focus: triggering arrange");
+		arrange(m, d, true);
+	} else {
+		wlr_log(WLR_DEBUG, "scroller_on_focus: skipping arrange (initial map)");
+	}
+}
+
+static int tiled_collect(desktop_t *d, node_t ***out_nodes) {
+	if (!d || !d->root || !out_nodes)
+		return 0;
+
+	*out_nodes = NULL;
+	int count = 0;
+	for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root))
+		if (n->client && IS_TILED(n->client))
+			count++;
+
+	if (count == 0)
+		return 0;
+
+	node_t **nodes = calloc((size_t)count, sizeof(*nodes));
+	if (!nodes)
+		return 0;
+
+	int index = 0;
+	for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root))
+		if (n->client && IS_TILED(n->client))
+			nodes[index++] = n;
+
+	*out_nodes = nodes;
+	return count;
+}
+
+static int scroller_collect(desktop_t *d, node_t ***out_nodes) {
+	return scroller_collect_nodes(d, out_nodes);
+}
+
+static bool scroller_focus(desktop_t *d, direction_t dir) {
+	switch (dir) {
+	case DIR_WEST:
+		return scroller_focus_prev(d);
+	case DIR_EAST:
+		return scroller_focus_next(d);
+	case DIR_NORTH:
+		return scroller_focus_up(d);
+	case DIR_SOUTH:
+		return scroller_focus_down(d);
+	}
+	return false;
+}
+
+static bool master_stack_focus(desktop_t *d, direction_t dir) {
+	switch (dir) {
+	case DIR_WEST:
+		return master_stack_focus_west(d);
+	case DIR_EAST:
+		return master_stack_focus_east(d);
+	case DIR_NORTH:
+		return master_stack_focus_north(d);
+	case DIR_SOUTH:
+		return master_stack_focus_south(d);
+	}
+	return false;
+}
+
+static bool master_stack_swap(output_t *m, desktop_t *d, direction_t dir) {
+	switch (dir) {
+	case DIR_WEST:
+		return master_stack_swap_west(m, d);
+	case DIR_EAST:
+		return master_stack_swap_east(m, d);
+	case DIR_NORTH:
+		return master_stack_swap_north(m, d);
+	case DIR_SOUTH:
+		return master_stack_swap_south(m, d);
+	}
+	return false;
+}
+
+static const layout_impl_t tiled_impl = {
+	.name = "tiled",
+	.arrange = tiled_arrange,
+	.on_focus = NULL,
+	.focus = NULL,
+	.swap = NULL,
+	.init_client = NULL,
+	.collect = tiled_collect,
+	.single_visible = false,
+	.has_directional_nav = false,
+};
+
+static const layout_impl_t monocle_impl = {
+	.name = "monocle",
+	.arrange = monocle_arrange,
+	.on_focus = monocle_on_focus,
+	.focus = NULL,
+	.swap = NULL,
+	.init_client = NULL,
+	.collect = tiled_collect,
+	.single_visible = true,
+	.has_directional_nav = false,
+};
+
+static const layout_impl_t scroller_impl = {
+	.name = "scroller",
+	.arrange = scroller_arrange,
+	.on_focus = scroller_on_focus,
+	.focus = scroller_focus,
+	.swap = NULL,
+	.init_client = scroller_init_client,
+	.collect = scroller_collect,
+	.single_visible = false,
+	.has_directional_nav = true,
+};
+
+static const layout_impl_t master_stack_impl = {
+	.name = "master_stack",
+	.arrange = master_stack_arrange,
+	.on_focus = NULL,
+	.focus = master_stack_focus,
+	.swap = master_stack_swap,
+	.init_client = NULL,
+	.collect = master_stack_collect,
+	.single_visible = false,
+	.has_directional_nav = true,
+};
+
+static const layout_impl_t *registry[] = {
+	[LAYOUT_TILED] = &tiled_impl,
+	[LAYOUT_MONOCLE] = &monocle_impl,
+	[LAYOUT_SCROLLER] = &scroller_impl,
+	[LAYOUT_MASTER_STACK] = &master_stack_impl,
+};
+
+const layout_impl_t *layout_get_impl(layout_t layout) {
+	if ((size_t)layout >= sizeof(registry) / sizeof(registry[0]))
+		return NULL;
+	return registry[layout];
+}
+
+void layout_set(desktop_t *d, layout_t new_layout) {
+	if (!d)
+		return;
+	d->layout = new_layout;
+}
+
+void layout_toggle(desktop_t *d, layout_t target) {
+	if (!d)
+		return;
+	if (d->layout == target) {
+		layout_set(d, d->user_layout);
+	} else {
+		d->user_layout = d->layout;
+		layout_set(d, target);
+	}
+}
+
+void layout_cycle(output_t *m, desktop_t *d, int direction) {
+	if (!d)
+		return;
+
+	int num_layouts = sizeof(registry) / sizeof(registry[0]);
+	int current = (int)d->layout;
+	int next = (current + direction) % num_layouts;
+	if (next < 0)
+		next += num_layouts;
+
+	d->user_layout = d->layout;
+	layout_set(d, (layout_t)next);
+	arrange(m, d, true);
+	if (d->focus)
+		focus_node(m, d, d->focus);
+}

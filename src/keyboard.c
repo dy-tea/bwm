@@ -5,9 +5,9 @@
 #include "input_method.h"
 #include "ipc.h"
 #include "keyboard.h"
+#include "layout.h"
 #include "master_stack.h"
 #include "output.h"
-#include "scroller.h"
 #include "seat.h"
 #include "server.h"
 #include "tabs.h"
@@ -285,54 +285,39 @@ bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym) {
 }
 
 // navigation actions
+static bool layout_focus_direction(desktop_t *d, direction_t dir) {
+	const layout_impl_t *impl = layout_get_impl(d->layout);
+	return impl && impl->focus && impl->focus(d, dir);
+}
+
 void focus_west(void) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
 
-	// cycle to previous tab
-	node_t *tab_anc = tabbed_ancestor(mon->desk->focus);
+	desktop_t *d = mon->desk;
+
+	node_t *tab_anc = tabbed_ancestor(d->focus);
 	if (tab_anc != NULL) {
-		node_t *prev = tab_prev_leaf(tab_anc, mon->desk->focus);
-		if (prev != NULL && prev != mon->desk->focus) {
-			focus_node(mon, mon->desk, prev);
-			arrange(mon, mon->desk, true);
-			wlr_log(WLR_DEBUG, "Focused previous tab");
+		node_t *prev = tab_prev_leaf(tab_anc, d->focus);
+		if (prev != NULL && prev != d->focus) {
+			focus_node(mon, d, prev);
+			arrange(mon, d, true);
 		}
 		return;
 	}
 
-	if (mon->desk->layout == LAYOUT_SCROLLER) {
-		if (scroller_focus_prev(mon->desk)) {
-			focus_node(mon, mon->desk, mon->desk->focus);
-			wlr_log(WLR_DEBUG, "Focused west (scroller)");
-		}
+	if (layout_focus_direction(d, DIR_WEST))
 		return;
-	}
 
-	if (mon->desk->layout == LAYOUT_MASTER_STACK) {
-		if (master_stack_focus_west(mon->desk)) {
-			focus_node(mon, mon->desk, mon->desk->focus);
-			wlr_log(WLR_DEBUG, "Focused west (master-stack)");
-		}
-		return;
-	}
-
-	node_t *n = find_fence(mon->desk->focus, DIR_WEST);
+	node_t *n = find_fence(d->focus, DIR_WEST);
 	if (n != NULL) {
 		n = second_extrema(n);
-		if (n != NULL) {
-			focus_node(mon, mon->desk, n);
-			wlr_log(WLR_DEBUG, "Focused west");
-		}
-	} else if (focus_wrapping) {
-		desktop_t *d = mon->desk;
-		if (d->root) {
-			node_t *w = second_extrema(d->root);
-			if (w && w != d->focus) {
-				focus_node(mon, d, w);
-				wlr_log(WLR_DEBUG, "Focused west (wrapped)");
-			}
-		}
+		if (n != NULL)
+			focus_node(mon, d, n);
+	} else if (focus_wrapping && d->root) {
+		node_t *w = second_extrema(d->root);
+		if (w && w != d->focus)
+			focus_node(mon, d, w);
 	}
 }
 
@@ -340,50 +325,30 @@ void focus_east(void) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
 
-	// cycle to next tab
-	node_t *tab_anc = tabbed_ancestor(mon->desk->focus);
+	desktop_t *d = mon->desk;
+
+	node_t *tab_anc = tabbed_ancestor(d->focus);
 	if (tab_anc != NULL) {
-		node_t *next = tab_next_leaf(tab_anc, mon->desk->focus);
-		if (next != NULL && next != mon->desk->focus) {
-			focus_node(mon, mon->desk, next);
-			arrange(mon, mon->desk, true);
-			wlr_log(WLR_DEBUG, "Focused next tab");
+		node_t *next = tab_next_leaf(tab_anc, d->focus);
+		if (next != NULL && next != d->focus) {
+			focus_node(mon, d, next);
+			arrange(mon, d, true);
 		}
 		return;
 	}
 
-	if (mon->desk->layout == LAYOUT_SCROLLER) {
-		if (scroller_focus_next(mon->desk)) {
-			focus_node(mon, mon->desk, mon->desk->focus);
-			wlr_log(WLR_DEBUG, "Focused east (scroller)");
-		}
+	if (layout_focus_direction(d, DIR_EAST))
 		return;
-	}
 
-	if (mon->desk->layout == LAYOUT_MASTER_STACK) {
-		if (master_stack_focus_east(mon->desk)) {
-			focus_node(mon, mon->desk, mon->desk->focus);
-			wlr_log(WLR_DEBUG, "Focused east (master-stack)");
-		}
-		return;
-	}
-
-	node_t *n = find_fence(mon->desk->focus, DIR_EAST);
+	node_t *n = find_fence(d->focus, DIR_EAST);
 	if (n != NULL) {
 		n = first_extrema(n);
-		if (n != NULL) {
-			focus_node(mon, mon->desk, n);
-			wlr_log(WLR_DEBUG, "Focused east");
-		}
-	} else if (focus_wrapping) {
-		desktop_t *d = mon->desk;
-		if (d->root) {
-			node_t *w = first_extrema(d->root);
-			if (w && w != d->focus) {
-				focus_node(mon, d, w);
-				wlr_log(WLR_DEBUG, "Focused east (wrapped)");
-			}
-		}
+		if (n != NULL)
+			focus_node(mon, d, n);
+	} else if (focus_wrapping && d->root) {
+		node_t *w = first_extrema(d->root);
+		if (w && w != d->focus)
+			focus_node(mon, d, w);
 	}
 }
 
@@ -391,38 +356,20 @@ void focus_south(void) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
 
-	if (mon->desk->layout == LAYOUT_SCROLLER) {
-		if (scroller_focus_down(mon->desk)) {
-			focus_node(mon, mon->desk, mon->desk->focus);
-			wlr_log(WLR_DEBUG, "Focused south (scroller stack)");
-		}
-		return;
-	}
+	desktop_t *d = mon->desk;
 
-	if (mon->desk->layout == LAYOUT_MASTER_STACK) {
-		if (master_stack_focus_south(mon->desk)) {
-			focus_node(mon, mon->desk, mon->desk->focus);
-			wlr_log(WLR_DEBUG, "Focused south (master-stack)");
-		}
+	if (layout_focus_direction(d, DIR_SOUTH))
 		return;
-	}
 
-	node_t *n = find_fence(mon->desk->focus, DIR_SOUTH);
+	node_t *n = find_fence(d->focus, DIR_SOUTH);
 	if (n != NULL) {
 		n = second_extrema(n);
-		if (n != NULL) {
-			focus_node(mon, mon->desk, n);
-			wlr_log(WLR_DEBUG, "Focused south");
-		}
-	} else if (focus_wrapping) {
-		desktop_t *d = mon->desk;
-		if (d->root) {
-			node_t *w = first_extrema(d->root);
-			if (w && w != d->focus) {
-				focus_node(mon, d, w);
-				wlr_log(WLR_DEBUG, "Focused south (wrapped)");
-			}
-		}
+		if (n != NULL)
+			focus_node(mon, d, n);
+	} else if (focus_wrapping && d->root) {
+		node_t *w = first_extrema(d->root);
+		if (w && w != d->focus)
+			focus_node(mon, d, w);
 	}
 }
 
@@ -430,60 +377,43 @@ void focus_north(void) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
 
-	if (mon->desk->layout == LAYOUT_SCROLLER) {
-		if (scroller_focus_up(mon->desk)) {
-			focus_node(mon, mon->desk, mon->desk->focus);
-			wlr_log(WLR_DEBUG, "Focused north (scroller stack)");
-		}
-		return;
-	}
+	desktop_t *d = mon->desk;
 
-	if (mon->desk->layout == LAYOUT_MASTER_STACK) {
-		if (master_stack_focus_north(mon->desk)) {
-			focus_node(mon, mon->desk, mon->desk->focus);
-			wlr_log(WLR_DEBUG, "Focused north (master-stack)");
-		}
+	if (layout_focus_direction(d, DIR_NORTH))
 		return;
-	}
 
-	node_t *n = find_fence(mon->desk->focus, DIR_NORTH);
+	node_t *n = find_fence(d->focus, DIR_NORTH);
 	if (n != NULL) {
 		n = first_extrema(n);
-		if (n != NULL) {
-			focus_node(mon, mon->desk, n);
-			wlr_log(WLR_DEBUG, "Focused north");
-		}
-	} else if (focus_wrapping) {
-		desktop_t *d = mon->desk;
-		if (d->root) {
-			node_t *w = second_extrema(d->root);
-			if (w && w != d->focus) {
-				focus_node(mon, d, w);
-				wlr_log(WLR_DEBUG, "Focused north (wrapped)");
-			}
-		}
+		if (n != NULL)
+			focus_node(mon, d, n);
+	} else if (focus_wrapping && d->root) {
+		node_t *w = second_extrema(d->root);
+		if (w && w != d->focus)
+			focus_node(mon, d, w);
 	}
 }
 
 // Window swapping actions
+static bool layout_swap_direction(output_t *m, desktop_t *d, direction_t dir) {
+	const layout_impl_t *impl = layout_get_impl(d->layout);
+	return impl && impl->swap && impl->swap(m, d, dir);
+}
+
 void swap_west(void) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
 
-	if (mon->desk->layout == LAYOUT_MASTER_STACK) {
-		if (master_stack_swap_west(mon, mon->desk)) {
-			wlr_log(WLR_INFO, "Swapped with west window (master-stack)");
-		}
-		return;
-	}
+	desktop_t *d = mon->desk;
 
-	node_t *n = find_fence(mon->desk->focus, DIR_WEST);
+	if (layout_swap_direction(mon, d, DIR_WEST))
+		return;
+
+	node_t *n = find_fence(d->focus, DIR_WEST);
 	if (n != NULL) {
 		n = second_extrema(n);
-		if (n != NULL) {
-			swap_nodes(mon, mon->desk, mon->desk->focus, mon, mon->desk, n);
-			wlr_log(WLR_INFO, "Swapped with west window");
-		}
+		if (n != NULL)
+			swap_nodes(mon, d, d->focus, mon, d, n);
 	}
 }
 
@@ -491,20 +421,16 @@ void swap_east(void) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
 
-	if (mon->desk->layout == LAYOUT_MASTER_STACK) {
-		if (master_stack_swap_east(mon, mon->desk)) {
-			wlr_log(WLR_INFO, "Swapped with east window (master-stack)");
-		}
-		return;
-	}
+	desktop_t *d = mon->desk;
 
-	node_t *n = find_fence(mon->desk->focus, DIR_EAST);
+	if (layout_swap_direction(mon, d, DIR_EAST))
+		return;
+
+	node_t *n = find_fence(d->focus, DIR_EAST);
 	if (n != NULL) {
 		n = first_extrema(n);
-		if (n != NULL) {
-			swap_nodes(mon, mon->desk, mon->desk->focus, mon, mon->desk, n);
-			wlr_log(WLR_INFO, "Swapped with east window");
-		}
+		if (n != NULL)
+			swap_nodes(mon, d, d->focus, mon, d, n);
 	}
 }
 
@@ -512,20 +438,16 @@ void swap_north(void) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
 
-	if (mon->desk->layout == LAYOUT_MASTER_STACK) {
-		if (master_stack_swap_north(mon, mon->desk)) {
-			wlr_log(WLR_INFO, "Swapped with north window (master-stack)");
-		}
-		return;
-	}
+	desktop_t *d = mon->desk;
 
-	node_t *n = find_fence(mon->desk->focus, DIR_NORTH);
+	if (layout_swap_direction(mon, d, DIR_NORTH))
+		return;
+
+	node_t *n = find_fence(d->focus, DIR_NORTH);
 	if (n != NULL) {
 		n = second_extrema(n);
-		if (n != NULL) {
-			swap_nodes(mon, mon->desk, mon->desk->focus, mon, mon->desk, n);
-			wlr_log(WLR_INFO, "Swapped with north window");
-		}
+		if (n != NULL)
+			swap_nodes(mon, d, d->focus, mon, d, n);
 	}
 }
 
@@ -533,20 +455,16 @@ void swap_south(void) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
 
-	if (mon->desk->layout == LAYOUT_MASTER_STACK) {
-		if (master_stack_swap_south(mon, mon->desk)) {
-			wlr_log(WLR_INFO, "Swapped with south window (master-stack)");
-		}
-		return;
-	}
+	desktop_t *d = mon->desk;
 
-	node_t *n = find_fence(mon->desk->focus, DIR_SOUTH);
+	if (layout_swap_direction(mon, d, DIR_SOUTH))
+		return;
+
+	node_t *n = find_fence(d->focus, DIR_SOUTH);
 	if (n != NULL) {
 		n = first_extrema(n);
-		if (n != NULL) {
-			swap_nodes(mon, mon->desk, mon->desk->focus, mon, mon->desk, n);
-			wlr_log(WLR_INFO, "Swapped with south window");
-		}
+		if (n != NULL)
+			swap_nodes(mon, d, d->focus, mon, d, n);
 	}
 }
 
@@ -1007,8 +925,7 @@ void toggle_monocle(void) {
 	desktop_t *d = mon->desk;
 
 	if (d->layout == LAYOUT_MONOCLE) {
-		d->layout = d->user_layout;
-		wlr_log(WLR_INFO, "Switched to tiled layout");
+		layout_set(d, d->user_layout);
 
 		if (d->root) {
 			for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root)) {
@@ -1019,9 +936,7 @@ void toggle_monocle(void) {
 			}
 		}
 	} else {
-		d->user_layout = d->layout;
-		d->layout = LAYOUT_MONOCLE;
-		wlr_log(WLR_INFO, "Switched to monocle layout");
+		layout_toggle(d, LAYOUT_MONOCLE);
 
 		if (d->root) {
 			for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root)) {
@@ -1046,7 +961,7 @@ void set_tiled_layout(void) {
 	if (mon == NULL || d == NULL)
 		return;
 
-	d->layout = LAYOUT_TILED;
+	layout_set(d, LAYOUT_TILED);
 	d->user_layout = LAYOUT_TILED;
 
 	if (d->root) {
@@ -1073,28 +988,16 @@ void toggle_master_stack(void) {
 	desktop_t *d = mon->desk;
 
 	if (d->layout == LAYOUT_MASTER_STACK) {
-		d->layout = d->user_layout;
-		wlr_log(WLR_INFO, "Switched to tiled layout");
-
-		if (d->root) {
-			for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root)) {
-				if (n->client && n->client->toplevel && n->client->state != STATE_FULLSCREEN) {
-					n->client->toplevel->client_maximized = false;
-					wlr_xdg_toplevel_set_maximized(n->client->toplevel->xdg_toplevel, false);
-				}
-			}
-		}
+		layout_set(d, d->user_layout);
 	} else {
-		d->user_layout = d->layout;
-		d->layout = LAYOUT_MASTER_STACK;
-		wlr_log(WLR_INFO, "Switched to master-stack layout");
+		layout_toggle(d, LAYOUT_MASTER_STACK);
+	}
 
-		if (d->root) {
-			for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root)) {
-				if (n->client && n->client->toplevel && n->client->state != STATE_FULLSCREEN) {
-					n->client->toplevel->client_maximized = false;
-					wlr_xdg_toplevel_set_maximized(n->client->toplevel->xdg_toplevel, false);
-				}
+	if (d->root) {
+		for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root)) {
+			if (n->client && n->client->toplevel && n->client->state != STATE_FULLSCREEN) {
+				n->client->toplevel->client_maximized = false;
+				wlr_xdg_toplevel_set_maximized(n->client->toplevel->xdg_toplevel, false);
 			}
 		}
 	}

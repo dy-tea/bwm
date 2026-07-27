@@ -20,6 +20,8 @@ extern int scroller_proportion_preset_count;
 
 void scroller_arrange(struct output_t *m, desktop_t *d, struct wlr_box available);
 
+int scroller_collect_nodes(desktop_t *d, node_t ***out_nodes);
+
 void scroller_stack_push(client_t *head, client_t *new_client);
 void scroller_stack_remove(client_t *client);
 client_t *scroller_get_stack_head(const client_t *client);

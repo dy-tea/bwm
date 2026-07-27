@@ -2,6 +2,7 @@
 #include "ipc_cmd.h"
 #include "ipc_helpers.h"
 #include "keyboard.h"
+#include "layout.h"
 #include "output.h"
 #include "server.h"
 #include "transaction.h"
@@ -101,15 +102,14 @@ void ipc_cmd_desktop(char **args, int num, int client_fd) {
 		if (num > 1 && streq("--all", args[1])) {
 			for (output_t *m = mon_head; m != NULL; m = m->next) {
 				for (desktop_t *d = m->desk_head; d != NULL; d = d->next) {
-					d->layout = layout;
+					layout_set(d, layout);
 					arrange(m, d, true);
-					// extreme hack
 					ipc_put_status(SUB_MASK_DESKTOP_LAYOUT, "desktop_layout[%s,%c]\n", d->name,
 						layout_to_char(d->layout));
 				}
 			}
 		} else {
-			desk->layout = layout;
+			layout_set(desk, layout);
 			arrange(mon, desk, true);
 			if (desk->focus != NULL)
 				focus_node(mon, desk, desk->focus);

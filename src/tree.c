@@ -1,8 +1,7 @@
 #include "animation.h"
 #include "effects.h"
-#include "fallthrough.h"
 #include "ipc.h"
-#include "master_stack.h"
+#include "layout.h"
 #include "output.h"
 #include "scratchpad.h"
 #include "scroller.h"
@@ -341,31 +340,9 @@ void arrange(output_t *m, desktop_t *d, bool use_transaction) {
 	rect.width -= m->padding.left + d->padding.left + d->padding.right + m->padding.right;
 	rect.height -= m->padding.top + d->padding.top + d->padding.bottom + m->padding.bottom;
 
-	switch (d->layout) {
-	case LAYOUT_SCROLLER:
-		scroller_arrange(m, d, rect);
-		break;
-	case LAYOUT_MASTER_STACK:
-		master_stack_arrange(m, d, rect);
-		break;
-	case LAYOUT_MONOCLE:
-		rect.x += monocle_padding.left;
-		rect.y += monocle_padding.top;
-		rect.width -= monocle_padding.left + monocle_padding.right;
-		rect.height -= monocle_padding.top + monocle_padding.bottom;
-		fallthrough;
-	default:
-		if (!gapless_monocle || d->layout != LAYOUT_MONOCLE) {
-			int wg = compute_window_gap(d);
-			rect.x += wg;
-			rect.y += wg;
-			rect.width -= wg;
-			rect.height -= wg;
-		}
-
-		apply_layout(m, d, d->root, rect, rect);
-		break;
-	}
+	const layout_impl_t *impl = layout_get_impl(d->layout);
+	if (impl && impl->arrange)
+		impl->arrange(m, d, rect);
 
 	if (use_transaction)
 		transaction_commit_dirty();
@@ -1134,57 +1111,30 @@ static bool focus_node_impl(output_t *m, desktop_t *d, node_t *n, bool give_keyb
 		return true;
 	}
 
-	if (d->layout == LAYOUT_MONOCLE && d->root != NULL) {
-		// update visibility state and scene graph for all nodes
-		for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root)) {
-			if (node->client == NULL)
-				continue;
-			bool should_show = (node == n);
-			node->client->flags.shown = should_show;
-			struct wlr_scene_tree *scene_tree = client_get_scene_tree(node->client);
-			if (scene_tree)
-				wlr_scene_node_set_enabled(&scene_tree->node, should_show);
-		}
-	} else if (d->layout == LAYOUT_SCROLLER && d->root != NULL) {
-		for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
-			if (node->client != NULL)
-				node->client->flags.shown = true;
-
-		if (n != NULL && n->client != NULL && n->client->toplevel && n->client->toplevel->configured) {
-			wlr_log(WLR_DEBUG, "focus_node: scroller layout, triggering arrange for "
-				"scrolling effect");
-			arrange(m, d, true);
-		} else {
-			wlr_log(WLR_DEBUG, "focus_node: scroller layout, skipping arrange (initial map)");
-		}
+	const layout_impl_t *impl = layout_get_impl(d->layout);
+	if (impl && impl->on_focus) {
+		impl->on_focus(m, d, n);
 	} else if (d->root != NULL) {
 		for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
 			if (node->client != NULL)
 				node->client->flags.shown = true;
-	} else {
-		// mark all windows as shown in tiled mode, but only for current desktop
-		if (d->root != NULL)
-			for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
-				if (node->client != NULL)
-					node->client->flags.shown = true;
+	}
 
-		// for tabbed groups, hide non-focused tab leaves and refresh tab colors
-		node_t *t = tabbed_ancestor(n);
-		if (t != NULL) {
-			tabs_update_focus(t, n);
-			for (node_t *leaf = first_extrema(t); leaf != NULL && leaf != t; leaf = next_leaf(leaf, t)) {
-				if (leaf->client == NULL)
-					continue;
-				if (leaf->client->state == STATE_FLOATING)
-					continue;
+	node_t *t = tabbed_ancestor(n);
+	if (t != NULL) {
+		tabs_update_focus(t, n);
+		for (node_t *leaf = first_extrema(t); leaf != NULL && leaf != t; leaf = next_leaf(leaf, t)) {
+			if (leaf->client == NULL)
+				continue;
+			if (leaf->client->state == STATE_FLOATING)
+				continue;
 
-				bool show = (leaf == n);
-				leaf->client->flags.shown = show;
+			bool show = (leaf == n);
+			leaf->client->flags.shown = show;
 
-				struct wlr_scene_tree *st = client_get_scene_tree(leaf->client);
-				if (st)
-					wlr_scene_node_set_enabled(&st->node, show);
-			}
+			struct wlr_scene_tree *st = client_get_scene_tree(leaf->client);
+			if (st)
+				wlr_scene_node_set_enabled(&st->node, show);
 		}
 	}
 

@@ -3,6 +3,7 @@
 #include "idle.h"
 #include "ipc.h"
 #include "layer.h"
+#include "layout.h"
 #include "lock.h"
 #include "output.h"
 #include "output_config.h"
@@ -495,7 +496,7 @@ void handle_new_output(struct wl_listener *listener, void *data) {
 		if (d) {
 			d->id = next_desktop_id++;
 			strncpy(d->name, "default", SMALEN - 1);
-			d->layout = LAYOUT_TILED;
+			layout_set(d, LAYOUT_TILED);
 			d->user_layout = LAYOUT_TILED;
 			d->window_gap = window_gap;
 			d->master_stack_count = 1;
