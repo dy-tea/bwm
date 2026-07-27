@@ -154,7 +154,7 @@ static void copy_node_current_state(node_t *node, transaction_inst_t *instructio
 	}
 
 	if (node->destroying) {
-		node->client->shown = false;
+		node->client->flags.shown = false;
 		return;
 	}
 
@@ -350,12 +350,12 @@ static void arrange_node_geometry(node_t *node, transaction_inst_t *instruction)
 		}
 	}
 
-	if (node->client->shown) {
+	if (node->client->flags.shown) {
 		wlr_scene_node_set_enabled(&scene_tree->node, true);
 		wlr_log(WLR_INFO, "Arranged layout for node %u [already shown]", node->id);
 	} else {
 		wlr_log(WLR_DEBUG, "Arranged layout for node %u [waiting to be shown] configured=%d shown=%d",
-			node->id, configured, node->client->shown);
+			node->id, configured, node->client->flags.shown);
 	}
 }
 
@@ -564,7 +564,7 @@ static void transaction_commit(transaction_t *txn) {
 
 				bool has_stable_frame = node->client->toplevel->geometry.width > 0 ||
 					node->client->toplevel->geometry.height > 0;
-				instruction->require_geometry_match = has_stable_frame && node->client->shown &&
+				instruction->require_geometry_match = has_stable_frame && node->client->flags.shown &&
 					node->client->toplevel->configured;
 
 				// wait for all mapped toplevels to respond

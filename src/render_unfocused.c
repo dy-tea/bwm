@@ -72,7 +72,7 @@ void render_unfocused_client_update(client_t *client) {
 	if (!client)
 		return;
 
-	bool enabled = client->render_unfocused;
+	bool enabled = client->flags.render_unfocused;
 
 	struct render_unfocused_link *rfl, *tmp;
 	wl_list_for_each_safe(rfl, tmp, &render_unfocused_clients, link) {

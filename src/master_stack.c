@@ -34,8 +34,8 @@ static int compare_node_order(const void *lhs, const void *rhs) {
 static int compare_master_then_order(const void *lhs, const void *rhs) {
 	const node_t *a = *(node_t *const *)lhs;
 	const node_t *b = *(node_t *const *)rhs;
-	bool a_master = a->client->master_stack_master;
-	bool b_master = b->client->master_stack_master;
+	bool a_master = a->client->flags.master_stack_master;
+	bool b_master = b->client->flags.master_stack_master;
 
 	if (a_master != b_master)
 		return a_master ? -1 : 1;
@@ -58,14 +58,14 @@ static void reconcile_master_membership(desktop_t *d, node_t **nodes, int count)
 
 	// count number of actual masters
 	for (int i = 0; i < count; ++i)
-		actual += nodes[i]->client->master_stack_master;
+		actual += nodes[i]->client->flags.master_stack_master;
 
 	if (actual > target) {
 		for (int i = count - 1; i >= 0 && actual > target; --i) {
 			client_t *client = nodes[i]->client;
 
-			if (client->master_stack_master) {
-				client->master_stack_master = false;
+			if (client->flags.master_stack_master) {
+				client->flags.master_stack_master = false;
 				--actual;
 			}
 		}
@@ -73,8 +73,8 @@ static void reconcile_master_membership(desktop_t *d, node_t **nodes, int count)
 		for (int i = 0; i < count && actual < target; ++i) {
 			client_t *client = nodes[i]->client;
 
-			if (!client->master_stack_master) {
-				client->master_stack_master = true;
+			if (!client->flags.master_stack_master) {
+				client->flags.master_stack_master = true;
 				++actual;
 			}
 		}
@@ -378,9 +378,9 @@ bool master_stack_increment(desktop_t *d) {
 		return false;
 	}
 
-	node_t *target = d->focus && d->focus->client && !d->focus->client->master_stack_master &&
+	node_t *target = d->focus && d->focus->client && !d->focus->client->flags.master_stack_master &&
 		IS_TILED(d->focus->client) ? d->focus : nodes[mc];
-	target->client->master_stack_master = true;
+	target->client->flags.master_stack_master = true;
 	d->master_stack_count = mc + 1;
 	free(nodes);
 	return true;
@@ -395,9 +395,9 @@ bool master_stack_decrement(desktop_t *d) {
 		return false;
 	}
 
-	node_t *target = d->focus && d->focus->client && d->focus->client->master_stack_master &&
+	node_t *target = d->focus && d->focus->client && d->focus->client->flags.master_stack_master &&
 		IS_TILED(d->focus->client) ? d->focus : nodes[mc - 1];
-	target->client->master_stack_master = false;
+	target->client->flags.master_stack_master = false;
 	d->master_stack_count = mc - 1;
 	free(nodes);
 	return true;
@@ -408,12 +408,12 @@ bool master_stack_promote(desktop_t *d) {
 	int count = collect_tiled_nodes(d, &nodes);
 	int mc = master_count_clamped(d, count);
 	int focus_index = find_node_index(nodes, count, d ? d->focus : NULL);
-	if (focus_index < 0 || nodes[focus_index]->client->master_stack_master) {
+	if (focus_index < 0 || nodes[focus_index]->client->flags.master_stack_master) {
 		free(nodes);
 		return false;
 	}
 
-	nodes[focus_index]->client->master_stack_master = true;
+	nodes[focus_index]->client->flags.master_stack_master = true;
 	d->master_stack_count = mc + 1;
 	free(nodes);
 	return true;
@@ -421,7 +421,7 @@ bool master_stack_promote(desktop_t *d) {
 
 bool master_stack_demote(desktop_t *d) {
 	if (!d || !d->focus || !d->focus->client || !IS_TILED(d->focus->client) ||
-		!d->focus->client->master_stack_master)
+		!d->focus->client->flags.master_stack_master)
 		return false;
 
 	node_t **nodes = NULL;
@@ -432,7 +432,7 @@ bool master_stack_demote(desktop_t *d) {
 		return false;
 	}
 
-	d->focus->client->master_stack_master = false;
+	d->focus->client->flags.master_stack_master = false;
 	d->master_stack_count = mc - 1;
 	free(nodes);
 	return true;
@@ -644,11 +644,11 @@ static bool swap_in_direction(output_t *m, desktop_t *d, master_stack_direction_
 	client_t *focused = nodes[index]->client;
 	client_t *other = nodes[target]->client;
 	uint64_t order = focused->master_stack_order;
-	bool is_master = focused->master_stack_master;
+	bool is_master = focused->flags.master_stack_master;
 	focused->master_stack_order = other->master_stack_order;
-	focused->master_stack_master = other->master_stack_master;
+	focused->flags.master_stack_master = other->flags.master_stack_master;
 	other->master_stack_order = order;
-	other->master_stack_master = is_master;
+	other->flags.master_stack_master = is_master;
 
 	free(nodes);
 	arrange(m, d, true);

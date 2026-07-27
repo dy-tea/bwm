@@ -196,11 +196,11 @@ static void block_out_window(toplevel_t *tl, struct wlr_render_pass *pass,
 	}
 
 	client_t *c = tl->node->client;
-	if (!c->block_out_from_screenshare) {
+	if (!c->flags.block_out_from_screenshare) {
 		wlr_log(WLR_DEBUG, "block_out: %s not blocked", c->title);
 		return;
 	}
-	if (!c->shown && c->state != STATE_FULLSCREEN) {
+	if (!c->flags.shown && c->state != STATE_FULLSCREEN) {
 		wlr_log(WLR_DEBUG, "block_out: %s not shown (state=%d)", c->title, c->state);
 		return;
 	}
@@ -269,9 +269,9 @@ static void block_out_xwayland_window(xwayland_toplevel_t *view, struct wlr_rend
 		return;
 
 	client_t *c = view->node->client;
-	if (!c->block_out_from_screenshare)
+	if (!c->flags.block_out_from_screenshare)
 		return;
-	if (!c->shown && c->state != STATE_FULLSCREEN)
+	if (!c->flags.shown && c->state != STATE_FULLSCREEN)
 		return;
 
 	output_t *o = output_from_wlr_output(output);

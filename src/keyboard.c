@@ -547,34 +547,34 @@ void toggle_block_out_from_screenshare(void) {
 		return;
 	}
 
-	n->client->block_out_from_screenshare = !n->client->block_out_from_screenshare;
+	n->client->flags.block_out_from_screenshare = !n->client->flags.block_out_from_screenshare;
 	wlr_log(WLR_DEBUG, "toggle_block_out: %s -> %d", n->client->app_id,
-		n->client->block_out_from_screenshare);
+		n->client->flags.block_out_from_screenshare);
 
 	if (n->client->toplevel) {
 		toplevel_t *tl = n->client->toplevel;
 
-		if (n->client->block_out_from_screenshare && tl->image_capture_surface) {
+		if (n->client->flags.block_out_from_screenshare && tl->image_capture_surface) {
 			wlr_scene_node_destroy(&tl->image_capture_surface->buffer->node);
 			tl->image_capture_surface = NULL;
-		} else if (!n->client->block_out_from_screenshare && !tl->image_capture_surface) {
+		} else if (!n->client->flags.block_out_from_screenshare && !tl->image_capture_surface) {
 			tl->image_capture_surface = wlr_scene_surface_create(&tl->image_capture->tree,
 				tl->xdg_toplevel->base->surface);
 		}
 	} else if (n->client->xwayland_view) {
 		xwayland_toplevel_t *xw = n->client->xwayland_view;
 
-		if (n->client->block_out_from_screenshare && xw->image_capture_surface) {
+		if (n->client->flags.block_out_from_screenshare && xw->image_capture_surface) {
 			wlr_scene_node_destroy(&xw->image_capture_surface->buffer->node);
 			xw->image_capture_surface = NULL;
-		} else if (!n->client->block_out_from_screenshare && !xw->image_capture_surface) {
+		} else if (!n->client->flags.block_out_from_screenshare && !xw->image_capture_surface) {
 			xw->image_capture_surface = wlr_scene_surface_create(&xw->image_capture->tree,
 				xw->xwayland_surface->surface);
 		}
 	}
 
 	wlr_log(WLR_INFO, "toggle block_out_from_screenshare: %s",
-		n->client->block_out_from_screenshare ? "on" : "off");
+		n->client->flags.block_out_from_screenshare ? "on" : "off");
 }
 
 void toggle_floating(void) {
@@ -822,7 +822,7 @@ void send_to_desktop(int desktop_index) {
 	n->destroying = false;
 	n->ntxnrefs = 0;
 
-	n->client->shown = false;
+	n->client->flags.shown = false;
 	struct wlr_scene_tree *scene_tree = client_get_scene_tree(n->client);
 	if (scene_tree)
 		wlr_scene_node_set_enabled(&scene_tree->node, false);
@@ -893,7 +893,7 @@ void send_to_desktop_by_name(const char *name) {
 	n->destroying = false;
 	n->ntxnrefs = 0;
 
-	n->client->shown = false;
+	n->client->flags.shown = false;
 	struct wlr_scene_tree *scene_tree = client_get_scene_tree(n->client);
 	if (scene_tree)
 		wlr_scene_node_set_enabled(&scene_tree->node, false);

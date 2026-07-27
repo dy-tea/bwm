@@ -111,7 +111,7 @@ void scratchpad_add(node_t *n) {
 	}
 
 	// disable scene
-	n->client->shown = false;
+	n->client->flags.shown = false;
 	if (st)
 		wlr_scene_node_set_enabled(&st->node, false);
 
@@ -185,7 +185,7 @@ void scratchpad_show(node_t *n) {
 		if (st)
 			wlr_scene_node_reparent(&st->node, server.tile_tree);
 
-		n->client->shown = true;
+		n->client->flags.shown = true;
 		if (st)
 			wlr_scene_node_set_enabled(&st->node, true);
 
@@ -210,7 +210,7 @@ void scratchpad_show(node_t *n) {
 				n->client->floating_rectangle.y);
 		}
 
-		n->client->shown = true;
+		n->client->flags.shown = true;
 		if (st)
 			wlr_scene_node_set_enabled(&st->node, true);
 
@@ -312,7 +312,7 @@ void scratchpad_hide(node_t *n) {
 	}
 
 	// disable scene
-	n->client->shown = false;
+	n->client->flags.shown = false;
 	if (st)
 		wlr_scene_node_set_enabled(&st->node, false);
 

@@ -30,7 +30,8 @@ typedef enum {
 	RULE_TYPE_SHORTCUTS_INHIBITOR = 1 << 18,
 	RULE_TYPE_RENDER_UNFOCUSED = 1 << 19,
 	RULE_TYPE_OPACITY = 1 << 20,
-	RULE_TYPE_LAST = 1 << 21,
+	RULE_TYPE_ANIM_DISABLE = 1 << 21,
+	RULE_TYPE_LAST = 1 << 22,
 } rule_type_t;
 
 typedef struct {

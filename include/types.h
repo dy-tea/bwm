@@ -122,10 +122,29 @@ typedef struct {
 	bool freed;
 } presel_t;
 
+typedef struct {
+	uint32_t urgent : 1;
+	uint32_t shown : 1;
+	uint32_t freed : 1;
+	uint32_t master_stack_master : 1;
+	uint32_t cursor_in_left_half : 1;
+	uint32_t cursor_in_upper_half : 1;
+	uint32_t blur : 1;
+	uint32_t blur_from_rule : 1;
+	uint32_t mica : 1;
+	uint32_t acrylic : 1;
+	uint32_t shadow : 1;
+	uint32_t block_out_from_screenshare : 1;
+	uint32_t allow_tearing : 1;
+	uint32_t allow_tearing_from_rule : 1;
+	uint32_t render_unfocused : 1;
+	uint32_t render_unfocused_from_rule : 1;
+	uint32_t anim_disabled : 1;
+} client_flags_t;
+
 typedef struct client_t {
 	char app_id[MAXLEN];
 	char title[MAXLEN];
-	bool urgent, shown, freed;
 	client_state_t state, last_state;
 	stack_layer_t layer, last_layer;
 	struct wlr_box floating_rectangle, tiled_rectangle, committed_tiled_rectangle, arranged_rectangle;
@@ -139,29 +158,17 @@ typedef struct client_t {
 
 	// Master-stack layout properties
 	uint64_t master_stack_order;
-	bool master_stack_master;
 
 	// Resize state for scroller
 	float old_scroller_proportion, old_stack_proportion;
-	bool cursor_in_left_half, cursor_in_upper_half;
 
 	// Visual effects
-	bool blur, blur_from_rule, mica, acrylic, shadow;
 	float border_radius;
 	float opacity;
 	float shadow_size, shadow_offset_x, shadow_offset_y;
 	float shadow_color[4];
 
-	// Screenshare privacy
-	bool block_out_from_screenshare;
-
-	// Tearing
-	bool allow_tearing;
-	bool allow_tearing_from_rule;
-
-	// Render-unfocused
-	bool render_unfocused;
-	bool render_unfocused_from_rule;
+	client_flags_t flags;
 } client_t;
 
 typedef struct node_t {

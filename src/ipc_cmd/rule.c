@@ -169,6 +169,12 @@ void ipc_cmd_rule(char **args, int num, int client_fd) {
 			} else if (streq("shortcuts_inhibitor=off", arg)) {
 				r->consequence.flags &= ~RULE_TYPE_SHORTCUTS_INHIBITOR;
 				r->consequence.has |= RULE_TYPE_SHORTCUTS_INHIBITOR;
+			} else if (streq("animations_disable=on", arg)) {
+				r->consequence.flags |= RULE_TYPE_ANIM_DISABLE;
+				r->consequence.has |= RULE_TYPE_ANIM_DISABLE;
+			} else if (streq("animations_disable=off", arg)) {
+				r->consequence.flags &= ~RULE_TYPE_ANIM_DISABLE;
+				r->consequence.has |= RULE_TYPE_ANIM_DISABLE;
 			} else if (streq("render_unfocused=on", arg)) {
 				r->consequence.flags |= RULE_TYPE_RENDER_UNFOCUSED;
 				r->consequence.has |= RULE_TYPE_RENDER_UNFOCUSED;

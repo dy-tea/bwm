@@ -123,7 +123,7 @@ static bool output_has_fullscreen_cover(output_t *output) {
 static bool fullscreen_has_effects(output_t *output) {
 	node_t *node = output->desk->focus;
 	client_t *client = node->client;
-	return client->blur || client->mica || client->acrylic;
+	return client->flags.blur || client->flags.mica || client->flags.acrylic;
 }
 
 static struct wlr_surface *fullscreen_surface(output_t *output) {

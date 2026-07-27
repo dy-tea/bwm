@@ -171,6 +171,9 @@ void list_rules(char *buf, size_t buf_size) {
 		if (r->consequence.has & RULE_TYPE_SHADOW)
 			offset += snprintf(buf + offset, buf_size - offset, "shadow=%s ",
 				r->consequence.flags & RULE_TYPE_SHADOW ? "on" : "off");
+		if (r->consequence.has & RULE_TYPE_ANIM_DISABLE)
+			offset += snprintf(buf + offset, buf_size - offset, "animations_disable=%s ",
+				r->consequence.flags & RULE_TYPE_ANIM_DISABLE ? "on" : "off");
 		if (r->consequence.has & RULE_TYPE_BLOCK_OUT_FROM_SCREENSHARE)
 			offset += snprintf(buf + offset, buf_size - offset, "block_out_from_screenshare=%s ",
 				r->consequence.has & RULE_TYPE_BLOCK_OUT_FROM_SCREENSHARE ? "on" : "off");
@@ -267,28 +270,28 @@ void rule_apply_consequence(node_t *node, client_t *client, const rule_consequen
 			rule->has & RULE_TYPE_SCROLLER_PROPORTION_SINGLE ? rule->scroller_proportion_single : 0.0f);
 
 	if (rule->has & RULE_TYPE_BLOCK_OUT_FROM_SCREENSHARE)
-		client->block_out_from_screenshare = rule->flags & RULE_TYPE_BLOCK_OUT_FROM_SCREENSHARE;
+		client->flags.block_out_from_screenshare = rule->flags & RULE_TYPE_BLOCK_OUT_FROM_SCREENSHARE;
 
 	if (rule->has & RULE_TYPE_ALLOW_TEARING) {
-		client->allow_tearing = rule->flags & RULE_TYPE_ALLOW_TEARING;
-		client->allow_tearing_from_rule = true;
+		client->flags.allow_tearing = rule->flags & RULE_TYPE_ALLOW_TEARING;
+		client->flags.allow_tearing_from_rule = true;
 	}
 
 	if (rule->has & RULE_TYPE_RENDER_UNFOCUSED) {
-		client->render_unfocused = rule->flags & RULE_TYPE_RENDER_UNFOCUSED;
-		client->render_unfocused_from_rule = true;
+		client->flags.render_unfocused = rule->flags & RULE_TYPE_RENDER_UNFOCUSED;
+		client->flags.render_unfocused_from_rule = true;
 	}
 
 	if (rule->has & RULE_TYPE_BLUR) {
-		client->blur = rule->flags & RULE_TYPE_BLUR;
-		client->blur_from_rule = true;
+		client->flags.blur = rule->flags & RULE_TYPE_BLUR;
+		client->flags.blur_from_rule = true;
 	}
 
 	if (rule->has & RULE_TYPE_MICA)
-		client->mica = rule->flags & RULE_TYPE_MICA;
+		client->flags.mica = rule->flags & RULE_TYPE_MICA;
 
 	if (rule->has & RULE_TYPE_ACRYLIC)
-		client->acrylic = rule->flags & RULE_TYPE_ACRYLIC;
+		client->flags.acrylic = rule->flags & RULE_TYPE_ACRYLIC;
 
 	if (rule->has & RULE_TYPE_BORDER_RADIUS)
 		client->border_radius = rule->border_radius;
@@ -296,8 +299,11 @@ void rule_apply_consequence(node_t *node, client_t *client, const rule_consequen
 	if (rule->has & RULE_TYPE_OPACITY)
 		client->opacity = rule->opacity;
 
+	if (rule->has & RULE_TYPE_ANIM_DISABLE)
+		client->flags.anim_disabled = rule->flags & RULE_TYPE_ANIM_DISABLE;
+
 	if (rule->has & RULE_TYPE_SHADOW) {
-		client->shadow = rule->flags & RULE_TYPE_SHADOW;
+		client->flags.shadow = rule->flags & RULE_TYPE_SHADOW;
 		client->shadow_size = shadow_size;
 		client->shadow_offset_x = shadow_offset_x;
 		client->shadow_offset_y = shadow_offset_y;

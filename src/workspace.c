@@ -218,14 +218,14 @@ found_desktop:
 		should_show = (node == current_desktop->focus);
 
 	if (should_show) {
-		node->client->shown = true;
+		node->client->flags.shown = true;
 		bool already_configured = true;
 		if (node->client->toplevel)
 			already_configured = node->client->toplevel->configured;
 		if (already_configured)
 			wlr_scene_node_set_enabled(&scene_tree->node, true);
 	} else {
-		node->client->shown = false;
+		node->client->flags.shown = false;
 		wlr_scene_node_set_enabled(&scene_tree->node, false);
 	}
 }
@@ -348,7 +348,7 @@ static void workspace_switch_animate(output_t *output, desktop_t *old_desk, desk
 			if (n->client) {
 				struct wlr_scene_tree *tree = client_get_scene_tree(n->client);
 				if (tree) {
-					n->client->shown = true;
+					n->client->flags.shown = true;
 					wlr_scene_node_set_enabled(&tree->node, true);
 				}
 			}
@@ -367,7 +367,7 @@ static void workspace_switch_animate(output_t *output, desktop_t *old_desk, desk
 				if (n->client) {
 					struct wlr_scene_tree *tree = client_get_scene_tree(n->client);
 					if (tree) {
-						n->client->shown = true;
+						n->client->flags.shown = true;
 						wlr_scene_node_set_enabled(&tree->node, true);
 						struct wlr_box target = n->client->tiled_rectangle;
 						struct wlr_box from = {

@@ -157,7 +157,7 @@ void surface_set_shadow(struct wlr_scene_tree *scene_tree, node_t *node, surface
 		return;
 
 	if (node && node->client)
-		node->client->shadow = enabled;
+		node->client->flags.shadow = enabled;
 
 	if (enabled) {
 		if (!*shadow) {

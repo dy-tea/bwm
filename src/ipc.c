@@ -42,7 +42,7 @@ static bool desktop_has_urgent(desktop_t *d) {
 		return false;
 
 	for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root))
-		if (n->client && n->client->urgent)
+		if (n->client && n->client->flags.urgent)
 			return true;
 
 	return false;

@@ -38,8 +38,8 @@ void scroller_init_client(client_t *c) {
 	c->prev_in_stack = NULL;
 	c->old_scroller_proportion = 0.0f;
 	c->old_stack_proportion = 1.0f;
-	c->cursor_in_left_half = false;
-	c->cursor_in_upper_half = false;
+	c->flags.cursor_in_left_half = false;
+	c->flags.cursor_in_upper_half = false;
 }
 
 client_t *scroller_get_stack_head(const client_t *c) {

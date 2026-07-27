@@ -35,7 +35,7 @@
 void toplevel_map(struct wl_listener *listener, void *data);
 
 static void hide_node_client(node_t *n) {
-	n->client->shown = false;
+	n->client->flags.shown = false;
 	struct wlr_scene_tree *st = client_get_scene_tree(n->client);
 	if (st)
 		wlr_scene_node_set_enabled(&st->node, false);
@@ -46,7 +46,7 @@ static void unhide_leaves(desktop_t *desk) {
 		if (!ni->client)
 			continue;
 
-		ni->client->shown = true;
+		ni->client->flags.shown = true;
 		bool configured = true;
 		if (ni->client->toplevel)
 			configured = ni->client->toplevel->configured;
@@ -65,7 +65,7 @@ static void hide_leaves(desktop_t *desk) {
 		if (!ni->client)
 			continue;
 
-		ni->client->shown = false;
+		ni->client->flags.shown = false;
 		struct wlr_scene_tree *st = client_get_scene_tree(ni->client);
 		if (st)
 			wlr_scene_node_set_enabled(&st->node, false);
@@ -191,7 +191,7 @@ void ipc_cmd_node(char **args, int num, int client_fd) {
 			for (node_t *n_iter = first_extrema(src_desk->root); n_iter != NULL; n_iter = next_leaf(n_iter,
 					src_desk->root)) {
 				if (n_iter->client) {
-					n_iter->client->shown = true;
+					n_iter->client->flags.shown = true;
 					bool already_configured = true;
 					if (n_iter->client->toplevel)
 						already_configured = n_iter->client->toplevel->configured;
@@ -207,7 +207,7 @@ void ipc_cmd_node(char **args, int num, int client_fd) {
 			for (node_t *n_iter = first_extrema(src_desk->root); n_iter != NULL; n_iter = next_leaf(n_iter,
 					src_desk->root)) {
 				if (n_iter->client) {
-					n_iter->client->shown = false;
+					n_iter->client->flags.shown = false;
 					struct wlr_scene_tree *scene_tree = client_get_scene_tree(n_iter->client);
 					if (scene_tree)
 						wlr_scene_node_set_enabled(&scene_tree->node, false);
@@ -278,8 +278,8 @@ void ipc_cmd_node(char **args, int num, int client_fd) {
 				send_failure(client_fd, "node -g: no client\n");
 				return;
 			}
-			bool new_blur = has_value ? set_value : !n->client->blur;
-			n->client->blur = new_blur;
+			bool new_blur = has_value ? set_value : !n->client->flags.blur;
+			n->client->flags.blur = new_blur;
 			surface_client_set_effect(n->client, EFFECT_BLUR, new_blur);
 			send_success(client_fd, "flag changed\n");
 		} else if (strcmp(key, "mica") == 0) {
@@ -287,8 +287,8 @@ void ipc_cmd_node(char **args, int num, int client_fd) {
 				send_failure(client_fd, "node -g: no client\n");
 				return;
 			}
-			bool new_val = has_value ? set_value : !n->client->mica;
-			n->client->mica = new_val;
+			bool new_val = has_value ? set_value : !n->client->flags.mica;
+			n->client->flags.mica = new_val;
 			surface_client_set_effect(n->client, EFFECT_MICA, new_val);
 			send_success(client_fd, "flag changed\n");
 		} else if (strcmp(key, "acrylic") == 0) {
@@ -296,8 +296,8 @@ void ipc_cmd_node(char **args, int num, int client_fd) {
 				send_failure(client_fd, "node -g: no client\n");
 				return;
 			}
-			bool new_val = has_value ? set_value : !n->client->acrylic;
-			n->client->acrylic = new_val;
+			bool new_val = has_value ? set_value : !n->client->flags.acrylic;
+			n->client->flags.acrylic = new_val;
 			surface_client_set_effect(n->client, EFFECT_ACRYLIC, new_val);
 			send_success(client_fd, "flag changed\n");
 		} else if (strcmp(key, "shadow") == 0) {
@@ -305,8 +305,8 @@ void ipc_cmd_node(char **args, int num, int client_fd) {
 				send_failure(client_fd, "node -g: no client\n");
 				return;
 			}
-			bool new_val = has_value ? set_value : !n->client->shadow;
-			n->client->shadow = new_val;
+			bool new_val = has_value ? set_value : !n->client->flags.shadow;
+			n->client->flags.shadow = new_val;
 			n->client->shadow_size = shadow_size;
 			n->client->shadow_offset_x = shadow_offset_x;
 			n->client->shadow_offset_y = shadow_offset_y;
@@ -775,7 +775,7 @@ void ipc_cmd_node(char **args, int num, int client_fd) {
 						continue;
 					if (leaf->client->state == STATE_FLOATING)
 						continue;
-					leaf->client->shown = true;
+					leaf->client->flags.shown = true;
 					struct wlr_scene_tree *stree = client_get_scene_tree(leaf->client);
 					if (stree)
 						wlr_scene_node_set_enabled(&stree->node, true);

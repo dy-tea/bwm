@@ -159,14 +159,14 @@ client_t *make_client(void) {
 	c->last_state = STATE_TILED;
 	c->layer = LAYER_NORMAL;
 	c->last_layer = LAYER_NORMAL;
-	c->urgent = false;
-	c->shown = false;
+	c->flags.urgent = false;
+	c->flags.shown = false;
 	c->master_stack_order = next_master_stack_order++;
-	c->master_stack_master = false;
+	c->flags.master_stack_master = false;
 	c->opacity = 1.0f;
 
 	// initialize shadow defaults
-	c->shadow = false;
+	c->flags.shadow = false;
 	c->shadow_size = shadow_size;
 	c->shadow_offset_x = shadow_offset_x;
 	c->shadow_offset_y = shadow_offset_y;
@@ -202,7 +202,7 @@ void free_node(node_t *n) {
 		tabs_destroy(n);
 
 	if (n->client != NULL) {
-		n->client->freed = true;
+		n->client->flags.freed = true;
 		free(n->client);
 	}
 
@@ -658,7 +658,7 @@ void apply_layout(output_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
 			if (leaf->client->state == STATE_FLOATING)
 				continue;
 			bool show = (leaf == active);
-			leaf->client->shown = show;
+			leaf->client->flags.shown = show;
 
 			struct wlr_scene_tree *st = client_get_scene_tree(leaf->client);
 			if (st)
@@ -1140,7 +1140,7 @@ static bool focus_node_impl(output_t *m, desktop_t *d, node_t *n, bool give_keyb
 			if (node->client == NULL)
 				continue;
 			bool should_show = (node == n);
-			node->client->shown = should_show;
+			node->client->flags.shown = should_show;
 			struct wlr_scene_tree *scene_tree = client_get_scene_tree(node->client);
 			if (scene_tree)
 				wlr_scene_node_set_enabled(&scene_tree->node, should_show);
@@ -1148,7 +1148,7 @@ static bool focus_node_impl(output_t *m, desktop_t *d, node_t *n, bool give_keyb
 	} else if (d->layout == LAYOUT_SCROLLER && d->root != NULL) {
 		for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
 			if (node->client != NULL)
-				node->client->shown = true;
+				node->client->flags.shown = true;
 
 		if (n != NULL && n->client != NULL && n->client->toplevel && n->client->toplevel->configured) {
 			wlr_log(WLR_DEBUG, "focus_node: scroller layout, triggering arrange for "
@@ -1160,13 +1160,13 @@ static bool focus_node_impl(output_t *m, desktop_t *d, node_t *n, bool give_keyb
 	} else if (d->root != NULL) {
 		for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
 			if (node->client != NULL)
-				node->client->shown = true;
+				node->client->flags.shown = true;
 	} else {
 		// mark all windows as shown in tiled mode, but only for current desktop
 		if (d->root != NULL)
 			for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
 				if (node->client != NULL)
-					node->client->shown = true;
+					node->client->flags.shown = true;
 
 		// for tabbed groups, hide non-focused tab leaves and refresh tab colors
 		node_t *t = tabbed_ancestor(n);
@@ -1179,7 +1179,7 @@ static bool focus_node_impl(output_t *m, desktop_t *d, node_t *n, bool give_keyb
 					continue;
 
 				bool show = (leaf == n);
-				leaf->client->shown = show;
+				leaf->client->flags.shown = show;
 
 				struct wlr_scene_tree *st = client_get_scene_tree(leaf->client);
 				if (st)
@@ -1238,7 +1238,7 @@ bool activate_node(output_t *m, desktop_t *d, node_t *n) {
 			(focus_on_activate == FOCUS_ON_ACTIVATE_URGENT)) {
 		bool result = focus_node_impl(m, d, n, false);
 		if (focus_on_activate == FOCUS_ON_ACTIVATE_URGENT && n && n->client) {
-			n->client->urgent = true;
+			n->client->flags.urgent = true;
 			update_border_colors(n->client);
 		}
 		return result;

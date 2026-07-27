@@ -376,6 +376,8 @@ bool animation_fade_in(struct toplevel_t *toplevel) {
 
 	if (!anim_type_configs[2].enabled)
 		return false;
+	if (toplevel->node->client && toplevel->node->client->flags.anim_disabled)
+		return false;
 
 	animation_entry_t *entry = find_animation(toplevel->node);
 	if (entry) {
@@ -442,6 +444,8 @@ bool animation_fade_out(toplevel_t *toplevel) {
 		return false;
 
 	if (!anim_type_configs[3].enabled)
+		return false;
+	if (toplevel->node->client && toplevel->node->client->flags.anim_disabled)
 		return false;
 
 	animation_entry_t *entry = create_animation_entry();
@@ -512,6 +516,8 @@ bool animation_start_workspace_slide(output_t *output, node_t *node,
 
 	if (!anim_type_configs[6].enabled)
 		return false;
+	if (node->client && node->client->flags.anim_disabled)
+		return false;
 
 	animation_entry_t *entry = find_animation(node);
 	if (entry) {
@@ -566,6 +572,8 @@ bool animation_start_resize(toplevel_t *toplevel, struct wlr_box from, struct wl
 		return false;
 
 	if (!anim_type_configs[1].enabled)
+		return false;
+	if (toplevel->node->client && toplevel->node->client->flags.anim_disabled)
 		return false;
 
 	// skip if the size didn't actually change
@@ -836,13 +844,18 @@ bool animation_apply_geometry_from(node_t *node, struct wlr_scene_tree *scene_tr
 
 	output_t *output = node->output;
 	if (!animate || !enable_animations || !output || !output->enabled || !node->client ||
-			!node->client->shown) {
+			!node->client->flags.shown) {
 		animation_cancel_node(node);
 		wlr_scene_node_set_position(&scene_tree->node, target.x, target.y);
 		return false;
 	}
 
 	if (!anim_type_configs[0].enabled) {
+		animation_cancel_node(node);
+		wlr_scene_node_set_position(&scene_tree->node, target.x, target.y);
+		return false;
+	}
+	if (node->client && node->client->flags.anim_disabled) {
 		animation_cancel_node(node);
 		wlr_scene_node_set_position(&scene_tree->node, target.x, target.y);
 		return false;
@@ -1070,7 +1083,7 @@ bool animation_update_output(output_t *output, struct timespec now) {
 		if (entry->node->output != output)
 			continue;
 
-		if (!entry->node->client->shown || !entry->scene_tree->node.enabled) {
+		if (!entry->node->client->flags.shown || !entry->scene_tree->node.enabled) {
 			// if this is a resize animation finishing early, clean up the clip
 			if (entry->kind == ANIM_KIND_RESIZE && entry->toplevel && entry->toplevel->content_tree)
 				wlr_scene_subsurface_tree_set_clip(&entry->toplevel->content_tree->node, NULL);
@@ -1121,7 +1134,7 @@ bool animation_update_output(output_t *output, struct timespec now) {
 
 				if (entry->kind == ANIM_KIND_WORKSPACE_SLIDE && entry->slide_out && entry->node &&
 						entry->node->client) {
-					entry->node->client->shown = false;
+					entry->node->client->flags.shown = false;
 					wlr_scene_node_set_enabled(&entry->scene_tree->node, false);
 					wlr_log(WLR_DEBUG, "animation: workspace slide-out complete, disabled node=%u",
 						entry->node->id);

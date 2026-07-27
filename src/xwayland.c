@@ -619,7 +619,7 @@ static void handle_map(struct wl_listener *listener, void *data) {
 			client->floating_rectangle.y);
 
 		node->hidden = true;
-		client->shown = true;
+		client->flags.shown = true;
 		wlr_scene_node_set_enabled(&xwayland_view->scene_tree->node, true);
 	} else {
 		if (client->state != STATE_PSEUDO_TILED)
@@ -627,7 +627,7 @@ static void handle_map(struct wl_listener *listener, void *data) {
 
 		node->rectangle.width = xsurface->width;
 		node->rectangle.height = xsurface->height;
-		client->shown = true;
+		client->flags.shown = true;
 		wlr_scene_node_set_enabled(&xwayland_view->scene_tree->node, true);
 		wlr_scene_node_set_enabled(&xwayland_view->content_tree->node, true);
 
@@ -640,7 +640,7 @@ static void handle_map(struct wl_listener *listener, void *data) {
 	insert_node(target_desktop, node, target_desktop->focus);
 
 	if (target_desktop != d && !target_desktop_is_focused) {
-		client->shown = false;
+		client->flags.shown = false;
 		wlr_scene_node_set_enabled(&xwayland_view->scene_tree->node, false);
 	}
 
@@ -678,13 +678,13 @@ static void handle_map(struct wl_listener *listener, void *data) {
 	xwayland_view_set_activated(xwayland_view, true);
 	server.last_focused_xwayland_view = xwayland_view;
 
-	if (!client->block_out_from_screenshare) {
+	if (!client->flags.block_out_from_screenshare) {
 		xwayland_view->image_capture_surface =
 			wlr_scene_surface_create(&xwayland_view->image_capture->tree, xsurface->surface);
 	}
 
 	wlr_log(WLR_DEBUG, "XWayland window map complete: scene_tree enabled=%d shown=%d",
-		xwayland_view->scene_tree->node.enabled, client->shown);
+		xwayland_view->scene_tree->node.enabled, client->flags.shown);
 }
 
 void xwayland_set_effect(xwayland_toplevel_t *xwayland_view, surface_effect_t effect,
@@ -1016,13 +1016,13 @@ static void handle_set_hints(struct wl_listener *listener, void *data) {
 	struct wlr_xwayland_surface *xsurface = xwayland_view->xwayland_surface;
 
 	if (xwayland_view->node && xwayland_view->node->client) {
-		xwayland_view->node->client->urgent = xsurface->hints &&
+		xwayland_view->node->client->flags.urgent = xsurface->hints &&
 			(xsurface->hints->flags & XCB_ICCCM_WM_HINT_X_URGENCY);
 		ipc_put_status(SUB_MASK_REPORT, NULL);
 		ipc_put_status(SUB_MASK_NODE_FLAG, "node_flag[%s,%s,%u,%c]\n",
 			xwayland_view->node->client->app_id[0] ? xwayland_view->node->client->app_id : "?",
 			xwayland_view->node->client->title[0] ? xwayland_view->node->client->title : "?",
-			xwayland_view->node->id, xwayland_view->node->client->urgent ? 'U' : 'u');
+			xwayland_view->node->id, xwayland_view->node->client->flags.urgent ? 'U' : 'u');
 	}
 }
 

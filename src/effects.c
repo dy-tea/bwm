@@ -618,7 +618,7 @@ static bool rebuild_live_blur(output_t *output, uint64_t shared_blurred, bool on
 			wl_list_for_each(tl, &server.toplevels, link) {
 				if (!tl->blur || !tl->blur->blur_node || !tl->node || !tl->node->client)
 					continue;
-				if (!tl->node->client->shown)
+				if (!tl->node->client->flags.shown)
 					continue;
 				if (!tl->node->output || tl->node->output != output)
 					continue;
@@ -635,7 +635,7 @@ static bool rebuild_live_blur(output_t *output, uint64_t shared_blurred, bool on
 		wl_list_for_each(tl, &server.toplevels, link) {
 			if (!tl->blur || !tl->blur->blur_node || !tl->node || !tl->node->client)
 				continue;
-			if (!tl->node->client->shown)
+			if (!tl->node->client->flags.shown)
 				continue;
 			if (!tl->node->output || tl->node->output != output)
 				continue;
@@ -657,7 +657,7 @@ static bool rebuild_live_blur(output_t *output, uint64_t shared_blurred, bool on
 		wl_list_for_each(tl, &server.toplevels, link) {
 			if (!tl->blur || !tl->blur->blur_node || !tl->node || !tl->node->client)
 				continue;
-			if (!tl->node->client->shown)
+			if (!tl->node->client->flags.shown)
 				continue;
 			if (!tl->node->output || tl->node->output != output)
 				continue;
@@ -1009,7 +1009,7 @@ static bool rebuild_live_acrylic(output_t *output, pixman_region32_t *damage,
 	wl_list_for_each(tl, &server.toplevels, link) {
 		if (!tl->blur || !tl->blur->acrylic_node || !tl->node || !tl->node->client)
 			continue;
-		if (!tl->node->client->shown)
+		if (!tl->node->client->flags.shown)
 			continue;
 		if (!tl->node->output || tl->node->output != output)
 			continue;
@@ -1230,7 +1230,7 @@ static bool blur_render_shadow(toplevel_t *tl) {
 		return false;
 
 	client_t *c = tl->node->client;
-	if (!c->shadow)
+	if (!c->flags.shadow)
 		return false;
 	if (c->state == STATE_FULLSCREEN)
 		return false;
@@ -1399,7 +1399,7 @@ static bool rebuild_corner_masks(output_t *output, uint64_t bg_tex) {
 	wl_list_for_each(tl, &server.toplevels, link) {
 		if (!tl->rounded || !tl->rounded->corner_mask_node || !tl->node || !tl->node->client)
 			continue;
-		if (!tl->node->client->shown)
+		if (!tl->node->client->flags.shown)
 			continue;
 		if (!tl->node->output || tl->node->output != output)
 			continue;
@@ -1690,7 +1690,7 @@ void effects_evict_buffers(void) {
 
 	toplevel_t *tl;
 	wl_list_for_each(tl, &server.toplevels, link) {
-		bool visible = tl->node && tl->node->client && tl->node->client->shown;
+		bool visible = tl->node && tl->node->client && tl->node->client->flags.shown;
 
 		if (tl->blur) {
 			// visual eviction
@@ -1766,7 +1766,7 @@ static bool workspace_effect_buffers_missing(output_t *output) {
 	wl_list_for_each(tl, &server.toplevels, link) {
 		if (!tl->blur || !tl->node || !tl->node->client)
 			continue;
-		if (!tl->node->client->shown || tl->node->output != output)
+		if (!tl->node->client->flags.shown || tl->node->output != output)
 			continue;
 
 		if (blur_enabled && tl->blur->blur_node && !tl->blur->blur_buf)
@@ -1843,12 +1843,12 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 		wl_list_for_each(tl, &server.toplevels, link) {
 			if (!tl->shadow || (!tl->shadow->shadow_dirty && !tl->shadow->shadow_geometry_dirty))
 				continue;
-			if (!tl->node || !tl->node->client || !tl->node->client->shown)
+			if (!tl->node || !tl->node->client || !tl->node->client->flags.shown)
 				continue;
 			if (!tl->node->output || tl->node->output != output)
 				continue;
 
-			if (!tl->node->client->shadow) {
+			if (!tl->node->client->flags.shadow) {
 				tl->shadow->shadow_dirty = false;
 				tl->shadow->shadow_geometry_dirty = false;
 				if (tl->shadow->shadow_node && tl->shadow->shadow_node->node.enabled)
@@ -1890,7 +1890,7 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 		bool needs_bg = false;
 		toplevel_t *tl;
 		wl_list_for_each(tl, &server.toplevels, link) {
-			if (!tl->node || !tl->node->client || !tl->node->client->shown)
+			if (!tl->node || !tl->node->client || !tl->node->client->flags.shown)
 				continue;
 			if (!tl->node->output || tl->node->output != output)
 				continue;
@@ -1908,8 +1908,8 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 		bool any_blur = false;
 		toplevel_t *tl;
 		wl_list_for_each(tl, &server.toplevels, link) {
-			if (tl->blur && tl->blur->blur_node && tl->node && tl->node->client && tl->node->client->shown &&
-					tl->node->output && tl->node->output == output) {
+			if (tl->blur && tl->blur->blur_node && tl->node && tl->node->client &&
+					tl->node->client->flags.shown && tl->node->output && tl->node->output == output) {
 				any_blur = true;
 				break;
 			}
@@ -1926,7 +1926,7 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 		toplevel_t *tl;
 		wl_list_for_each(tl, &server.toplevels, link) {
 			if (tl->blur && tl->blur->acrylic_node && tl->node && tl->node->client &&
-					tl->node->client->shown && tl->node->output && tl->node->output == output) {
+					tl->node->client->flags.shown && tl->node->output && tl->node->output == output) {
 				any_acrylic = true;
 				break;
 			}
@@ -2023,7 +2023,7 @@ after_capture:
 		wl_list_for_each(tl, &server.toplevels, link) {
 			if (!tl->rounded || !tl->rounded->border_dirty)
 				continue;
-			if (!tl->node || !tl->node->client || !tl->node->client->shown)
+			if (!tl->node || !tl->node->client || !tl->node->client->flags.shown)
 				continue;
 			if (!tl->node->output || tl->node->output != output)
 				continue;

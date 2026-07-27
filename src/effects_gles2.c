@@ -17,11 +17,6 @@
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/util/log.h>
 
-#include "gl_grayscale_frag_src.h"
-#include "gl_invert_frag_src.h"
-#include "gl_nightlight_frag_src.h"
-#include "gl_sepia_frag_src.h"
-
 #ifdef WLR_HAS_GLES2_RENDERER
 const struct wlr_drm_format_set *wlr_renderer_get_render_formats(struct wlr_renderer *renderer);
 

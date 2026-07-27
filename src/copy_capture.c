@@ -87,9 +87,9 @@ static int disable_blocked_windows(struct blocked_node_state *states, int max_st
 			continue;
 
 		client_t *c = tl->node->client;
-		if (!c->block_out_from_screenshare)
+		if (!c->flags.block_out_from_screenshare)
 			continue;
-		if (!c->shown && c->state != STATE_FULLSCREEN)
+		if (!c->flags.shown && c->state != STATE_FULLSCREEN)
 			continue;
 
 		if (count >= max_states)
@@ -109,9 +109,9 @@ static int disable_blocked_windows(struct blocked_node_state *states, int max_st
 			continue;
 
 		client_t *c = xw->node->client;
-		if (!c->block_out_from_screenshare)
+		if (!c->flags.block_out_from_screenshare)
 			continue;
-		if (!c->shown && c->state != STATE_FULLSCREEN)
+		if (!c->flags.shown && c->state != STATE_FULLSCREEN)
 			continue;
 
 		if (count >= max_states)
@@ -812,7 +812,8 @@ static void frame_handle_capture(struct wl_client *wl_client, struct wl_resource
 
 		wlr_log(WLR_DEBUG, "ext-copy-capture: found matching toplevel %p, "
 			"calling perform_scene_node_capture", (void *)tl);
-		bool block_out = tl->node && tl->node->client && tl->node->client->block_out_from_screenshare;
+		bool block_out = tl->node && tl->node->client &&
+			tl->node->client->flags.block_out_from_screenshare;
 
 		if (perform_scene_node_capture(frame, source, tl->image_capture, block_out,
 				&tl->capture_renderer)) {
@@ -832,7 +833,8 @@ static void frame_handle_capture(struct wl_client *wl_client, struct wl_resource
 
 		wlr_log(WLR_DEBUG, "ext-copy-capture: found matching xwayland view %p, "
 			"calling perform_scene_node_capture", (void *)xw);
-		bool block_out = xw->node && xw->node->client && xw->node->client->block_out_from_screenshare;
+		bool block_out = xw->node && xw->node->client &&
+			xw->node->client->flags.block_out_from_screenshare;
 
 		if (perform_scene_node_capture(frame, source, xw->image_capture, block_out,
 				&xw->capture_renderer)) {

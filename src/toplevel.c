@@ -449,7 +449,7 @@ static void toplevel_set_floating(toplevel_t *toplevel, node_t *n, output_t *out
 	n->client->last_state = STATE_TILED;
 	n->client->state = STATE_FLOATING;
 	n->hidden = true;
-	n->client->shown = true;
+	n->client->flags.shown = true;
 	wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
 }
 
@@ -674,7 +674,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
 	// hide window if target desktop is not the focused desktop
 	bool target_desktop_is_focused = (target_desktop == (target_output ? target_output->desk : NULL));
 	if (desktop_changed && !target_desktop_is_focused) {
-		n->client->shown = false;
+		n->client->flags.shown = false;
 		wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
 	}
 
@@ -694,7 +694,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
 	// apply the configured xdg-decoration policy
 	toplevel_apply_decoration_mode(toplevel);
 
-	if (!n->client->block_out_from_screenshare) {
+	if (!n->client->flags.block_out_from_screenshare) {
 		toplevel->image_capture_surface = wlr_scene_surface_create(&toplevel->image_capture->tree,
 			toplevel->xdg_toplevel->base->surface);
 	}
@@ -712,11 +712,13 @@ void toplevel_freeze_sibling_buffers(desktop_t *d, node_t *n) {
 		return;
 	if (!enable_animations)
 		return;
+	if (n->client && n->client->flags.anim_disabled)
+		return;
 
 	node_t *root = d->root;
 	node_t *leaf = first_extrema(root);
 	while (leaf) {
-		if (leaf != n && leaf->client && leaf->client->shown && leaf->client->toplevel &&
+		if (leaf != n && leaf->client && leaf->client->flags.shown && leaf->client->toplevel &&
 				!leaf->client->toplevel->saved_surface_tree) {
 			toplevel_save_buffer(leaf->client->toplevel);
 			wlr_log(WLR_DEBUG, "Froze buffer for sibling node %u", leaf->id);
@@ -753,7 +755,7 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
 	if (!animation_fade_out(toplevel))
 		animation_cancel_node(toplevel->node);
 
-	if (enable_animations && toplevel->node->client && toplevel->node->client->shown)
+	if (enable_animations && toplevel->node->client && toplevel->node->client->flags.shown)
 		toplevel_save_buffer(toplevel);
 
 	node_t *n = toplevel->node;
@@ -927,7 +929,7 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
 	bool has_blur = toplevel->blur && toplevel->blur->blur_node != NULL;
 
 	// only update blur from protocol if it wasn't set by a rule
-	if (toplevel->node && toplevel->node->client && !toplevel->node->client->blur_from_rule) {
+	if (toplevel->node && toplevel->node->client && !toplevel->node->client->flags.blur_from_rule) {
 		if (wants_blur != has_blur)
 			toplevel_set_effect(toplevel, EFFECT_BLUR, wants_blur);
 		if (toplevel->blur && fx)
@@ -1636,8 +1638,9 @@ void handle_new_xdg_decoration(struct wl_listener *listener, void *data) {
 
 bool toplevel_can_tear(struct toplevel_t *toplevel) {
 	// per-window rule override takes precedence
-	if (toplevel->node && toplevel->node->client && toplevel->node->client->allow_tearing_from_rule)
-		return toplevel->node->client->allow_tearing;
+	if (toplevel->node && toplevel->node->client &&
+		toplevel->node->client->flags.allow_tearing_from_rule)
+		return toplevel->node->client->flags.allow_tearing;
 
 	// explicit tearing hint from client
 	if (toplevel->tearing_hint == WP_TEARING_CONTROL_V1_PRESENTATION_HINT_ASYNC)
