@@ -10,7 +10,6 @@
 
 # Layout
 - Better tab grouping (see sway or Hyprland for reference)
-- Better scrolling layout from niri (not using bsp tree)
 
 # Misc
 - Rework the docs to be easier to use
