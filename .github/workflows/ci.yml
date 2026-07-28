@@ -32,9 +32,8 @@ jobs:
 
       - name: Build
         run: |
-          cd arch/
-          chown -R builder:builder .
-          sudo -u builder makepkg -si --noconfirm
+          meson setup build
+          ninja -C build
 
   alpine:
     runs-on: ubuntu-latest
