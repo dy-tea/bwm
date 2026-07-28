@@ -142,15 +142,17 @@ static void set_node_geom(node_t *n, struct wlr_box geom, output_t *m, desktop_t
 			r.height = MIN_HEIGHT;
 	}
 
-	if ((int)n->constraints.min_width > MIN_WIDTH && r.width < (int)n->constraints.min_width &&
-			geom.width > 0) {
-		r.x = geom.x + (geom.width - (int)n->constraints.min_width) / 2;
-		r.width = n->constraints.min_width;
-	}
-	if ((int)n->constraints.min_height > MIN_HEIGHT && r.height < (int)n->constraints.min_height &&
-			geom.height > 0) {
-		r.y = geom.y + (geom.height - (int)n->constraints.min_height) / 2;
-		r.height = n->constraints.min_height;
+	if (respect_tiled_min_size) {
+		if ((int)n->constraints.min_width > MIN_WIDTH && r.width < (int)n->constraints.min_width &&
+				geom.width > 0) {
+			r.x = geom.x + (geom.width - (int)n->constraints.min_width) / 2;
+			r.width = n->constraints.min_width;
+		}
+		if ((int)n->constraints.min_height > MIN_HEIGHT && r.height < (int)n->constraints.min_height &&
+				geom.height > 0) {
+			r.y = geom.y + (geom.height - (int)n->constraints.min_height) / 2;
+			r.height = n->constraints.min_height;
+		}
 	}
 
 	n->client->tiled_rectangle = r;

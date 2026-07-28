@@ -82,6 +82,8 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 		ipc_handle_bool(args, num, client_fd, &smart_gaps, IPC_FLAG_COMMIT);
 	} else if (streq("smart_borders", *args)) {
 		ipc_handle_bool(args, num, client_fd, &smart_borders, IPC_FLAG_COMMIT);
+	} else if (streq("respect_tiled_min_size", *args)) {
+		ipc_handle_bool(args, num, client_fd, &respect_tiled_min_size, IPC_FLAG_COMMIT);
 	} else if (streq("focus_wrapping", *args)) {
 		ipc_handle_bool(args, num, client_fd, &focus_wrapping, IPC_FLAG_COMMIT);
 	} else if (streq("focus_on_activate", *args)) {

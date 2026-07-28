@@ -50,6 +50,8 @@ void ipc_cmd_wm(char **args, int num, int client_fd) {
 			smart_gaps ? "true" : "false");
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"smart_borders\": %s,\n",
 			smart_borders ? "true" : "false");
+		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"respect_tiled_min_size\": %s,\n",
+			respect_tiled_min_size ? "true" : "false");
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"focus_wrapping\": %s,\n",
 			focus_wrapping ? "true" : "false");
 

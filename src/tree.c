@@ -60,6 +60,7 @@ int border_width = 2;
 int window_gap = 10;
 bool smart_gaps = false;
 bool smart_borders = false;
+bool respect_tiled_min_size = false;
 bool focus_wrapping = true;
 int focus_on_activate = FOCUS_ON_ACTIVATE_FOCUS;
 double split_ratio = 0.5;
@@ -387,7 +388,7 @@ static void render_leaf(output_t *m, desktop_t *d, node_t *n, struct wlr_box rec
 	}
 
 	// clamp up to constraints and center within the tile slot
-	if (use_centering) {
+	if (respect_tiled_min_size && use_centering) {
 		if ((int)n->constraints.min_width > MIN_WIDTH && r.width < (int)n->constraints.min_width &&
 				slot.width > 0) {
 			r.x = slot.x + (slot.width - (int)n->constraints.min_width) / 2;
@@ -527,15 +528,20 @@ static void compute_split_rects(node_t *n, desktop_t *d, struct wlr_box rect,
 	*first_rect = rect;
 	*second_rect = rect;
 
+	uint16_t first_min_w = respect_tiled_min_size &&
+		n->first_child ? n->first_child->constraints.min_width : 0;
+	uint16_t second_min_w = respect_tiled_min_size &&
+		n->second_child ? n->second_child->constraints.min_width : 0;
+	uint16_t first_min_h = respect_tiled_min_size &&
+		n->first_child ? n->first_child->constraints.min_height : 0;
+	uint16_t second_min_h = respect_tiled_min_size &&
+		n->second_child ? n->second_child->constraints.min_height : 0;
+
 	if (n->split_type == TYPE_VERTICAL) {
-		split_dimension(rect.width, n->split_ratio,
-			n->first_child ? n->first_child->constraints.min_width : 0,
-			n->second_child ? n->second_child->constraints.min_width : 0, &first_rect->width,
+		split_dimension(rect.width, n->split_ratio, first_min_w, second_min_w, &first_rect->width,
 			&second_rect->width, &second_rect->x);
 	} else {
-		split_dimension(rect.height, n->split_ratio,
-			n->first_child ? n->first_child->constraints.min_height : 0,
-			n->second_child ? n->second_child->constraints.min_height : 0, &first_rect->height,
+		split_dimension(rect.height, n->split_ratio, first_min_h, second_min_h, &first_rect->height,
 			&second_rect->height, &second_rect->y);
 	}
 }

@@ -344,6 +344,12 @@ doorsctl config left_padding <pixels>
 Sets the left padding for all desktops.
 
 ```
+doorsctl config respect_tiled_min_size <true|false>
+```
+
+When true, tiled windows will not go below their configured minimum size no matter what.
+
+```
 doorsctl config normal_border_color <color>
 ```
 

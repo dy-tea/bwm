@@ -266,6 +266,7 @@ extern int border_width;
 extern int window_gap;
 extern bool smart_gaps;
 extern bool smart_borders;
+extern bool respect_tiled_min_size;
 extern bool focus_wrapping;
 extern int focus_on_activate; // focus_on_activate_mode_t
 extern double split_ratio;

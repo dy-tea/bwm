@@ -13,7 +13,6 @@
 
 # Misc
 - Rework the docs to be easier to use
-- Minimum sizes are currently always respected, clipping may be preferred in most cases
 - Improve the README (include video, images, better info)
 
 # Potential
