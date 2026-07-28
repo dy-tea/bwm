@@ -8,6 +8,7 @@
 #include "layout.h"
 #include "master_stack.h"
 #include "output.h"
+#include "scroller.h"
 #include "seat.h"
 #include "server.h"
 #include "tabs.h"
@@ -1074,6 +1075,13 @@ void resize_left(void) {
 	}
 	if (resize_master_stack_ratio(true, -RESIZE_AMOUNT))
 		return;
+	if (mon->desk->layout == LAYOUT_SCROLLER) {
+		if (scroller_resize_width(mon->desk, -RESIZE_AMOUNT)) {
+			arrange(mon, mon->desk, true);
+			wlr_log(WLR_INFO, "Resized left (scroller)");
+		}
+		return;
+	}
 
 	node_t *n = mon->desk->focus;
 	if (n->parent == NULL) {
@@ -1114,6 +1122,13 @@ void resize_right(void) {
 	}
 	if (resize_master_stack_ratio(true, RESIZE_AMOUNT))
 		return;
+	if (mon->desk->layout == LAYOUT_SCROLLER) {
+		if (scroller_resize_width(mon->desk, RESIZE_AMOUNT)) {
+			arrange(mon, mon->desk, true);
+			wlr_log(WLR_INFO, "Resized right (scroller)");
+		}
+		return;
+	}
 
 	node_t *n = mon->desk->focus;
 	if (n->parent == NULL) {
@@ -1154,6 +1169,16 @@ void resize_up(void) {
 	}
 	if (resize_master_stack_ratio(false, -RESIZE_AMOUNT))
 		return;
+	if (mon->desk->layout == LAYOUT_SCROLLER) {
+		float delta = -RESIZE_AMOUNT;
+		if (mon->desk->scroller_state)
+			delta *= (float)mon->desk->scroller_state->working_area.height;
+		if (scroller_resize_stack(mon->desk, delta)) {
+			arrange(mon, mon->desk, true);
+			wlr_log(WLR_INFO, "Resized up (scroller)");
+		}
+		return;
+	}
 
 	node_t *n = mon->desk->focus;
 	if (n->parent == NULL) {
@@ -1194,6 +1219,16 @@ void resize_down(void) {
 	}
 	if (resize_master_stack_ratio(false, RESIZE_AMOUNT))
 		return;
+	if (mon->desk->layout == LAYOUT_SCROLLER) {
+		float delta = RESIZE_AMOUNT;
+		if (mon->desk->scroller_state)
+			delta *= (float)mon->desk->scroller_state->working_area.height;
+		if (scroller_resize_stack(mon->desk, delta)) {
+			arrange(mon, mon->desk, true);
+			wlr_log(WLR_INFO, "Resized down (scroller)");
+		}
+		return;
+	}
 
 	node_t *n = mon->desk->focus;
 	if (n->parent == NULL) {

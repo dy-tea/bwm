@@ -811,8 +811,10 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
 				n->client && n->client->title[0] ? n->client->title : "?", n->id);
 		}
 		// in scroller layout, remove from scroller state first
-		if (d->layout == LAYOUT_SCROLLER && d->scroller_state && n->client)
+		if (d->layout == LAYOUT_SCROLLER && d->scroller_state && n->client) {
 			scroller_remove_tile(d->scroller_state, n->client, m);
+			scroller_apply_active_focus(d, m);
+		}
 
 		remove_node(d, n);
 
@@ -825,7 +827,14 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
 		toplevel->node = NULL;
 
 		// focus handling after removing node
-		if (d->focus != NULL && d->focus->client != NULL) {
+		if (d->layout == LAYOUT_SCROLLER) {
+			// fall back to tree focus only if croller is empty
+			if (d->focus == NULL && d->root != NULL) {
+				d->focus = first_extrema(d->root);
+				if (d->focus != NULL)
+					focus_node(d->output ? d->output : m, d, d->focus);
+			}
+		} else if (d->focus != NULL && d->focus->client != NULL) {
 			focus_node(d->output ? d->output : m, d, d->focus);
 		} else if (d->root != NULL) {
 			d->focus = first_extrema(d->root);

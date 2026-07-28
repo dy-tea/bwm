@@ -44,6 +44,7 @@ typedef struct scroller_state_t {
 	int column_count, capacity, active_column_idx;
 	double view_offset;
 	struct wlr_box working_area;
+	bool activate_prev_column_on_removal;
 } scroller_state_t;
 
 scroller_state_t *scroller_create(void);
@@ -67,10 +68,12 @@ bool scroller_expel_from_column(desktop_t *d);
 bool scroller_is_tiled(const client_t *c);
 void scroller_apply_client_rules(client_t *c, float rule_proportion, float rule_proportion_single);
 
-void scroller_resize_width(client_t *client, float delta);
-void scroller_resize_stack(client_t *client, float delta);
+bool scroller_resize_width(desktop_t *d, float delta);
+bool scroller_resize_stack(desktop_t *d, float delta);
 void scroller_set_proportion(client_t *client, float proportion);
 void scroller_cycle_proportion_preset(client_t *client);
+
+void scroller_apply_active_focus(desktop_t *d, struct output_t *m);
 
 int scroller_collect(desktop_t *d, node_t ***out_nodes);
 

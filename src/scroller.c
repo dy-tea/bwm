@@ -56,6 +56,7 @@ scroller_state_t *scroller_create(void) {
 	if (!s)
 		return NULL;
 	s->view_offset = 0.0;
+	s->activate_prev_column_on_removal = false;
 	return s;
 }
 
@@ -172,9 +173,12 @@ bool scroller_add_tile(scroller_state_t *s, client_t *client, bool activate) {
 	new_col->tile_count = 1;
 
 	// adjust active_column_idx
-	if (activate)
+	if (activate) {
 		s->active_column_idx = insert_col;
-	else if (s->active_column_idx >= insert_col)
+		// Track that we should activate the previous column if this one is
+		// removed, matching niri's activate_prev_column_on_removal.
+		s->activate_prev_column_on_removal = true;
+	} else if (s->active_column_idx >= insert_col)
 		s->active_column_idx++;
 
 	return true;
@@ -238,12 +242,24 @@ void scroller_remove_tile(scroller_state_t *s, client_t *client, struct output_t
 		// fix active_column_idx
 		if (s->column_count == 0) {
 			s->active_column_idx = 0;
+			s->activate_prev_column_on_removal = false;
 			return;
 		}
-		if (s->active_column_idx >= s->column_count)
-			s->active_column_idx = s->column_count - 1;
-		if (col_idx <= s->active_column_idx && s->active_column_idx > 0)
+		if (col_idx == s->active_column_idx) {
+			// The active column was removed.
+			if (s->activate_prev_column_on_removal && s->active_column_idx > 0) {
+				// Activate the previous column (e.g. open-and-immediately-close).
+				s->active_column_idx--;
+			} else {
+				// Activate the next column, clamped to the last available.
+				if (s->active_column_idx >= s->column_count)
+					s->active_column_idx = s->column_count - 1;
+			}
+			s->activate_prev_column_on_removal = false;
+		} else if (col_idx < s->active_column_idx) {
+			// A column to the left was removed; shift the active index.
 			s->active_column_idx--;
+		}
 	} else {
 		if (tile_idx < col->active_tile_idx)
 			col->active_tile_idx--;
@@ -291,6 +307,8 @@ void scroller_arrange(struct output_t *m, desktop_t *d, struct wlr_box available
 	scroller_state_t *s = d->scroller_state;
 	if (!s)
 		return;
+
+	s->working_area = available;
 
 	// populate from BSP tree if scroller state is empty but toplevels exist
 	if (s->column_count == 0 && d->root)
@@ -417,7 +435,7 @@ void scroller_arrange(struct output_t *m, desktop_t *d, struct wlr_box available
 	free(col_xs);
 }
 
-static void apply_active_focus(desktop_t *d) {
+void scroller_apply_active_focus(desktop_t *d, struct output_t *m) {
 	scroller_state_t *s = d->scroller_state;
 	if (!s || s->column_count == 0) {
 		d->focus = NULL;
@@ -434,8 +452,9 @@ static void apply_active_focus(desktop_t *d) {
 	if (c && c->toplevel && c->toplevel->node) {
 		node_t *target = c->toplevel->node;
 		d->focus = target;
-		if (d->output)
-			focus_node(d->output, d, target);
+		output_t *out = d->output ? d->output : m;
+		if (out)
+			focus_node(out, d, target);
 	}
 }
 
@@ -451,7 +470,8 @@ bool scroller_focus_next(desktop_t *d) {
 		s->active_column_idx++;
 	}
 	s->view_offset = 0.0; // reset scroll for now
-	apply_active_focus(d);
+	s->activate_prev_column_on_removal = false;
+	scroller_apply_active_focus(d, NULL);
 	return true;
 }
 
@@ -467,7 +487,8 @@ bool scroller_focus_prev(desktop_t *d) {
 		s->active_column_idx--;
 	}
 	s->view_offset = 0.0;
-	apply_active_focus(d);
+	s->activate_prev_column_on_removal = false;
+	scroller_apply_active_focus(d, NULL);
 	return true;
 }
 
@@ -483,7 +504,7 @@ bool scroller_focus_down(desktop_t *d) {
 		return false;
 
 	col->active_tile_idx++;
-	apply_active_focus(d);
+	scroller_apply_active_focus(d, NULL);
 	return true;
 }
 
@@ -499,7 +520,7 @@ bool scroller_focus_up(desktop_t *d) {
 		return false;
 
 	col->active_tile_idx--;
-	apply_active_focus(d);
+	scroller_apply_active_focus(d, NULL);
 	return true;
 }
 
@@ -515,7 +536,8 @@ void scroller_center_window(desktop_t *d, client_t *client) {
 	s->active_column_idx = col_idx;
 	s->columns[col_idx].active_tile_idx = tile_idx;
 	s->view_offset = 0.0;
-	apply_active_focus(d);
+	s->activate_prev_column_on_removal = false;
+	scroller_apply_active_focus(d, NULL);
 }
 
 bool scroller_consume_into_column(desktop_t *d) {
@@ -541,7 +563,12 @@ bool scroller_consume_into_column(desktop_t *d) {
 	if (target_col >= s->column_count)
 		return false;
 
-	return scroller_add_tile_to_column(s, cl, target_col, true);
+	bool result = scroller_add_tile_to_column(s, cl, target_col, true);
+	if (result)
+		// Track that we should activate the previous column if this one is
+		// removed, matching niri's activate_prev_column_on_removal.
+		s->activate_prev_column_on_removal = true;
+	return result;
 }
 
 bool scroller_expel_from_column(desktop_t *d) {
@@ -577,26 +604,48 @@ void scroller_apply_client_rules(client_t *c, float rule_proportion, float rule_
 	// TODO: store per-client proportion overrides if needed later.
 }
 
-void scroller_resize_width(client_t *client, float delta) {
-	if (!client)
-		return;
-	// Find the client's column in the scroller state (needs desktop_t).
-	// For now, stub – proportion is set via config.
-	// This will be wired through IPC / keybindings properly.
-	(void)delta;
-	wlr_log(WLR_DEBUG, "scroller_resize_width: stub (client=%p delta=%.2f)", (void *)client, delta);
+bool scroller_resize_width(desktop_t *d, float delta) {
+	scroller_state_t *s = d ? d->scroller_state : NULL;
+	if (!s || s->column_count == 0)
+		return false;
+
+	int col = s->active_column_idx;
+	double prop = s->columns[col].width.value + (double)delta;
+	if (prop < 0.1)
+		prop = 0.1;
+	if (prop > 1.0)
+		prop = 1.0;
+	s->columns[col].width.type = SCROLLER_WIDTH_PROPORTION;
+	s->columns[col].width.value = prop;
+	return true;
 }
 
-void scroller_resize_stack(client_t *client, float delta) {
-	(void)client;
-	(void)delta;
-	wlr_log(WLR_DEBUG, "scroller_resize_stack: stub");
+bool scroller_resize_stack(desktop_t *d, float delta) {
+	scroller_state_t *s = d ? d->scroller_state : NULL;
+	if (!s || s->column_count == 0)
+		return false;
+
+	scroller_column_t *col = &s->columns[s->active_column_idx];
+	if (col->tile_count == 0)
+		return false;
+
+	int tile_idx = col->active_tile_idx;
+	// Convert auto-height to fixed using the last computed rect height.
+	if (col->tiles[tile_idx].height.type == SCROLLER_HEIGHT_AUTO) {
+		col->tiles[tile_idx].height.type = SCROLLER_HEIGHT_FIXED;
+		col->tiles[tile_idx].height.value = (double)col->tiles[tile_idx].rect.height;
+	}
+
+	double h = col->tiles[tile_idx].height.value + (double)delta;
+	if (h < 1.0)
+		h = 1.0;
+	col->tiles[tile_idx].height.value = h;
+	return true;
 }
 
 void scroller_set_proportion(client_t *client, float proportion) {
 	if (!client)
 		return;
-	// TODO: find column and update its width.
 	(void)proportion;
 	wlr_log(WLR_DEBUG, "scroller_set_proportion: stub (client=%p prop=%.2f)", (void *)client,
 		proportion);
@@ -605,7 +654,6 @@ void scroller_set_proportion(client_t *client, float proportion) {
 void scroller_cycle_proportion_preset(client_t *client) {
 	if (!client || !scroller_proportion_preset || scroller_proportion_preset_count == 0)
 		return;
-	// TODO: find column, cycle through presets.
 	wlr_log(WLR_DEBUG, "scroller_cycle_proportion_preset: stub");
 }
 
