@@ -6,6 +6,7 @@
 #include "keyboard.h"
 #include "layer.h"
 #include "output.h"
+#include "scroller.h"
 #include "seat.h"
 #include "server.h"
 #include "tablet.h"
@@ -971,6 +972,38 @@ void cursor_axis(struct wl_listener *listener, void *data) {
 				}
 			}
 			return;
+		}
+	}
+
+	output_t *m = server.focused_output;
+	desktop_t *d = m ? m->desk : NULL;
+	bool is_touchpad = (event->source == WL_POINTER_AXIS_SOURCE_FINGER ||
+		event->source == WL_POINTER_AXIS_SOURCE_CONTINUOUS);
+
+	// cancel any ongoing touchpad scroll gesture if the layout is not scroller
+	if (server.touchpad_scroll.ongoing && (!d || d->layout != LAYOUT_SCROLLER))
+		server.touchpad_scroll.ongoing = false;
+
+	// handle touchpad horizontal scrolling in the scroller layout
+	if (d && d->layout == LAYOUT_SCROLLER && is_touchpad &&
+			event->orientation == WL_POINTER_AXIS_HORIZONTAL_SCROLL) {
+		if (!server.touchpad_scroll.ongoing) {
+			server.touchpad_scroll.ongoing = true;
+			server.touchpad_scroll.is_touchpad = is_touchpad;
+			scroller_view_offset_gesture_begin(d, is_touchpad);
+		}
+		scroller_view_offset_gesture_update(d, event->delta);
+		arrange(m, d, true);
+		return;
+	}
+
+	// cancel any ongoing touchpad scroll gesture if this event is not a
+	// horizontal touchpad scroll
+	if (server.touchpad_scroll.ongoing) {
+		server.touchpad_scroll.ongoing = false;
+		if (d && d->layout == LAYOUT_SCROLLER) {
+			scroller_view_offset_gesture_end(d);
+			arrange(m, d, true);
 		}
 	}
 

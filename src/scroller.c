@@ -2,6 +2,7 @@
 #include "scroller.h"
 #include "toplevel.h"
 #include "tree.h"
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wlr/types/wlr_xdg_shell.h>
@@ -456,6 +457,105 @@ void scroller_apply_active_focus(desktop_t *d, struct output_t *m) {
 		if (out)
 			focus_node(out, d, target);
 	}
+}
+
+
+#define VIEW_GESTURE_WORKING_AREA_MOVEMENT 300.
+
+void scroller_view_offset_gesture_begin(desktop_t *d, bool is_touchpad) {
+	scroller_state_t *s = d ? d->scroller_state : NULL;
+	if (!s || s->column_count == 0)
+		return;
+	s->view_offset = 0.0;
+	(void)is_touchpad;
+}
+
+void scroller_view_offset_gesture_update(desktop_t *d, double delta_x) {
+	scroller_state_t *s = d ? d->scroller_state : NULL;
+	if (!s || s->column_count == 0)
+		return;
+
+	double gap = (double)compute_window_gap(d);
+	if (gap < 0)
+		gap = 0.0;
+
+	double area_w = (double)s->working_area.width;
+	double norm_factor = area_w / VIEW_GESTURE_WORKING_AREA_MOVEMENT;
+	if (norm_factor < 5.0)
+		norm_factor = 5.0;
+
+	double delta = delta_x * norm_factor;
+
+	double *col_xs = malloc((size_t)(s->column_count + 1) * sizeof(*col_xs));
+	if (!col_xs)
+		return;
+
+	double wx = 0.0;
+	for (int i = 0; i < s->column_count; i++) {
+		col_xs[i] = wx;
+		wx += s->columns[i].resolved_width + gap;
+	}
+	col_xs[s->column_count] = wx;
+
+	double active_col_x = col_xs[s->active_column_idx];
+	double total_width = col_xs[s->column_count];
+	double min_offset = -active_col_x;
+	double max_offset = total_width - active_col_x - area_w;
+
+	s->view_offset += delta;
+	if (s->view_offset < min_offset)
+		s->view_offset = min_offset;
+	if (s->view_offset > max_offset)
+		s->view_offset = max_offset;
+
+	free(col_xs);
+}
+
+bool scroller_view_offset_gesture_end(desktop_t *d) {
+	scroller_state_t *s = d ? d->scroller_state : NULL;
+	if (!s || s->column_count == 0)
+		return false;
+
+	double gap = (double)compute_window_gap(d);
+	if (gap < 0)
+		gap = 0.0;
+
+	/* compute column x positions */
+	double *col_xs = malloc((size_t)(s->column_count + 1) * sizeof(*col_xs));
+	if (!col_xs)
+		return false;
+
+	double wx = 0.0;
+	for (int i = 0; i < s->column_count; i++) {
+		col_xs[i] = wx;
+		wx += s->columns[i].resolved_width + gap;
+	}
+	col_xs[s->column_count] = wx;
+
+	double active_col_x = col_xs[s->active_column_idx];
+	double view_pos = active_col_x + s->view_offset;
+
+	int nearest = s->active_column_idx;
+	double nearest_dist = fabs(view_pos - active_col_x);
+	for (int i = 0; i < s->column_count; i++) {
+		double dist = fabs(view_pos - col_xs[i]);
+		if (dist < nearest_dist) {
+			nearest_dist = dist;
+			nearest = i;
+		}
+	}
+
+	free(col_xs);
+
+	if (nearest != s->active_column_idx) {
+		s->active_column_idx = nearest;
+		s->view_offset = 0.0;
+		s->activate_prev_column_on_removal = false;
+		return true;
+	}
+
+	s->view_offset = 0.0;
+	return true;
 }
 
 bool scroller_focus_next(desktop_t *d) {

@@ -75,6 +75,10 @@ void scroller_cycle_proportion_preset(client_t *client);
 
 void scroller_apply_active_focus(desktop_t *d, struct output_t *m);
 
+void scroller_view_offset_gesture_begin(desktop_t *d, bool is_touchpad);
+void scroller_view_offset_gesture_update(desktop_t *d, double delta_x);
+bool scroller_view_offset_gesture_end(desktop_t *d);
+
 int scroller_collect(desktop_t *d, node_t ***out_nodes);
 
 extern float scroller_default_proportion;

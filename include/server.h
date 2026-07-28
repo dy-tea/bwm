@@ -105,6 +105,11 @@ typedef struct server_t {
 	struct wl_listener swipe_update;
 	struct wl_listener swipe_end;
 
+	struct {
+		bool ongoing;
+		bool is_touchpad;
+	} touchpad_scroll;
+
 	struct wlr_relative_pointer_manager_v1 *relative_pointer_manager;
 	struct wlr_idle_notifier_v1 *idle_notifier;
 
