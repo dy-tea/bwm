@@ -1,6 +1,6 @@
 #include "color_helpers.glsl"
 
-precision mediump float;
+precision highp float;
 uniform sampler2D tex;
 uniform vec2 halfpixel;
 uniform float offset;

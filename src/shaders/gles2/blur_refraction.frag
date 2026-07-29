@@ -1,4 +1,4 @@
-precision mediump float;
+precision highp float;
 uniform sampler2D tex;
 uniform float offset;
 uniform vec2 halfpixel;

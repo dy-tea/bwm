@@ -1,6 +1,6 @@
 // Color space and brightness helper functions for shaders (based on shaders from Hyprland)
 
-precision mediump float;
+precision highp float;
 
 // Perceived brightness weights (standard luminance coefficients)
 // Source: http://alienryderflex.com/hsp.html
