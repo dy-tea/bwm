@@ -4,6 +4,7 @@
 #include "copy_capture.h"
 #include "cursor.h"
 #include "effects.h"
+#include "global_shortcuts.h"
 #include "idle.h"
 #include "idle_power.h"
 #include "input.h"
@@ -713,6 +714,7 @@ void server_init(void) {
 	rule_init();
 	output_config_init();
 	input_init();
+	global_shortcuts_init();
 
 	// security context manager
 	server.security_context_manager_v1 = wlr_security_context_manager_v1_create(server.wl_display);
@@ -916,6 +918,7 @@ void server_fini(void) {
 	rule_fini();
 	output_config_fini();
 	input_fini();
+	global_shortcuts_fini();
 	config_fini();
 	wl_display_destroy_clients(server.wl_display);
 

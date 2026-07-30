@@ -198,7 +198,12 @@ static void apply_leaf_positions(desktop_t *d) {
 
 		unsigned int bw = effective_border_width(d);
 		if (bw != 0) {
-			struct wlr_box geo = {0, 0, r.width, r.height};
+			struct wlr_box geo = {
+				0,
+				0,
+				r.width,
+				r.height
+			};
 			update_borders(client_border_tree(n->client), client_border_rects(n->client), geo, bw);
 			update_border_colors(n->client);
 			if (n->client->border_radius > 0.0f) {

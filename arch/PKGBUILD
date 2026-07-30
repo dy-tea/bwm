@@ -11,6 +11,7 @@ depends=(
 	'libevdev.so'
 	'libinput'
 	'libpixman-1.so'
+	'libsystemd.so'
 	'libudev.so'
 	'libwayland-server.so'
 	'libxcb'

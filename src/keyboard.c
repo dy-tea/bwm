@@ -1,5 +1,6 @@
 #include "config.h"
 #include "fallthrough.h"
+#include "global_shortcuts.h"
 #include "idle_power.h"
 #include "input.h"
 #include "input_method.h"
@@ -159,6 +160,12 @@ void keyboard_key(struct wl_listener *listener, void *data) {
 				if ((handled = handle_keybind(modifiers, syms[i])))
 					break;
 		}
+	}
+
+	if (!handled) {
+		// check portal global shortcuts (lower priority than compositor keybinds)
+		handled = global_shortcuts_handle_key(modifiers, keycode, syms, nsyms, event->state,
+			event->time_msec);
 	}
 
 	if (!handled) {

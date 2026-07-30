@@ -34,6 +34,12 @@ libs = [
 	wayland_protos,
 ]
 
+libsystemd = dependency('libsystemd', required: false)
+if libsystemd.found()
+  libs += libsystemd
+  add_project_arguments('-DHAVE_SYSTEMD=1', language: 'c')
+endif
+
 if host_machine.system() == 'freebsd'
   libs += declare_dependency(link_args: ['/usr/local/lib/libinotify.so', '-lpthread'])
 endif
@@ -96,6 +102,7 @@ executable(
 		'src' / 'effects_gles2.c',
 		'src' / 'effects_vk.c',
 		'src' / 'gesture.c',
+		'src' / 'global_shortcuts.c',
 		'src' / 'idle.c',
 		'src' / 'idle_power.c',
 		'src' / 'ipc.c',
