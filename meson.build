@@ -109,6 +109,7 @@ executable(
 		'src' / 'ipc_cmd' / 'actions.c',
 		'src' / 'ipc_cmd' / 'config.c',
 		'src' / 'ipc_cmd' / 'env.c',
+		'src' / 'ipc_cmd' / 'globalshortcuts.c',
 		'src' / 'ipc_cmd' / 'desktop.c',
 		'src' / 'ipc_cmd' / 'dispatch.c',
 		'src' / 'ipc_cmd' / 'hotkey.c',

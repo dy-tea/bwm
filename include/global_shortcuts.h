@@ -58,3 +58,5 @@ void global_shortcuts_init(void);
 void global_shortcuts_fini(void);
 bool global_shortcuts_handle_key(uint32_t modifiers, uint32_t keycode, const xkb_keysym_t *syms,
 	int nsyms, uint32_t state, uint32_t time_msec);
+void global_shortcuts_send_by_app(const char *app_id, const char *shortcut_id, bool pressed);
+void global_shortcuts_list(char *buf, size_t buf_size);

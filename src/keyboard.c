@@ -48,6 +48,66 @@ static void destroy_empty_wlr_keyboard_group(void *data) {
 
 bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed);
 
+static void parse_portal_shortcut_cmd(const char *cmd, char *app_id, size_t app_id_size,
+		char *shortcut_id, size_t shortcut_id_size) {
+	app_id[0] = '\0';
+	shortcut_id[0] = '\0';
+	if (!cmd || cmd[0] == '\0')
+		return;
+	const char *args = cmd + 16;
+	const char *space = strchr(args, ' ');
+	if (space) {
+		size_t app_len = (size_t)(space - args);
+		if (app_len >= app_id_size)
+			app_len = app_id_size - 1;
+		memcpy(app_id, args, app_len);
+		app_id[app_len] = '\0';
+		snprintf(shortcut_id, shortcut_id_size, "%s", space + 1);
+	}
+}
+
+static bool find_and_send_portal_shortcut(uint32_t modifiers, uint32_t keycode,
+		const xkb_keysym_t *syms, int nsyms, bool pressed) {
+	keybind_t *arrays[2] = {
+		NULL,
+		keybinds
+	};
+	size_t sizes[2] = {
+		0,
+		num_keybinds
+	};
+
+	if (active_submap) {
+		arrays[0] = active_submap->keybinds;
+		sizes[0] = active_submap->num_keybinds;
+	}
+
+	for (int pass = 0; pass < 2; pass++) {
+		if (!arrays[pass] || sizes[pass] == 0)
+			continue;
+		for (size_t i = 0; i < sizes[pass]; i++) {
+			if (arrays[pass][i].action != BIND_GLOBAL_SHORTCUT)
+				continue;
+			bool matched = false;
+			if (arrays[pass][i].use_keycode)
+				matched = keybind_matches(&arrays[pass][i], modifiers, 0, keycode);
+			else {
+				for (int j = 0; j < nsyms && !matched; j++)
+					matched = keybind_matches(&arrays[pass][i], modifiers, syms[j], 0);
+			}
+			if (matched) {
+				char app_id[256], shortcut_id[256];
+				parse_portal_shortcut_cmd(arrays[pass][i].external_cmd, app_id, sizeof(app_id), shortcut_id,
+					sizeof(shortcut_id));
+				if (app_id[0] && shortcut_id[0])
+					global_shortcuts_send_by_app(app_id, shortcut_id, pressed);
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 static output_t *find_monitor_for_desktop(desktop_t *d) {
 	output_t *m = mon_head;
 	while (m != NULL) {
@@ -162,11 +222,14 @@ void keyboard_key(struct wl_listener *listener, void *data) {
 		}
 	}
 
-	if (!handled) {
-		// check portal global shortcuts (lower priority than compositor keybinds)
-		handled = global_shortcuts_handle_key(modifiers, keycode, syms, nsyms, event->state,
-			event->time_msec);
-	}
+	// check portal global shortcuts (independent of compositor keybinds)
+	if (global_shortcuts_handle_key(modifiers, keycode, syms, nsyms, event->state, event->time_msec))
+		handled = true;
+
+	// handle portal shortcut keybind release (send Deactivated to match press from execute_bind)
+	if (event->state == WL_KEYBOARD_KEY_STATE_RELEASED && find_and_send_portal_shortcut(modifiers,
+		event->keycode, syms, nsyms, false))
+		handled = true;
 
 	if (!handled) {
 		// forward key to input method if grabbed

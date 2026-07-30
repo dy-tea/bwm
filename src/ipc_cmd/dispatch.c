@@ -22,6 +22,7 @@ static const cmd_entry_t cmds[] = {
 	{"equalize", ipc_cmd_equalize},
 	{"flip", ipc_cmd_flip},
 	{"focus", ipc_cmd_focus},
+	{"globalshortcuts", ipc_cmd_globalshortcuts},
 	{"hotkey", ipc_cmd_hotkey},
 	{"input", ipc_cmd_input},
 	{"keyboard_grouping", ipc_cmd_keyboard_grouping},

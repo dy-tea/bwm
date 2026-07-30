@@ -26,5 +26,6 @@ void ipc_cmd_scroller(char **args, int num, int client_fd);
 void ipc_cmd_master_stack(char **args, int num, int client_fd);
 void ipc_cmd_hotkey(char **args, int num, int client_fd);
 void ipc_cmd_scratchpad(char **args, int num, int client_fd);
+void ipc_cmd_globalshortcuts(char **args, int num, int client_fd);
 void ipc_cmd_bezier(char **args, int num, int client_fd);
 void ipc_cmd_spring(char **args, int num, int client_fd);

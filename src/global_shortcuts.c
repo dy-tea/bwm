@@ -6,6 +6,7 @@
 #include <string.h>
 #include <strings.h>
 #include <systemd/sd-bus.h>
+#include <time.h>
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/util/log.h>
@@ -604,8 +605,7 @@ void global_shortcuts_init(void) {
 
 	r = sd_bus_request_name(gs.bus, GS_BUS_NAME, 0);
 	if (r < 0) {
-		wlr_log(WLR_ERROR, "failed to request bus name '%s': %s", GS_BUS_NAME,
-			strerror(-r));
+		wlr_log(WLR_ERROR, "failed to request bus name '%s': %s", GS_BUS_NAME, strerror(-r));
 		sd_bus_unref(gs.bus);
 		gs.bus = NULL;
 		return;
@@ -708,6 +708,65 @@ bool global_shortcuts_handle_key(uint32_t modifiers, uint32_t keycode, const xkb
 	return false;
 }
 
+void global_shortcuts_send_by_app(const char *app_id, const char *shortcut_id, bool pressed) {
+	if (!gs.initialized || !gs.bus || !app_id || !shortcut_id)
+		return;
+
+	struct timespec tp;
+	clock_gettime(CLOCK_MONOTONIC, &tp);
+	uint64_t timestamp = (uint64_t)tp.tv_sec * 1000 + (uint64_t)tp.tv_nsec / 1000000;
+
+	gs_session_t *sess;
+	wl_list_for_each(sess, &gs.sessions, link) {
+		if (sess->destroyed)
+			continue;
+		if (strcmp(sess->app_id, app_id) != 0)
+			continue;
+		gs_shortcut_t *sc;
+		wl_list_for_each(sc, &sess->shortcuts, link) {
+			if (strcmp(sc->id, shortcut_id) == 0) {
+				if (pressed)
+					emit_activated(sess, sc, timestamp);
+				else
+					emit_deactivated(sess, sc, timestamp);
+				return;
+			}
+		}
+	}
+}
+
+void global_shortcuts_list(char *buf, size_t buf_size) {
+	if (!buf || buf_size == 0)
+		return;
+
+	int offset = 0;
+
+	if (!gs.initialized || !gs.bus) {
+		snprintf(buf, buf_size, "not initialized\n");
+		return;
+	}
+
+	gs_session_t *sess;
+	wl_list_for_each(sess, &gs.sessions, link) {
+		if (sess->destroyed)
+			continue;
+		gs_shortcut_t *sc;
+		wl_list_for_each(sc, &sess->shortcuts, link) {
+			int ret = snprintf(buf + offset, buf_size - offset, "%s:%s\t%s\n",
+				sess->app_id ? sess->app_id : "?", sc->id ? sc->id : "?",
+				sc->description ? sc->description : "");
+			if (ret < 0)
+				return;
+			if ((size_t)ret >= buf_size - offset)
+				return;
+			offset += ret;
+		}
+	}
+
+	if (offset == 0)
+		snprintf(buf, buf_size, "none\n");
+}
+
 
 #else // !HAVE_SYSTEMD
 
@@ -731,6 +790,17 @@ bool global_shortcuts_handle_key(uint32_t modifiers, uint32_t keycode, const xkb
 	(void)state;
 	(void)time_msec;
 	return false;
+}
+
+void global_shortcuts_send_by_app(const char *app_id, const char *shortcut_id, bool pressed) {
+	(void)app_id;
+	(void)shortcut_id;
+	(void)pressed;
+}
+
+void global_shortcuts_list(char *buf, size_t buf_size) {
+	if (buf && buf_size)
+		snprintf(buf, buf_size, "not available (no systemd)\n");
 }
 
 

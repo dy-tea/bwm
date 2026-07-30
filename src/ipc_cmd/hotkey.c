@@ -108,7 +108,8 @@ void ipc_cmd_hotkey(char **args, int num, int client_fd) {
 	bind_action_t action = parse_action(cmd, &desktop_index, submap_name);
 
 	add_keybind(modifiers, keysym, keycode, use_keycode, action, desktop_index,
-		action == BIND_EXTERNAL ? cmd : NULL, submap_name[0] ? submap_name : NULL);
+		(action == BIND_EXTERNAL || action == BIND_GLOBAL_SHORTCUT) ? cmd : NULL,
+		submap_name[0] ? submap_name : NULL);
 
 	send_success(client_fd, "hotkey added\n");
 }

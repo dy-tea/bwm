@@ -88,6 +88,7 @@ typedef enum {
 	BIND_INTERACTIVE_RESIZE,
 	BIND_TILING_DRAG,
 	BIND_EXTERNAL,
+	BIND_GLOBAL_SHORTCUT,
 } bind_action_t;
 
 typedef enum {
