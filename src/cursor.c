@@ -172,91 +172,67 @@ static uint32_t get_tiled_resizable_edges(node_t *node) {
 	return edges;
 }
 
-static void update_scene_positions(node_t *n, struct wlr_box rect, desktop_t *d) {
-	if (!n || !d)
+static void apply_leaf_positions(desktop_t *d) {
+	if (!d || !d->root)
 		return;
 
-	n->pending.rectangle = rect;
-	n->current.rectangle = rect;
+	for (node_t *n = first_extrema(d->root); n; n = next_leaf(n, d->root)) {
+		if (!n->client)
+			continue;
 
-	if (is_leaf(n)) {
-		if (n->client) {
-			// apply window gap and border width to leaf nodes
-			struct wlr_box r = rect;
-			unsigned int bw = effective_border_width(d);
-			int wg = (gapless_monocle && d->layout == LAYOUT_MONOCLE) ? 0 : compute_window_gap(d);
-			r = apply_bleed(r, bw, wg);
+		struct wlr_box r = n->client->arranged_rectangle;
+		if (r.width < 1 || r.height < 1)
+			continue;
 
-			n->client->tiled_rectangle = r;
-			n->client->committed_tiled_rectangle = r;
+		struct wlr_scene_tree *st = client_get_scene_tree(n->client);
+		if (!st)
+			continue;
 
-			struct wlr_scene_tree *st = client_get_scene_tree(n->client);
-			if (st) {
-				wlr_scene_node_set_position(&st->node, r.x, r.y);
+		wlr_scene_node_set_position(&st->node, r.x, r.y);
 
-				if (n->client->toplevel)
-					wlr_xdg_toplevel_set_size(n->client->toplevel->xdg_toplevel, r.width, r.height);
-				else if (n->client->xwayland_view)
-					wlr_xwayland_surface_configure(n->client->xwayland_view->xwayland_surface, r.x, r.y, r.width,
-						r.height);
+		if (n->client->toplevel)
+			wlr_xdg_toplevel_set_size(n->client->toplevel->xdg_toplevel, r.width, r.height);
+		else if (n->client->xwayland_view)
+			wlr_xwayland_surface_configure(n->client->xwayland_view->xwayland_surface, r.x, r.y, r.width,
+				r.height);
 
-				if (bw != 0) {
-					const struct wlr_box geo = {
-						0,
-						0,
-						r.width,
-						r.height
-					};
-					update_borders(client_border_tree(n->client), client_border_rects(n->client), geo, bw);
-					update_border_colors(n->client);
-					if (n->client->border_radius > 0.0f) {
-						surface_rounded_t *rounded = client_get_rounded(n->client);
-						if (rounded) {
-							int new_fw = r.width + 2 * (int)bw;
-							int new_fh = r.height + 2 * (int)bw;
-							if (new_fw > 0 && new_fh > 0 && (rounded->border_shader_buf_w != new_fw ||
-									rounded->border_shader_buf_h != new_fh)) {
-								rounded->border_dirty = true;
-								rounded->corner_mask_dirty = true;
-							}
-						}
+		unsigned int bw = effective_border_width(d);
+		if (bw != 0) {
+			struct wlr_box geo = {0, 0, r.width, r.height};
+			update_borders(client_border_tree(n->client), client_border_rects(n->client), geo, bw);
+			update_border_colors(n->client);
+			if (n->client->border_radius > 0.0f) {
+				surface_rounded_t *rounded = client_get_rounded(n->client);
+				if (rounded) {
+					int new_fw = r.width + 2 * (int)bw;
+					int new_fh = r.height + 2 * (int)bw;
+					if (new_fw > 0 && new_fh > 0 && (rounded->border_shader_buf_w != new_fw ||
+							rounded->border_shader_buf_h != new_fh)) {
+						rounded->border_dirty = true;
+						rounded->corner_mask_dirty = true;
 					}
 				}
 			}
 		}
-	} else if (n->split_type == TYPE_VERTICAL) {
-		int split_x = rect.x + (int)(rect.width * n->split_ratio);
-		struct wlr_box left = {
-			rect.x,
-			rect.y,
-			split_x - rect.x,
-			rect.height
-		};
-		struct wlr_box right = {
-			split_x,
-			rect.y,
-			rect.x + rect.width - split_x,
-			rect.height
-		};
-		update_scene_positions(n->first_child, left, d);
-		update_scene_positions(n->second_child, right, d);
-	} else if (n->split_type == TYPE_HORIZONTAL) {
-		int split_y = rect.y + (int)(rect.height * n->split_ratio);
-		struct wlr_box top = {
-			rect.x,
-			rect.y,
-			rect.width,
-			split_y - rect.y
-		};
-		struct wlr_box bottom = {
-			rect.x,
-			split_y,
-			rect.width,
-			rect.y + rect.height - split_y
-		};
-		update_scene_positions(n->first_child, top, d);
-		update_scene_positions(n->second_child, bottom, d);
 	}
+}
+
+static int find_scroller_tile_idx(scroller_column_t *col, client_t *c) {
+	for (int j = 0; j < col->tile_count; j++)
+		if (col->tiles[j].client == c)
+			return j;
+	return -1;
+}
+
+static int find_scroller_column(scroller_state_t *s, client_t *c) {
+	for (int i = 0; i < s->column_count; i++)
+		if (find_scroller_tile_idx(&s->columns[i], c) >= 0)
+			return i;
+	return -1;
+}
+
+static double max_d(double a, double b) {
+	return a > b ? a : b;
 }
 
 // process cursor motion for tiled window resizing
@@ -264,6 +240,37 @@ static void process_cursor_tiled_resize(void) {
 	node_t *node = server.tiled_resize_node;
 	if (!node || !node->client)
 		return;
+
+	desktop_t *d = node->desktop;
+	if (!d)
+		return;
+
+	// Handle scroller layout
+	if (d->layout == LAYOUT_SCROLLER && d->scroller_state) {
+		scroller_state_t *s = d->scroller_state;
+		if (s->column_count == 0)
+			return;
+
+		int col = find_scroller_column(s, node->client);
+		if (col < 0)
+			return;
+
+		double delta_x = server.cursor->x - server.grab_x;
+
+		if (server.resize_edges & (WLR_EDGE_LEFT | WLR_EDGE_RIGHT)) {
+			double area_w = max_d(1.0, (double)s->working_area.width);
+			s->columns[col].width.value += delta_x / area_w;
+			if (s->columns[col].width.value < 0.1)
+				s->columns[col].width.value = 0.1;
+			if (s->columns[col].width.value > 1.0)
+				s->columns[col].width.value = 1.0;
+			s->columns[col].width.type = SCROLLER_WIDTH_PROPORTION;
+		}
+
+		arrange(node->output, d, false);
+		apply_leaf_positions(d);
+		return;
+	}
 
 	// handle horizontal resizing
 	if (server.tiled_resize_parent_vertical &&
@@ -319,13 +326,10 @@ static void process_cursor_tiled_resize(void) {
 		parent->current.split_ratio = new_ratio;
 	}
 
-	if (server.tiled_resize_parent_vertical && node->desktop) {
-		update_scene_positions(server.tiled_resize_parent_vertical,
-			server.tiled_resize_parent_vertical->rectangle, node->desktop);
-	}
-	if (server.tiled_resize_parent_horizontal && node->desktop) {
-		update_scene_positions(server.tiled_resize_parent_horizontal,
-			server.tiled_resize_parent_horizontal->rectangle, node->desktop);
+	// Use the proper layout function to recompute all positions
+	if (node->output && d) {
+		arrange(node->output, d, false);
+		apply_leaf_positions(d);
 	}
 }
 
@@ -831,6 +835,7 @@ void cursor_button(struct wl_listener *listener, void *data) {
 								tiling_drag_begin(toplevel->node);
 						} else if (matched_kb->action == BIND_INTERACTIVE_RESIZE) {
 							client_t *c = toplevel->node->client;
+							desktop_t *d = toplevel->node->desktop;
 							uint32_t edges = 0;
 
 							if (c->state == STATE_FLOATING) {
@@ -877,61 +882,83 @@ void cursor_button(struct wl_listener *listener, void *data) {
 										edges = WLR_EDGE_RIGHT;
 								}
 							} else if (IS_TILED(c)) {
-								edges = get_tiled_resizable_edges(toplevel->node);
-
-								if (edges != 0) {
-									// determine edge
+								// for scroller layouts, only allow horizontal edges (column width resize)
+								if (d && d->layout == LAYOUT_SCROLLER) {
 									double wx = c->tiled_rectangle.x;
-									double wy = c->tiled_rectangle.y;
 									double ww = c->tiled_rectangle.width;
-									double wh = c->tiled_rectangle.height;
 									double cx = server.cursor->x;
-									double cy = server.cursor->y;
 
 									double third_w = ww / 3.0;
-									double third_h = wh / 3.0;
 
 									bool in_left = cx < wx + third_w;
 									bool in_right = cx > wx + ww - third_w;
-									bool in_top = cy < wy + third_h;
-									bool in_bottom = cy > wy + wh - third_h;
 
-									uint32_t clicked_edges = 0;
-
-									if (in_left || in_right)
-										clicked_edges |= in_left ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT;
-
-									if (in_top || in_bottom)
-										clicked_edges |= in_top ? WLR_EDGE_TOP : WLR_EDGE_BOTTOM;
-
-									if (clicked_edges == 0) {
+									if (in_left)
+										edges = WLR_EDGE_LEFT;
+									else if (in_right)
+										edges = WLR_EDGE_RIGHT;
+									else {
 										double dist_left = cx - wx;
 										double dist_right = (wx + ww) - cx;
-										double dist_top = cy - wy;
-										double dist_bottom = (wy + wh) - cy;
-
-										double min_dist = INFINITY;
-
-										if ((edges & WLR_EDGE_LEFT) && dist_left < min_dist) {
-											min_dist = dist_left;
-											clicked_edges = WLR_EDGE_LEFT;
-										}
-										if ((edges & WLR_EDGE_RIGHT) && dist_right < min_dist) {
-											min_dist = dist_right;
-											clicked_edges = WLR_EDGE_RIGHT;
-										}
-										if ((edges & WLR_EDGE_TOP) && dist_top < min_dist) {
-											min_dist = dist_top;
-											clicked_edges = WLR_EDGE_TOP;
-										}
-										if ((edges & WLR_EDGE_BOTTOM) && dist_bottom < min_dist) {
-											min_dist = dist_bottom;
-											clicked_edges = WLR_EDGE_BOTTOM;
-										}
+										edges = dist_left < dist_right ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT;
 									}
+								} else {
+									edges = get_tiled_resizable_edges(toplevel->node);
 
-									// intersect clicked edges with resizable edges
-									edges = clicked_edges & edges;
+									if (edges != 0) {
+										// determine edge
+										double wx = c->tiled_rectangle.x;
+										double wy = c->tiled_rectangle.y;
+										double ww = c->tiled_rectangle.width;
+										double wh = c->tiled_rectangle.height;
+										double cx = server.cursor->x;
+										double cy = server.cursor->y;
+
+										double third_w = ww / 3.0;
+										double third_h = wh / 3.0;
+
+										bool in_left = cx < wx + third_w;
+										bool in_right = cx > wx + ww - third_w;
+										bool in_top = cy < wy + third_h;
+										bool in_bottom = cy > wy + wh - third_h;
+
+										uint32_t clicked_edges = 0;
+
+										if (in_left || in_right)
+											clicked_edges |= in_left ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT;
+
+										if (in_top || in_bottom)
+											clicked_edges |= in_top ? WLR_EDGE_TOP : WLR_EDGE_BOTTOM;
+
+										if (clicked_edges == 0) {
+											double dist_left = cx - wx;
+											double dist_right = (wx + ww) - cx;
+											double dist_top = cy - wy;
+											double dist_bottom = (wy + wh) - cy;
+
+											double min_dist = INFINITY;
+
+											if ((edges & WLR_EDGE_LEFT) && dist_left < min_dist) {
+												min_dist = dist_left;
+												clicked_edges = WLR_EDGE_LEFT;
+											}
+											if ((edges & WLR_EDGE_RIGHT) && dist_right < min_dist) {
+												min_dist = dist_right;
+												clicked_edges = WLR_EDGE_RIGHT;
+											}
+											if ((edges & WLR_EDGE_TOP) && dist_top < min_dist) {
+												min_dist = dist_top;
+												clicked_edges = WLR_EDGE_TOP;
+											}
+											if ((edges & WLR_EDGE_BOTTOM) && dist_bottom < min_dist) {
+												min_dist = dist_bottom;
+												clicked_edges = WLR_EDGE_BOTTOM;
+											}
+										}
+
+										// intersect clicked edges with resizable edges
+										edges = clicked_edges & edges;
+									}
 								}
 							}
 

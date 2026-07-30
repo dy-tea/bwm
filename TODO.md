@@ -14,7 +14,6 @@
 # Misc
 - Rework the docs to be easier to use
 - Improve the README (include video, images, better info)
-- Interactive resize appears broken in tiled and scrolling layouts
 
 # Potential
 - Per desktop rules (e.g. floating, master_stack)
