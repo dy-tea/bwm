@@ -334,7 +334,7 @@ void scroller_arrange(struct output_t *m, desktop_t *d, struct wlr_box available
 		if (col->tile_count == 0)
 			continue;
 
-		double col_avail_h = area_h - (double)gap * 2.0;
+		double col_avail_h = area_h;
 		double total_weight = 0.0;
 		double fixed_h = 0.0;
 
