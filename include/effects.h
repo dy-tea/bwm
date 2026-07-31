@@ -69,7 +69,7 @@ typedef struct effects_output_t {
 	uint64_t screen_shader_native[2];
 	struct wlr_scene_buffer *screen_shader_node;
 
-	pixman_region32_t scratch_region_a, scratch_region_b;
+	pixman_region32_t scratch_region_a, scratch_region_b, scratch_region_c;
 
 	struct wlr_backend *capture_backend;
 	struct wlr_output *capture_output;

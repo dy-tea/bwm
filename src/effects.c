@@ -291,11 +291,13 @@ effects_output_t *effects_output_init(int width, int height) {
 
 	pixman_region32_init(&ctx->scratch_region_a);
 	pixman_region32_init(&ctx->scratch_region_b);
+	pixman_region32_init(&ctx->scratch_region_c);
 
 	if (!create_capture_output(ctx, width, height)) {
 		wlr_log(WLR_ERROR, "blur: failed to create capture output");
 		pixman_region32_fini(&ctx->scratch_region_a);
 		pixman_region32_fini(&ctx->scratch_region_b);
+		pixman_region32_fini(&ctx->scratch_region_c);
 		effects_state.backend->output_fini(&ctx->be_state);
 		free(ctx);
 		return NULL;
@@ -326,6 +328,7 @@ void effects_output_fini(effects_output_t *ctx) {
 	}
 	pixman_region32_fini(&ctx->scratch_region_a);
 	pixman_region32_fini(&ctx->scratch_region_b);
+	pixman_region32_fini(&ctx->scratch_region_c);
 	destroy_capture_output(ctx);
 	free(ctx);
 }
@@ -435,31 +438,60 @@ static void hide_workspace_slide_out_tree(output_t *output, node_t *node,
 	wlr_scene_node_set_enabled(*hidden, false);
 }
 
+static struct wlr_box get_client_rect(toplevel_t *tl);
+static struct wlr_box get_animated_client_rect(toplevel_t *tl);
+
+// union of rects hidden during shared backdrop capture
+static void collect_hidden_blur_rects(output_t *output, effects_output_t *ctx,
+	pixman_region32_t *out);
+
+// returns true when the damaged area reaches any visible surface that is not
+// hidden during the shared backdrop capture
+static bool damage_reaches_visible_surface(output_t *output, effects_output_t *ctx,
+	pixman_region32_t *damage);
+
+// scene setters that no-op when the value is unchanged
+static void scene_set_pos_guarded(struct wlr_scene_node *n, int x, int y) {
+	if (n->x == x && n->y == y)
+		return;
+	wlr_scene_node_set_position(n, x, y);
+}
+
+static void scene_set_source_box_guarded(struct wlr_scene_buffer *b, struct wlr_fbox *box) {
+	if (b->src_box.x == box->x && b->src_box.y == box->y && b->src_box.width == box->width &&
+		b->src_box.height == box->height)
+		return;
+	wlr_scene_buffer_set_source_box(b, box);
+}
+
+static void scene_set_dest_size_guarded(struct wlr_scene_buffer *b, int w, int h) {
+	if (b->dst_width == w && b->dst_height == h)
+		return;
+	wlr_scene_buffer_set_dest_size(b, w, h);
+}
+
 // capture scene with all blur/mica/acrylic toplevel scene trees hidden
 static uint64_t capture_bg_to_tex1_ex(output_t *output, effects_output_t *ctx, bool mica_only,
-	struct wlr_scene_node *hide_node, bool *hide_flag, bool hide_blur_toplevels,
-	bool exclude_slide_out);
+	struct wlr_scene_node *hide_node, bool *hide_flag, bool hide_blur_toplevels, bool exclude_slide_out,
+	bool *changed);
 
 static uint64_t capture_bg_to_tex1(output_t *output, effects_output_t *ctx, bool mica_only,
 		struct wlr_scene_node *hide_node, bool *hide_flag) {
-	return capture_bg_to_tex1_ex(output, ctx, mica_only, hide_node, hide_flag, true, false);
+	return capture_bg_to_tex1_ex(output, ctx, mica_only, hide_node, hide_flag, true, false, NULL);
 }
 
 static uint64_t capture_bg_to_tex1_ex(output_t *output, effects_output_t *ctx, bool mica_only,
 		struct wlr_scene_node *hide_node, bool *hide_flag, bool hide_blur_toplevels,
-		bool exclude_slide_out) {
+		bool exclude_slide_out, bool *changed) {
 	int w = output->width, h = output->height;
+	if (changed)
+		*changed = false;
 	if (!ctx->capture_output || !ctx->capture_scene_output)
 		return 0;
 	wlr_scene_output_set_position(ctx->capture_scene_output, output->lx, output->ly);
 	if (w <= 0 || h <= 0)
 		return 0;
 
-	// Re-capture only the damaged area at blur resolution instead of the whole
-	// frame: the backdrop texture (pong) keeps its previous content everywhere
-	// else. Damage that only touches the inside of blurred windows (which are
-	// hidden during the capture) still re-renders their rects, but at blur
-	// resolution that is far cheaper than a full-frame capture.
 	struct wlr_box region = {
 		0,
 		0,
@@ -472,13 +504,26 @@ static uint64_t capture_bg_to_tex1_ex(output_t *output, effects_output_t *ctx, b
 	if (!exclude_slide_out && !mica_only && hide_blur_toplevels && ctx->shared_bg_valid) {
 		struct wlr_scene_output *real_so = wlr_scene_get_scene_output(server.scene, output->wlr_output);
 		if (real_so && !pixman_region32_empty(&real_so->damage_ring.current)) {
-			pixman_region32_copy(&ctx->scratch_region_a, &real_so->damage_ring.current);
-			wlr_region_scale_xy(&ctx->scratch_region_a, &ctx->scratch_region_a, (float)ctx->blur_w / (float)w,
+			pixman_region32_copy(&ctx->scratch_region_b, &real_so->damage_ring.current);
+			collect_hidden_blur_rects(output, ctx, &ctx->scratch_region_a);
+			pixman_region32_subtract(&ctx->scratch_region_c, &ctx->scratch_region_b, &ctx->scratch_region_a);
+			// damage fully inside hidden rects may still change the backdrop when
+			// it reaches a visible surface stacked behind a blurred one
+			bool reaches_visible = damage_reaches_visible_surface(output, ctx, &ctx->scratch_region_b);
+			if (pixman_region32_empty(&ctx->scratch_region_c) && !reaches_visible) {
+				wlr_scene_output_set_position(ctx->capture_scene_output, -0x7fff, -0x7fff);
+				if (changed)
+					*changed = false;
+				return ctx->be_state.pong.native_handle[1];
+			}
+			// when hidden-area damage reaches visible surfaces, the whole damage
+			// must be re-rendered (the parts behind blurred windows changed too)
+			pixman_region32_t *cap_rgn = reaches_visible ? &ctx->scratch_region_b : &ctx->scratch_region_c;
+			wlr_region_scale_xy(cap_rgn, cap_rgn, (float)ctx->blur_w / (float)w,
 				(float)ctx->blur_h / (float)h);
-			pixman_region32_intersect_rect(&ctx->scratch_region_a, &ctx->scratch_region_a, 0, 0, ctx->blur_w,
-				ctx->blur_h);
-			if (!pixman_region32_empty(&ctx->scratch_region_a)) {
-				pixman_box32_t *ext = pixman_region32_extents(&ctx->scratch_region_a);
+			pixman_region32_intersect_rect(cap_rgn, cap_rgn, 0, 0, ctx->blur_w, ctx->blur_h);
+			if (!pixman_region32_empty(cap_rgn)) {
+				pixman_box32_t *ext = pixman_region32_extents(cap_rgn);
 				region = (struct wlr_box){
 					ext->x1,
 					ext->y1,
@@ -490,6 +535,8 @@ static uint64_t capture_bg_to_tex1_ex(output_t *output, effects_output_t *ctx, b
 		}
 		if (!region_capture) {
 			wlr_scene_output_set_position(ctx->capture_scene_output, -0x7fff, -0x7fff);
+			if (changed)
+				*changed = false;
 			return ctx->be_state.pong.native_handle[1];
 		}
 	}
@@ -621,8 +668,11 @@ static uint64_t capture_bg_to_tex1_ex(output_t *output, effects_output_t *ctx, b
 		region.y, region.width, region.height, &result);
 	wlr_output_state_finish(&cap_state);
 
-	if (result)
+	if (result) {
 		ctx->shared_bg_valid = !mica_only && hide_blur_toplevels;
+		if (changed)
+			*changed = true;
+	}
 
 	return result;
 }
@@ -632,7 +682,7 @@ static struct wlr_box get_animated_client_rect(toplevel_t *tl);
 
 // captures scene with blur layer surfaces hidden but blur toplevels visible (for layer blur)
 static uint64_t capture_bg_combined(output_t *output, effects_output_t *ctx) {
-	return capture_bg_to_tex1_ex(output, ctx, false, NULL, NULL, false, false);
+	return capture_bg_to_tex1_ex(output, ctx, false, NULL, NULL, false, false, NULL);
 }
 
 static bool region_intersects_damage(effects_output_t *ctx, pixman_region32_t *damage, int x, int y,
@@ -649,25 +699,28 @@ static void build_blur_mask_params(toplevel_t *tl, output_t *output, int w, int 
 		struct be_corner_mask_params *params) {
 	client_t *c = tl->node->client;
 	struct wlr_box content_r = get_animated_client_rect(tl);
-	float ow = (float)w, oh = (float)h;
 	int bw_i = (c->state == STATE_FULLSCREEN) ? 0 : border_width;
 	float inner_r = (c->border_radius > (float)bw_i) ? c->border_radius - (float)bw_i : 0.0f;
 	memset(params, 0, sizeof(*params));
-	params->out_w = w;
-	params->out_h = h;
-	params->win_u = (float)(content_r.x - output->lx) / ow;
-	params->win_v = (float)(content_r.y - output->ly) / oh;
-	params->win_sw = (float)content_r.width / ow;
-	params->win_sh = (float)content_r.height / oh;
+	params->out_w = content_r.width;
+	params->out_h = content_r.height;
+	params->win_u = 0.0f;
+	params->win_v = 0.0f;
+	params->win_sw = 1.0f;
+	params->win_sh = 1.0f;
 	params->win_size_px_w = (float)content_r.width;
 	params->win_size_px_h = (float)content_r.height;
 	params->border_radius_px = inner_r;
 	params->scale = output->wlr_output->scale;
+	params->bg_u = (float)(content_r.x - output->lx) / (float)w;
+	params->bg_v = (float)(content_r.y - output->ly) / (float)h;
+	params->bg_sw = (float)content_r.width / (float)w;
+	params->bg_sh = (float)content_r.height / (float)h;
 	params->pre_blit = false;
 }
 
 static bool rebuild_live_blur(output_t *output, uint64_t shared_blurred, pixman_region32_t *damage,
-		bool only_missing) {
+		bool only_missing, bool skip_blur) {
 	effects_output_t *ctx = output->effects;
 	int w = output->width, h = output->height;
 	bool any = false;
@@ -692,10 +745,33 @@ static bool rebuild_live_blur(output_t *output, uint64_t shared_blurred, pixman_
 		.refraction_noise_scale = refraction_noise_scale,
 	};
 
-	// capture shared background if not provided (fallback for non-damaged frames)
-	if (!shared_blurred) {
-		shared_blurred = capture_bg_to_tex1(output, ctx, false, NULL, NULL);
+	// reuse the shared blurred texture when the backdrop did not change
+	bool keep_blur = skip_blur && ctx->blur_buf && ctx->blur_native[0];
+
+	if (!keep_blur) {
+		// capture shared background if not provided (fallback for non-damaged frames)
 		if (!shared_blurred) {
+			shared_blurred = capture_bg_to_tex1(output, ctx, false, NULL, NULL);
+			if (!shared_blurred) {
+				toplevel_t *tl;
+				wl_list_for_each(tl, &server.toplevels, link) {
+					if (!tl->blur || !tl->blur->blur_node || !tl->node || !tl->node->client)
+						continue;
+					if (!tl->node->client->flags.shown)
+						continue;
+					if (!tl->node->output || tl->node->output != output)
+						continue;
+					if (tl->blur->blur_node)
+						wlr_scene_buffer_set_buffer(tl->blur->blur_node, NULL);
+				}
+				return false;
+			}
+		}
+
+		// blur the shared background once and reuse it for every window
+		// buffer stays at blur resolution, scene upscales it when drawing
+		if (!ensure_sized_buf(&ctx->blur_buf, ctx->blur_native, &ctx->blur_buf_w, &ctx->blur_buf_h,
+				ctx->blur_w, ctx->blur_h)) {
 			toplevel_t *tl;
 			wl_list_for_each(tl, &server.toplevels, link) {
 				if (!tl->blur || !tl->blur->blur_node || !tl->node || !tl->node->client)
@@ -709,29 +785,11 @@ static bool rebuild_live_blur(output_t *output, uint64_t shared_blurred, pixman_
 			}
 			return false;
 		}
-	}
 
-	// blur the shared background once and reuse it for every window
-	// buffer stays at blur resolution, scene upscales it when drawing
-	if (!ensure_sized_buf(&ctx->blur_buf, ctx->blur_native, &ctx->blur_buf_w, &ctx->blur_buf_h,
-			ctx->blur_w, ctx->blur_h)) {
-		toplevel_t *tl;
-		wl_list_for_each(tl, &server.toplevels, link) {
-			if (!tl->blur || !tl->blur->blur_node || !tl->node || !tl->node->client)
-				continue;
-			if (!tl->node->client->flags.shown)
-				continue;
-			if (!tl->node->output || tl->node->output != output)
-				continue;
-			if (tl->blur->blur_node)
-				wlr_scene_buffer_set_buffer(tl->blur->blur_node, NULL);
-		}
-		return false;
+		uint64_t blurred;
+		effects_backend->blur(&ctx->be_state, shared_blurred, ctx->blur_w, ctx->blur_h, &bp, &blurred);
+		effects_backend->blit(blurred, ctx->blur_native[0], ctx->blur_w, ctx->blur_h, NULL, 0);
 	}
-
-	uint64_t blurred;
-	effects_backend->blur(&ctx->be_state, shared_blurred, ctx->blur_w, ctx->blur_h, &bp, &blurred);
-	effects_backend->blit(blurred, ctx->blur_native[0], ctx->blur_w, ctx->blur_h, NULL, 0);
 	any = true;
 
 	// only windows with compositor-rounded corners need a per-window buffer
@@ -765,25 +823,34 @@ static bool rebuild_live_blur(output_t *output, uint64_t shared_blurred, pixman_
 		struct be_corner_mask_params params;
 		build_blur_mask_params(tl, output, w, h, &params);
 
-		// recompute the mask only when the window shape changed or the backdrop
-		// behind it changed (damage intersecting the masked area)
+		// recompute mask only when window shape changed or backdrop behind it changed
 		bool shape_changed = !tl->blur->blur_mask_valid || region_dirty ||
 			memcmp(&tl->blur->blur_mask_params, &params, sizeof(params)) != 0;
-		bool backdrop_changed = region_intersects_damage(ctx, damage, (int)(params.win_u * (float)w),
-			(int)(params.win_v * (float)h), (int)(params.win_sw * (float)w),
-			(int)(params.win_sh * (float)h));
+		struct wlr_box anim_r = get_animated_client_rect(tl);
+		bool backdrop_changed = region_intersects_damage(ctx, damage, anim_r.x - output->lx,
+			anim_r.y - output->ly, anim_r.width, anim_r.height);
 		if (!shape_changed && !backdrop_changed)
 			continue;
 		tl->blur->blur_region_dirty = false;
 
-		if (!ensure_output_buf(&tl->blur->blur_buf, tl->blur->blur_native, w, h)) {
+		// per-window buffer only covers window's content rect, so it is
+		// resized whenever window changes size
+		if (params.out_w <= 0 || params.out_h <= 0)
+			continue;
+		if (tl->blur->blur_mask_valid && (tl->blur->blur_mask_params.out_w != params.out_w ||
+				tl->blur->blur_mask_params.out_h != params.out_h)) {
+			effects_destroy_buffer(&tl->blur->blur_buf, tl->blur->blur_native);
+			tl->blur->blur_mask_valid = false;
+		}
+
+		if (!ensure_output_buf(&tl->blur->blur_buf, tl->blur->blur_native, params.out_w, params.out_h)) {
 			if (tl->blur->blur_node)
 				wlr_scene_buffer_set_buffer(tl->blur->blur_node, NULL);
 			continue;
 		}
 
-		effects_backend->apply_corner_mask(&ctx->be_state, tl->blur->blur_native[0], w, h,
-			ctx->blur_native[0], &params);
+		effects_backend->apply_corner_mask(&ctx->be_state, tl->blur->blur_native[0], params.out_w,
+			params.out_h, ctx->blur_native[0], &params);
 		tl->blur->blur_mask_params = params;
 		tl->blur->blur_mask_valid = true;
 		any = true;
@@ -816,11 +883,53 @@ static void push_blur_to_toplevels(output_t *output) {
 		if (tl->blur->blur_node->buffer != buf)
 			wlr_scene_buffer_set_buffer(tl->blur->blur_node, buf);
 
+		if (masked) {
+			struct wlr_box r = get_animated_client_rect(tl);
+			if (!pixman_region32_empty(&tl->blur->blur_region)) {
+				int br_x = tl->blur->blur_region.extents.x1;
+				int br_y = tl->blur->blur_region.extents.y1;
+				int br_w = tl->blur->blur_region.extents.x2 - br_x;
+				int br_h = tl->blur->blur_region.extents.y2 - br_y;
+				struct wlr_fbox src = {
+					.x = br_x,
+					.y = br_y,
+					.width = br_w,
+					.height = br_h
+				};
+				scene_set_pos_guarded(&tl->blur->blur_node->node, br_x, br_y);
+				scene_set_source_box_guarded(tl->blur->blur_node, &src);
+				scene_set_dest_size_guarded(tl->blur->blur_node, br_w, br_h);
+				continue;
+			}
+			int rx = r.x > output->lx ? r.x : output->lx;
+			int ry = r.y > output->ly ? r.y : output->ly;
+			int rxe = r.x + r.width < output->lx + output->width ? r.x + r.width : output->lx +
+				output->width;
+			int rye = r.y + r.height < output->ly + output->height ? r.y + r.height : output->ly +
+				output->height;
+			if (rxe <= rx || rye <= ry) {
+				if (tl->blur->blur_node->buffer)
+					wlr_scene_buffer_set_buffer(tl->blur->blur_node, NULL);
+				continue;
+			}
+			int off_x = rx - r.x;
+			int off_y = ry - r.y;
+			struct wlr_fbox src = {
+				.x = off_x,
+				.y = off_y,
+				.width = rxe - rx,
+				.height = rye - ry
+			};
+			scene_set_pos_guarded(&tl->blur->blur_node->node, off_x, off_y);
+			scene_set_source_box_guarded(tl->blur->blur_node, &src);
+			scene_set_dest_size_guarded(tl->blur->blur_node, rxe - rx, rye - ry);
+			continue;
+		}
+
 		// source box lives in the buffer's coordinate space
 		// shared buffer is at blur resolution (upscaled by the scene)
-		// masked windows use their own full-resolution buffer, so their source box is unchanged
-		float src_scale_x = masked ? 1.0f : (float)ctx->blur_w / (float)output->width;
-		float src_scale_y = masked ? 1.0f : (float)ctx->blur_h / (float)output->height;
+		float src_scale_x = (float)ctx->blur_w / (float)output->width;
+		float src_scale_y = (float)ctx->blur_h / (float)output->height;
 
 		if (tl->blur && !pixman_region32_empty(&tl->blur->blur_region)) {
 			int lx = 0, ly = 0;
@@ -842,20 +951,19 @@ static void push_blur_to_toplevels(output_t *output) {
 			int dw, dh;
 			if (!compute_src_box(output, &blur_rect, &src, &dw, &dh)) {
 				wlr_scene_buffer_set_buffer(tl->blur->blur_node, NULL);
-				wlr_scene_node_set_position(&tl->blur->blur_node->node, 0, 0);
+				scene_set_pos_guarded(&tl->blur->blur_node->node, 0, 0);
 				continue;
 			}
 
 			int offset_x = (blur_rect.x < output->lx) ? (output->lx - blur_rect.x) : 0;
 			int offset_y = (blur_rect.y < output->ly) ? (output->ly - blur_rect.y) : 0;
-			wlr_scene_node_set_position(&tl->blur->blur_node->node, blur_r_x + offset_x,
-				blur_r_y + offset_y);
+			scene_set_pos_guarded(&tl->blur->blur_node->node, blur_r_x + offset_x, blur_r_y + offset_y);
 			src.x *= src_scale_x;
 			src.y *= src_scale_y;
 			src.width *= src_scale_x;
 			src.height *= src_scale_y;
-			wlr_scene_buffer_set_source_box(tl->blur->blur_node, &src);
-			wlr_scene_buffer_set_dest_size(tl->blur->blur_node, dw, dh);
+			scene_set_source_box_guarded(tl->blur->blur_node, &src);
+			scene_set_dest_size_guarded(tl->blur->blur_node, dw, dh);
 		} else {
 			struct wlr_box r = get_animated_client_rect(tl);
 
@@ -863,19 +971,19 @@ static void push_blur_to_toplevels(output_t *output) {
 			int dw, dh;
 			if (!compute_src_box(output, &r, &src, &dw, &dh)) {
 				wlr_scene_buffer_set_buffer(tl->blur->blur_node, NULL);
-				wlr_scene_node_set_position(&tl->blur->blur_node->node, 0, 0);
+				scene_set_pos_guarded(&tl->blur->blur_node->node, 0, 0);
 				continue;
 			}
 
 			int node_ox = (r.x < output->lx) ? (output->lx - r.x) : 0;
 			int node_oy = (r.y < output->ly) ? (output->ly - r.y) : 0;
-			wlr_scene_node_set_position(&tl->blur->blur_node->node, node_ox, node_oy);
+			scene_set_pos_guarded(&tl->blur->blur_node->node, node_ox, node_oy);
 			src.x *= src_scale_x;
 			src.y *= src_scale_y;
 			src.width *= src_scale_x;
 			src.height *= src_scale_y;
-			wlr_scene_buffer_set_source_box(tl->blur->blur_node, &src);
-			wlr_scene_buffer_set_dest_size(tl->blur->blur_node, dw, dh);
+			scene_set_source_box_guarded(tl->blur->blur_node, &src);
+			scene_set_dest_size_guarded(tl->blur->blur_node, dw, dh);
 		}
 	}
 }
@@ -993,7 +1101,7 @@ static void push_blur_to_layers(output_t *output) {
 			int dw, dh;
 			if (!compute_src_box(output, &r, &src, &dw, &dh)) {
 				wlr_scene_buffer_set_buffer(ls->blur_node, NULL);
-				wlr_scene_node_set_position(&ls->blur_node->node, 0, 0);
+				scene_set_pos_guarded(&ls->blur_node->node, 0, 0);
 				continue;
 			}
 
@@ -1001,13 +1109,13 @@ static void push_blur_to_layers(output_t *output) {
 			int offset_y = (r.y < output->ly) ? (output->ly - r.y) : 0;
 
 			// position at blur region offset within surface
-			wlr_scene_node_set_position(&ls->blur_node->node, blur_r_x + offset_x, blur_r_y + offset_y);
+			scene_set_pos_guarded(&ls->blur_node->node, blur_r_x + offset_x, blur_r_y + offset_y);
 			src.x *= src_scale_x;
 			src.y *= src_scale_y;
 			src.width *= src_scale_x;
 			src.height *= src_scale_y;
-			wlr_scene_buffer_set_source_box(ls->blur_node, &src);
-			wlr_scene_buffer_set_dest_size(ls->blur_node, dw, dh);
+			scene_set_source_box_guarded(ls->blur_node, &src);
+			scene_set_dest_size_guarded(ls->blur_node, dw, dh);
 		}
 	}
 }
@@ -1087,6 +1195,8 @@ static bool rebuild_live_acrylic(output_t *output, pixman_region32_t *damage,
 				.win_size_px_h = (float)content_r.height,
 				.border_radius_px = inner_r,
 				.scale = output->wlr_output->scale,
+				.bg_sw = 1.0f,
+				.bg_sh = 1.0f,
 				.pre_blit = true,
 			};
 			effects_backend->apply_corner_mask(&ctx->be_state, tl->blur->acrylic_native[0], w, h, src,
@@ -1122,15 +1232,15 @@ static void push_acrylic_to_toplevels(output_t *output) {
 		int dw, dh;
 		if (!compute_src_box(output, &r, &src, &dw, &dh)) {
 			wlr_scene_buffer_set_buffer(tl->blur->acrylic_node, NULL);
-			wlr_scene_node_set_position(&tl->blur->acrylic_node->node, 0, 0);
+			scene_set_pos_guarded(&tl->blur->acrylic_node->node, 0, 0);
 			continue;
 		}
 
 		int node_ox = (r.x < output->lx) ? (output->lx - r.x) : 0;
 		int node_oy = (r.y < output->ly) ? (output->ly - r.y) : 0;
-		wlr_scene_node_set_position(&tl->blur->acrylic_node->node, node_ox, node_oy);
-		wlr_scene_buffer_set_source_box(tl->blur->acrylic_node, &src);
-		wlr_scene_buffer_set_dest_size(tl->blur->acrylic_node, dw, dh);
+		scene_set_pos_guarded(&tl->blur->acrylic_node->node, node_ox, node_oy);
+		scene_set_source_box_guarded(tl->blur->acrylic_node, &src);
+		scene_set_dest_size_guarded(tl->blur->acrylic_node, dw, dh);
 	}
 }
 
@@ -1196,15 +1306,15 @@ static void push_mica_to_toplevels(output_t *output) {
 		int dw, dh;
 		if (!compute_src_box(output, &r, &src, &dw, &dh)) {
 			wlr_scene_buffer_set_buffer(tl->blur->mica_node, NULL);
-			wlr_scene_node_set_position(&tl->blur->mica_node->node, 0, 0);
+			scene_set_pos_guarded(&tl->blur->mica_node->node, 0, 0);
 			continue;
 		}
 
 		int node_ox = (r.x < output->lx) ? (output->lx - r.x) : 0;
 		int node_oy = (r.y < output->ly) ? (output->ly - r.y) : 0;
-		wlr_scene_node_set_position(&tl->blur->mica_node->node, node_ox, node_oy);
-		wlr_scene_buffer_set_source_box(tl->blur->mica_node, &src);
-		wlr_scene_buffer_set_dest_size(tl->blur->mica_node, dw, dh);
+		scene_set_pos_guarded(&tl->blur->mica_node->node, node_ox, node_oy);
+		scene_set_source_box_guarded(tl->blur->mica_node, &src);
+		scene_set_dest_size_guarded(tl->blur->mica_node, dw, dh);
 	}
 }
 
@@ -1229,6 +1339,100 @@ static struct wlr_box get_animated_client_rect(toplevel_t *tl) {
 		r.height = anim.height;
 	}
 	return r;
+}
+
+// union of rects of blurred surfaces hidden during backdrop capture
+static void collect_hidden_blur_rects(output_t *output, effects_output_t *ctx,
+		pixman_region32_t *out) {
+	(void)ctx;
+	pixman_region32_clear(out);
+
+	toplevel_t *tl;
+	wl_list_for_each(tl, &server.toplevels, link) {
+		if (!tl->blur || !tl->node || !tl->node->client)
+			continue;
+		if (!tl->node->client->flags.shown)
+			continue;
+		if (!tl->blur->blur_node && !tl->blur->mica_node && !tl->blur->acrylic_node)
+			continue;
+		if (!tl->scene_tree || !tl->scene_tree->node.enabled)
+			continue;
+		struct wlr_box r = get_animated_client_rect(tl);
+		pixman_region32_union_rect(out, out, r.x, r.y, r.width, r.height);
+	}
+
+	for (int i = 0; i < 4; i++) {
+		layer_surface_t *ls;
+		wl_list_for_each(ls, &output->layers[i], link) {
+			if (!ls->blur_node || !ls->mapped)
+				continue;
+			if (!ls->scene_tree || !ls->scene_tree->node.enabled)
+				continue;
+			int lx, ly;
+			if (!wlr_scene_node_coords(&ls->scene_tree->node, &lx, &ly))
+				continue;
+			int w = (int)ls->layer_surface->current.actual_width;
+			int h = (int)ls->layer_surface->current.actual_height;
+			if (w <= 0 || h <= 0)
+				continue;
+			pixman_region32_union_rect(out, out, lx, ly, w, h);
+		}
+	}
+}
+
+// returns true when the damaged area reaches any visible surface that is not
+// hidden during the shared backdrop capture
+static bool damage_reaches_visible_surface(output_t *output, effects_output_t *ctx,
+		pixman_region32_t *damage) {
+	if (!damage || pixman_region32_empty(damage))
+		return false;
+
+	toplevel_t *tl;
+	wl_list_for_each(tl, &server.toplevels, link) {
+		if (!tl->node || !tl->node->client)
+			continue;
+		if (!tl->node->client->flags.shown)
+			continue;
+		if (!tl->node->output || tl->node->output != output)
+			continue;
+		if (!tl->scene_tree || !tl->scene_tree->node.enabled)
+			continue;
+		// surfaces hidden during the shared capture cannot change it
+		if (tl->blur && (tl->blur->blur_node || tl->blur->mica_node || tl->blur->acrylic_node))
+			continue;
+		struct wlr_box r = get_animated_client_rect(tl);
+		pixman_region32_clear(&ctx->scratch_region_a);
+		pixman_region32_union_rect(&ctx->scratch_region_a, &ctx->scratch_region_a, r.x, r.y, r.width,
+			r.height);
+		pixman_region32_intersect(&ctx->scratch_region_c, damage, &ctx->scratch_region_a);
+		if (!pixman_region32_empty(&ctx->scratch_region_c))
+			return true;
+	}
+
+	for (int i = 0; i < 4; i++) {
+		layer_surface_t *ls;
+		wl_list_for_each(ls, &output->layers[i], link) {
+			if (!ls->mapped)
+				continue;
+			if (ls->blur_node)
+				continue;
+			if (!ls->scene_tree || !ls->scene_tree->node.enabled)
+				continue;
+			int lx, ly;
+			if (!wlr_scene_node_coords(&ls->scene_tree->node, &lx, &ly))
+				continue;
+			int lw = (int)ls->layer_surface->current.actual_width;
+			int lh = (int)ls->layer_surface->current.actual_height;
+			if (lw <= 0 || lh <= 0)
+				continue;
+			pixman_region32_clear(&ctx->scratch_region_a);
+			pixman_region32_union_rect(&ctx->scratch_region_a, &ctx->scratch_region_a, lx, ly, lw, lh);
+			pixman_region32_intersect(&ctx->scratch_region_c, damage, &ctx->scratch_region_a);
+			if (!pixman_region32_empty(&ctx->scratch_region_c))
+				return true;
+		}
+	}
+	return false;
 }
 
 static bool scene_buffer_no_input(struct wlr_scene_buffer *buffer, double *sx, double *sy) {
@@ -1546,6 +1750,8 @@ static bool rebuild_corner_masks(output_t *output, uint64_t bg_tex) {
 			.win_size_px_h = (float)content_r.height,
 			.border_radius_px = inner_r,
 			.scale = output->wlr_output->scale,
+			.bg_sw = 1.0f,
+			.bg_sh = 1.0f,
 			.pre_blit = true,
 		};
 
@@ -1599,9 +1805,9 @@ static void push_corner_masks_to_toplevels(output_t *output, bool rebuilt) {
 			wlr_scene_node_set_enabled(&tl->rounded->corner_mask_node->node, true);
 		if (tl->rounded->corner_mask_node->buffer != tl->rounded->corner_mask_buf)
 			wlr_scene_buffer_set_buffer(tl->rounded->corner_mask_node, tl->rounded->corner_mask_buf);
-		wlr_scene_node_set_position(&tl->rounded->corner_mask_node->node, node_ox, node_oy);
-		wlr_scene_buffer_set_source_box(tl->rounded->corner_mask_node, &src);
-		wlr_scene_buffer_set_dest_size(tl->rounded->corner_mask_node, dw, dh);
+		scene_set_pos_guarded(&tl->rounded->corner_mask_node->node, node_ox, node_oy);
+		scene_set_source_box_guarded(tl->rounded->corner_mask_node, &src);
+		scene_set_dest_size_guarded(tl->rounded->corner_mask_node, dw, dh);
 	}
 }
 
@@ -1856,6 +2062,21 @@ static bool effects_pending_update(output_t *output) {
 	return false;
 }
 
+// returns true if a toplevel border must be re-rendered
+static bool effects_border_pending(output_t *output) {
+	toplevel_t *tl;
+	wl_list_for_each(tl, &server.toplevels, link) {
+		if (!tl->rounded || !tl->rounded->border_dirty)
+			continue;
+		if (!tl->node || !tl->node->client || !tl->node->client->flags.shown)
+			continue;
+		if (!tl->node->output || tl->node->output != output)
+			continue;
+		return true;
+	}
+	return false;
+}
+
 static bool workspace_effect_buffers_missing(output_t *output) {
 	effects_output_t *ctx = output->effects;
 	toplevel_t *tl;
@@ -1929,14 +2150,18 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 	if (ctx->width != output->width || ctx->height != output->height)
 		effects_output_resize(ctx, output->width, output->height, output);
 
-	effects_backend->frame_begin();
-
 	bool bg_damaged = workspace_warmup || effect_regions_damaged(output,
 		scene_output) || effects_pending_update(output);
 	bool mica_dirty = mica_enabled && ctx->mica_dirty;
+	bool effects_work = bg_damaged || mica_dirty;
 
-	// when no effect region is damaged and no effect state is pending, skip all effects work
-	if (!bg_damaged && !mica_dirty)
+	if (!effects_work && !effects_border_pending(output) && !screen_shader_enabled)
+		return;
+
+	effects_backend->frame_begin();
+
+	// only the border / screen shader needs the context this frame
+	if (!effects_work)
 		goto after_capture;
 
 	{
@@ -1987,6 +2212,7 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 
 	// capture background once for sharing across blur/acrylic/effects
 	uint64_t shared_bg = 0;
+	bool bg_changed = false;
 	{
 		bool needs_bg = false;
 		toplevel_t *tl;
@@ -2001,7 +2227,8 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 			}
 		}
 		if (needs_bg)
-			shared_bg = capture_bg_to_tex1_ex(output, ctx, false, NULL, NULL, true, workspace_warmup);
+			shared_bg = capture_bg_to_tex1_ex(output, ctx, false, NULL, NULL, true, workspace_warmup,
+				&bg_changed);
 	}
 
 	// toplevel blur
@@ -2017,7 +2244,8 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 		}
 		if (any_blur) {
 			if (bg_damaged)
-				rebuild_live_blur(output, shared_bg, &scene_output->damage_ring.current, workspace_warmup);
+				rebuild_live_blur(output, shared_bg, &scene_output->damage_ring.current, workspace_warmup,
+					!bg_changed && !workspace_warmup);
 			push_blur_to_toplevels(output);
 		}
 	}

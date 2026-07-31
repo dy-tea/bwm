@@ -6,6 +6,8 @@ uniform vec2 win_size_uv;
 uniform vec2 win_size_px;
 uniform float border_radius_px;
 uniform float scale;
+uniform vec2 bg_pos_uv;
+uniform vec2 bg_size_uv;
 varying vec2 v_uv;
 
 float rounding_alpha(vec2 coords, vec2 size, float radius) {
@@ -43,6 +45,7 @@ void main() {
   }
   vec2 coords = win_local * win_size_px;
   float alpha = rounding_alpha(coords, win_size_px, border_radius_px);
-  vec4 bg = texture2D(tex, v_uv);
+  vec2 bg_uv = bg_pos_uv + v_uv * bg_size_uv;
+  vec4 bg = texture2D(tex, bg_uv);
   gl_FragColor = vec4(bg.rgb * alpha, alpha);
 }

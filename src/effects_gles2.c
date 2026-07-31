@@ -96,7 +96,7 @@ struct gles2_data {
 		GLint gradient_lerp;
 	} u_border;
 	struct {
-		GLint tex, win_pos_uv, win_size_uv, win_size_px, border_radius_px, scale;
+		GLint tex, win_pos_uv, win_size_uv, win_size_px, border_radius_px, scale, bg_pos_uv, bg_size_uv;
 	} u_corner_mask;
 	struct {
 		GLint resolution, shadow_size, shadow_color, border_radius, inner_size, hole_pos, hole_size;
@@ -534,6 +534,8 @@ static bool gles2_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 		g->u_corner_mask.win_size_px = glGetUniformLocation(g->prog_corner_mask, "win_size_px");
 		g->u_corner_mask.border_radius_px = glGetUniformLocation(g->prog_corner_mask, "border_radius_px");
 		g->u_corner_mask.scale = glGetUniformLocation(g->prog_corner_mask, "scale");
+		g->u_corner_mask.bg_pos_uv = glGetUniformLocation(g->prog_corner_mask, "bg_pos_uv");
+		g->u_corner_mask.bg_size_uv = glGetUniformLocation(g->prog_corner_mask, "bg_size_uv");
 	}
 	if (g->prog_shadow) {
 		g->u_shadow.resolution = glGetUniformLocation(g->prog_shadow, "resolution");
@@ -931,6 +933,8 @@ static bool gles2_apply_corner_mask(be_output_state_t *state, uint64_t dst_fbo, 
 	glUniform2f(g->u_corner_mask.win_size_px, p->win_size_px_w, p->win_size_px_h);
 	glUniform1f(g->u_corner_mask.border_radius_px, p->border_radius_px);
 	glUniform1f(g->u_corner_mask.scale, p->scale);
+	glUniform2f(g->u_corner_mask.bg_pos_uv, p->bg_u, p->bg_v);
+	glUniform2f(g->u_corner_mask.bg_size_uv, p->bg_sw, p->bg_sh);
 	draw_quad();
 
 	if (p->pre_blit)

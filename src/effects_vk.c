@@ -1974,6 +1974,9 @@ static bool vk_apply_corner_mask(be_output_state_t *state, uint64_t dst_fbo, int
 		float br;
 		float scale;
 		int pre;
+		int pad;
+		float bgpos[2];
+		float bgsz[2];
 	} pc;
 	memset(&pc, 0, sizeof(pc));
 	pc.wpos[0] = p->win_u;
@@ -1985,6 +1988,10 @@ static bool vk_apply_corner_mask(be_output_state_t *state, uint64_t dst_fbo, int
 	pc.br = p->border_radius_px;
 	pc.scale = p->scale;
 	pc.pre = p->pre_blit ? 1 : 0;
+	pc.bgpos[0] = p->bg_u;
+	pc.bgpos[1] = 1.0f - p->bg_v - p->bg_sh;
+	pc.bgsz[0] = p->bg_sw;
+	pc.bgsz[1] = p->bg_sh;
 
 	VkClearValue clear_val = {
 		{

@@ -85,6 +85,8 @@ struct be_corner_mask_params {
 	float win_size_px_w, win_size_px_h;
 	float border_radius_px;
 	float scale;
+	float bg_u, bg_v;
+	float bg_sw, bg_sh;
 	bool pre_blit; // true if dst already has content
 };
 

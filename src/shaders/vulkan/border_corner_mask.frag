@@ -7,6 +7,8 @@ layout(push_constant) uniform PC {
   float border_radius_px;
   float scale;
   int pre_blit;
+  vec2 bg_pos_uv;
+  vec2 bg_size_uv;
 } pc;
 layout(location = 0) in vec2 v_uv;
 layout(location = 0) out vec4 fragColor;
@@ -42,6 +44,7 @@ void main() {
   }
   vec2 coords = win_local * pc.win_size_px;
   float alpha = rounding_alpha(coords, pc.win_size_px, pc.border_radius_px);
-  vec4 bg = texture(tex, v_uv);
+  vec2 bg_uv = pc.bg_pos_uv + v_uv * pc.bg_size_uv;
+  vec4 bg = texture(tex, bg_uv);
   fragColor = vec4(bg.rgb * alpha, alpha);
 }
