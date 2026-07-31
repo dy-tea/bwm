@@ -43,6 +43,6 @@ The **doorshkrc** is a config file for your hotkeys, and is reloaded on every sa
 
 ### Packages
 
-If you would like to install as a package, an arch PKGBUILD for the git version is available under the [arch](arch) directory, which is maintained by me.
+If you would like to install as a package, an arch package is available on the AUR at [doors-git](https://aur.archlinux.org/packages/doors-git).
 
 There is also a nix flake maintained by [anispwn](https://github.com/anispwyn).
