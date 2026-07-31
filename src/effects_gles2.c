@@ -1007,10 +1007,22 @@ static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_
 		if (dst_fbo == state->screen_shader.native_handle[0])
 			result_tex = (GLuint)state->screen_shader.native_handle[1];
 	} else if (attach_type == GL_RENDERBUFFER) {
-		GLuint staging_tex = (GLuint)state->staging.native_handle[1];
-
 		// ensure renderbuffer rendering is complete before copy
 		glFinish();
+
+		// resize staging texture to match so blit below is a 1:1 copy
+		if (state->staging.width != src_w || state->staging.height != src_h) {
+			destroy_fbo((GLuint *)&state->staging.native_handle[0],
+				(GLuint *)&state->staging.native_handle[1]);
+			if (!create_fbo(src_w, src_h, (GLuint *)&state->staging.native_handle[0],
+				(GLuint *)&state->staging.native_handle[1]))
+				return false;
+			state->staging.width = src_w;
+			state->staging.height = src_h;
+		}
+
+		GLuint staging_tex = (GLuint)state->staging.native_handle[1];
+
 		glBindFramebuffer(GL_FRAMEBUFFER, capture_fbo);
 		glBindTexture(GL_TEXTURE_2D, staging_tex);
 		glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, src_w, src_h);

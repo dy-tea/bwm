@@ -58,10 +58,12 @@ typedef struct effects_output_t {
 	// shared blurred background, reused by every window blur
 	struct wlr_buffer *blur_buf;
 	uint64_t blur_native[2];
+	int blur_buf_w, blur_buf_h;
 
 	// shared blurred layer background, reused by every layer surface blur
 	struct wlr_buffer *layer_blur_buf;
 	uint64_t layer_blur_native[2];
+	int layer_blur_buf_w, layer_blur_buf_h;
 
 	struct wlr_buffer *screen_shader_buf;
 	uint64_t screen_shader_native[2];
