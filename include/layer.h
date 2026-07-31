@@ -18,10 +18,7 @@ typedef struct layer_surface_t {
 	bool mapped;
 
 	struct wlr_scene_buffer *blur_node;
-	struct wlr_buffer *blur_buf;
-	uint64_t blur_native[2];
-	bool blur_scene_hidden;
-	bool blur_geometry_dirty;
+	bool blur_scene_hidden, blur_region_dirty;
 	pixman_region32_t blur_region;
 
 	struct wl_listener new_popup;

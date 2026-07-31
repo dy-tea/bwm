@@ -55,6 +55,14 @@ typedef struct effects_output_t {
 	uint64_t mica_native[2];
 	bool mica_dirty;
 
+	// shared blurred background, reused by every window blur
+	struct wlr_buffer *blur_buf;
+	uint64_t blur_native[2];
+
+	// shared blurred layer background, reused by every layer surface blur
+	struct wlr_buffer *layer_blur_buf;
+	uint64_t layer_blur_native[2];
+
 	struct wlr_buffer *screen_shader_buf;
 	uint64_t screen_shader_native[2];
 	struct wlr_scene_buffer *screen_shader_node;

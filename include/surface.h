@@ -19,6 +19,8 @@ typedef struct surface_blur_t {
 	struct wlr_buffer *acrylic_buf;
 	uint64_t acrylic_native[2];
 	pixman_region32_t blur_region;
+	bool blur_region_dirty, blur_mask_valid;
+	struct be_corner_mask_params blur_mask_params;
 } surface_blur_t;
 
 typedef struct surface_rounded_t {
