@@ -2071,7 +2071,8 @@ static bool vk_apply_screen_shader(uint64_t src_tex, uint64_t dst_fbo, int w, in
 }
 
 static bool vk_capture_readback(struct wlr_buffer *capture_buffer, be_output_state_t *state,
-		uint64_t dst_fbo, int dst_w, int dst_h, int src_w, int src_h, uint64_t *out_tex) {
+		uint64_t dst_fbo, int dst_x, int dst_y, int dst_w, int dst_h, int src_x, int src_y, int src_w,
+		int src_h, uint64_t *out_tex) {
 	vk->frame_dirty = true;
 	vk_ensure_cb_begun();
 	(void)src_w;
@@ -2130,13 +2131,13 @@ static bool vk_capture_readback(struct wlr_buffer *capture_buffer, be_output_sta
 	VkImageBlit region = {
 		.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
 		.srcOffsets = {
-			{0, 0, 0},
-			{capture_w, capture_h, 1}
+			{src_x, src_y, 0},
+			{src_x + capture_w, src_y + capture_h, 1}
 		},
 		.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
 		.dstOffsets = {
-			{0, 0, 0},
-			{dst_w, dst_h, 1}
+			{dst_x, dst_y, 0},
+			{dst_x + dst_w, dst_y + dst_h, 1}
 		},
 	};
 	vkCmdBlitImage(vk->frame_cb, vk_attribs.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst->img.image,

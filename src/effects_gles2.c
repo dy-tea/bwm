@@ -963,7 +963,8 @@ static bool gles2_apply_screen_shader(uint64_t src_tex, uint64_t dst_fbo, int w,
 }
 
 static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_state_t *state,
-		uint64_t dst_fbo, int dst_w, int dst_h, int src_w, int src_h, uint64_t *out_tex) {
+		uint64_t dst_fbo, int dst_x, int dst_y, int dst_w, int dst_h, int src_x, int src_y, int src_w,
+		int src_h, uint64_t *out_tex) {
 	GLuint capture_fbo = wlr_gles2_renderer_get_buffer_fbo(g->renderer, capture_buffer);
 	if (!capture_fbo) {
 		wlr_log(WLR_INFO, "gles2: capture_readback: no FBO");
@@ -984,7 +985,7 @@ static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_
 
 	if (attach_type == GL_TEXTURE && attach_name > 0 && g->prog_ext_blit) {
 		glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst_fbo);
-		glViewport(0, 0, dst_w, dst_h);
+		glViewport(dst_x, dst_y, dst_w, dst_h);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_EXTERNAL_OES, (GLuint)attach_name);
 		glUseProgram(g->prog_ext_blit);
@@ -996,7 +997,7 @@ static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_
 			result_tex = (GLuint)state->screen_shader.native_handle[1];
 	} else if (attach_type == GL_TEXTURE && attach_name > 0) {
 		glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst_fbo);
-		glViewport(0, 0, dst_w, dst_h);
+		glViewport(dst_x, dst_y, dst_w, dst_h);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, (GLuint)attach_name);
 		glUseProgram(g->prog_blit);
@@ -1025,11 +1026,11 @@ static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_
 
 		glBindFramebuffer(GL_FRAMEBUFFER, capture_fbo);
 		glBindTexture(GL_TEXTURE_2D, staging_tex);
-		glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, src_w, src_h);
+		glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_x, src_y, src_w, src_h);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 		glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst_fbo);
-		glViewport(0, 0, dst_w, dst_h);
+		glViewport(dst_x, dst_y, dst_w, dst_h);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, staging_tex);
 		glUseProgram(g->prog_blit);

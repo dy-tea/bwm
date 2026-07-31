@@ -25,6 +25,7 @@
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
+#include <wlr/util/region.h>
 
 // private wlroots functions
 extern bool wlr_renderer_is_pixman(const struct wlr_renderer *wlr_renderer);
@@ -346,6 +347,7 @@ void effects_output_resize(effects_output_t *ctx, int width, int height, output_
 	ctx->height = height;
 	ctx->blur_w = new_bw;
 	ctx->blur_h = new_bh;
+	ctx->shared_bg_valid = false;
 	wlr_output_state_set_custom_mode(&ctx->capture_state, width, height, 0);
 
 	effects_destroy_buffer(&ctx->mica_buf, ctx->mica_native);
@@ -453,6 +455,45 @@ static uint64_t capture_bg_to_tex1_ex(output_t *output, effects_output_t *ctx, b
 	if (w <= 0 || h <= 0)
 		return 0;
 
+	// Re-capture only the damaged area at blur resolution instead of the whole
+	// frame: the backdrop texture (pong) keeps its previous content everywhere
+	// else. Damage that only touches the inside of blurred windows (which are
+	// hidden during the capture) still re-renders their rects, but at blur
+	// resolution that is far cheaper than a full-frame capture.
+	struct wlr_box region = {
+		0,
+		0,
+		ctx->blur_w,
+		ctx->blur_h
+	};
+	bool region_capture = false;
+	// only the shared backdrop capture (all blur toplevels/layer surfaces hidden)
+	// produces content compatible with the existing pong content
+	if (!exclude_slide_out && !mica_only && hide_blur_toplevels && ctx->shared_bg_valid) {
+		struct wlr_scene_output *real_so = wlr_scene_get_scene_output(server.scene, output->wlr_output);
+		if (real_so && !pixman_region32_empty(&real_so->damage_ring.current)) {
+			pixman_region32_copy(&ctx->scratch_region_a, &real_so->damage_ring.current);
+			wlr_region_scale_xy(&ctx->scratch_region_a, &ctx->scratch_region_a, (float)ctx->blur_w / (float)w,
+				(float)ctx->blur_h / (float)h);
+			pixman_region32_intersect_rect(&ctx->scratch_region_a, &ctx->scratch_region_a, 0, 0, ctx->blur_w,
+				ctx->blur_h);
+			if (!pixman_region32_empty(&ctx->scratch_region_a)) {
+				pixman_box32_t *ext = pixman_region32_extents(&ctx->scratch_region_a);
+				region = (struct wlr_box){
+					ext->x1,
+					ext->y1,
+					ext->x2 - ext->x1,
+					ext->y2 - ext->y1
+				};
+				region_capture = true;
+			}
+		}
+		if (!region_capture) {
+			wlr_scene_output_set_position(ctx->capture_scene_output, -0x7fff, -0x7fff);
+			return ctx->be_state.pong.native_handle[1];
+		}
+	}
+
 	struct wl_array hidden_slide_out;
 	wl_array_init(&hidden_slide_out);
 	if (exclude_slide_out) {
@@ -522,7 +563,10 @@ static uint64_t capture_bg_to_tex1_ex(output_t *output, effects_output_t *ctx, b
 	wlr_output_state_set_custom_mode(&cap_state, ctx->blur_w, ctx->blur_h, 0);
 	wlr_output_state_set_scale(&cap_state, (float)ctx->blur_w / (float)w);
 
-	wlr_damage_ring_add_whole(&ctx->capture_scene_output->damage_ring);
+	if (region_capture)
+		wlr_damage_ring_add_box(&ctx->capture_scene_output->damage_ring, &region);
+	else
+		wlr_damage_ring_add_whole(&ctx->capture_scene_output->damage_ring);
 
 	bool ok = wlr_scene_output_build_state(ctx->capture_scene_output, &cap_state, NULL);
 
@@ -571,10 +615,14 @@ static uint64_t capture_bg_to_tex1_ex(output_t *output, effects_output_t *ctx, b
 		return 0;
 	}
 
-	uint64_t result;
+	uint64_t result = 0;
 	effects_backend->capture_readback(cap_state.buffer, &ctx->be_state,
-		ctx->be_state.pong.native_handle[0], ctx->blur_w, ctx->blur_h, ctx->blur_w, ctx->blur_h, &result);
+		ctx->be_state.pong.native_handle[0], region.x, region.y, region.width, region.height, region.x,
+		region.y, region.width, region.height, &result);
 	wlr_output_state_finish(&cap_state);
+
+	if (result)
+		ctx->shared_bg_valid = !mica_only && hide_blur_toplevels;
 
 	return result;
 }
@@ -1462,12 +1510,15 @@ static bool rebuild_corner_masks(output_t *output, uint64_t bg_tex) {
 			}
 
 			effects_backend->capture_readback(cap_state.buffer, &ctx->be_state,
-				ctx->be_state.pong.native_handle[0], ctx->blur_w, ctx->blur_h, cw, ch, &src);
+				ctx->be_state.pong.native_handle[0], 0, 0, ctx->blur_w, ctx->blur_h, 0, 0, cw, ch, &src);
 			wlr_output_state_finish(&cap_state);
 			if (!src) {
 				tl->rounded->corner_mask_dirty = false;
 				continue;
 			}
+			// this capture overwrites pong with the corner-mask backdrop
+			// (blur output nodes hidden), so the shared backdrop is stale
+			ctx->shared_bg_valid = false;
 		}
 
 		if (!ensure_output_buf(&tl->rounded->corner_mask_buf, tl->rounded->corner_mask_native, w, h)) {
@@ -1587,8 +1638,8 @@ static uint64_t capture_full_scene_to_tex(output_t *output, effects_output_t *ct
 	}
 
 	uint64_t result;
-	effects_backend->capture_readback(ctx->capture_state.buffer, &ctx->be_state, screen_fbo, w, h, w, h,
-		&result);
+	effects_backend->capture_readback(ctx->capture_state.buffer, &ctx->be_state, screen_fbo, 0, 0, w, h,
+		0, 0, w, h, &result);
 
 	wlr_buffer_unlock(ctx->capture_state.buffer);
 	ctx->capture_state.buffer = NULL;

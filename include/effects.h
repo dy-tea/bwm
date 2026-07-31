@@ -78,6 +78,10 @@ typedef struct effects_output_t {
 
 	uint64_t cached_bg_tex;
 	bool bg_cache_valid;
+
+	// true when pong holds the shared backdrop (i.e. the last capture was a
+	// full/shared capture); allows region-based re-capture instead of whole
+	bool shared_bg_valid;
 } effects_output_t;
 
 typedef struct effects_state_t {
