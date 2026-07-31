@@ -13,7 +13,7 @@
 static void create_xdg_popup(struct wlr_xdg_popup *xdg_popup, struct wlr_scene_tree *parent_tree,
 	struct wlr_scene_tree *image_capture_parent_tree);
 
-void popup_unconstrain(popup_t *popup) {
+static void popup_unconstrain(popup_t *popup) {
 	int lx, ly;
 	wlr_scene_node_coords(&popup->parent_tree->node.parent->node, &lx, &ly);
 
@@ -36,12 +36,12 @@ void popup_unconstrain(popup_t *popup) {
 	wlr_xdg_popup_unconstrain_from_box(popup->xdg_popup, &box);
 }
 
-void popup_new_popup(struct wl_listener *listener, void *data) {
+static void popup_new_popup(struct wl_listener *listener, void *data) {
 	popup_t *popup = wl_container_of(listener, popup, new_popup);
 	create_xdg_popup(data, popup->parent_tree, popup->image_capture_tree);
 }
 
-void popup_commit(struct wl_listener *listener, void *data) {
+static void popup_commit(struct wl_listener *listener, void *data) {
 	(void)data;
 	struct popup_t *popup = wl_container_of(listener, popup, commit);
 
@@ -51,13 +51,13 @@ void popup_commit(struct wl_listener *listener, void *data) {
 	popup_unconstrain(popup);
 }
 
-void popup_reposition(struct wl_listener *listener, void *data) {
+static void popup_reposition(struct wl_listener *listener, void *data) {
 	(void)data;
 	popup_t *popup = wl_container_of(listener, popup, reposition);
 	popup_unconstrain(popup);
 }
 
-void popup_destroy(struct wl_listener *listener, void *data) {
+static void popup_destroy(struct wl_listener *listener, void *data) {
 	(void)data;
 	popup_t *popup = wl_container_of(listener, popup, destroy);
 

@@ -28,7 +28,9 @@ typedef struct layer_surface_t {
 	struct wl_listener surface_commit;
 } layer_surface_t;
 
-void handle_new_layer_surface(struct wl_listener *listener, void *data);
 void arrange_layers(output_t *output);
 void focus_layer_surface(layer_surface_t *layer_surface);
 void layer_surface_set_blur(layer_surface_t *ls, bool enabled);
+
+void layer_init(void);
+void layer_fini(void);

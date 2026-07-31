@@ -46,7 +46,7 @@ static void handle_tearing_controller_destroy(struct wl_listener *listener, void
 	free(controller);
 }
 
-void handle_new_tearing_hint(struct wl_listener *listener, void *data) {
+static void handle_new_tearing_hint(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_tearing_control_v1 *tearing_control = data;
 
@@ -68,4 +68,19 @@ void handle_new_tearing_hint(struct wl_listener *listener, void *data) {
 	wl_list_init(&controller->link);
 
 	wl_list_insert(&server.tearing_controllers, &controller->link);
+}
+
+void tearing_init(void) {
+	server.tearing_control_v1 = wlr_tearing_control_manager_v1_create(server.wl_display, 1);
+	if (!server.tearing_control_v1) {
+		wlr_log(WLR_ERROR, "Failed to create tearing control manager");
+		exit(EXIT_FAILURE);
+	}
+	server.tearing_control_new_object.notify = handle_new_tearing_hint;
+	wl_list_init(&server.tearing_controllers);
+	wl_signal_add(&server.tearing_control_v1->events.new_object, &server.tearing_control_new_object);
+}
+
+void tearing_fini(void) {
+	wl_list_remove(&server.tearing_control_new_object.link);
 }

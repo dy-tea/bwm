@@ -75,9 +75,6 @@ typedef struct toplevel_t {
 	struct wl_listener foreign_destroy;
 } toplevel_t;
 
-void handle_new_xdg_toplevel(struct wl_listener *listener, void *data);
-void handle_new_xdg_decoration(struct wl_listener *listener, void *data);
-
 // helper functions
 void focus_toplevel(toplevel_t *toplevel);
 void toplevel_apply_geometry(toplevel_t *toplevel);
@@ -103,3 +100,5 @@ bool toplevel_can_tear(toplevel_t *toplevel);
 
 void toplevel_send_frame_done_interator(struct wlr_scene_buffer *scene_buffer, int x, int y,
 	void *data);
+
+toplevel_t *toplevel_create(struct wlr_xdg_toplevel *xdg_toplevel);

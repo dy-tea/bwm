@@ -242,10 +242,6 @@ typedef struct server_t {
 
 extern struct server_t server;
 
-void begin_interactive(struct toplevel_t *toplevel, enum cursor_mode mode, uint32_t edges);
-
-void handle_new_tearing_hint(struct wl_listener *listener, void *data);
-
 void server_init(void);
 int server_run(void);
 void server_fini(void);

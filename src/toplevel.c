@@ -1,6 +1,7 @@
 #include "animation.h"
 #include "config.h"
 #include "copy_capture.h"
+#include "cursor.h"
 #include "effects.h"
 #include "input_method.h"
 #include "ipc.h"
@@ -398,41 +399,6 @@ void toplevel_center_and_clip_surface(toplevel_t *toplevel) {
 
 	if (toplevel->shadow)
 		toplevel->shadow->shadow_geometry_dirty = true;
-}
-
-void xdg_toplevel_tag_manager_v1_handle_set_tag(struct wl_listener *listener, void *data) {
-	(void)listener;
-	const struct wlr_xdg_toplevel_tag_manager_v1_set_tag_event *event = data;
-	toplevel_t *toplevel = event->toplevel->base->data;
-	if (!toplevel)
-		return;
-
-	free(toplevel->tag);
-	toplevel->tag = strdup(event->tag);
-	if (!toplevel->tag) {
-		wlr_log(WLR_ERROR, "allocation failed");
-		return;
-	}
-
-	if (toplevel->node && toplevel->node->client) {
-		const char *app_id = toplevel->node->client->app_id;
-		const char *title = toplevel->node->client->title;
-		find_matching_rule(app_id, title, toplevel->tag);
-		ipc_put_status(SUB_MASK_NODE_CHANGE, "node_change[%s,%s,%u,tag]\n",
-			app_id && app_id[0] ? app_id : "?", title && title[0] ? title : "?", toplevel->node->id);
-	}
-
-	transaction_commit_dirty();
-}
-
-void xdg_dialog_handle_new(struct wl_listener *listener, void *data) {
-	(void)listener;
-	struct wlr_xdg_dialog_v1 *dialog = data;
-	toplevel_t *toplevel = dialog->xdg_toplevel->base->data;
-	if (!toplevel)
-		return;
-
-	toplevel->is_dialog = true;
 }
 
 static void toplevel_set_floating(toplevel_t *toplevel, node_t *n, output_t *output) {
@@ -1344,119 +1310,6 @@ void toplevel_apply_geometry(toplevel_t *toplevel) {
 		rect->y);
 }
 
-void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
-	(void)listener;
-	struct wlr_xdg_toplevel *xdg_toplevel = data;
-
-	wlr_log(WLR_INFO, "New XDG toplevel");
-	toplevel_t *toplevel = calloc(1, sizeof(*toplevel));
-	if (!toplevel) {
-		wlr_log(WLR_ERROR, "allocation failed");
-		return;
-	}
-
-	toplevel->xdg_toplevel = xdg_toplevel;
-	toplevel->mapped = false;
-	toplevel->configured = false;
-	toplevel->client_maximized = false;
-
-	// create parent scene tree container
-	toplevel->scene_tree = wlr_scene_tree_create(server.tile_tree);
-	if (!toplevel->scene_tree) {
-		wlr_log(WLR_ERROR, "Failed to create scene tree for toplevel");
-		free(toplevel);
-		return;
-	}
-
-	// keep scene invisible until arrange_node_geometry positions and enables it
-	wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
-
-	// create content tree as child and add surface
-	toplevel->content_tree = wlr_scene_tree_create(toplevel->scene_tree);
-	if (!toplevel->content_tree) {
-		wlr_log(WLR_ERROR, "Failed to create content tree for toplevel");
-		wlr_scene_node_destroy(&toplevel->scene_tree->node);
-		free(toplevel);
-		return;
-	}
-
-	// initialize border fields
-	toplevel->border_tree = NULL;
-	for (int i = 0; i < 4; i++)
-		toplevel->border_rects[i] = NULL;
-
-	toplevel->unmap.notify = toplevel_unmap;
-	wl_signal_add(&xdg_toplevel->base->surface->events.unmap, &toplevel->unmap);
-
-	// create surface scene within the content tree
-	struct wlr_scene_tree *xdg_tree = wlr_scene_xdg_surface_create(toplevel->content_tree,
-		xdg_toplevel->base);
-	if (!xdg_tree) {
-		wlr_log(WLR_ERROR, "Failed to create XDG surface scene for toplevel");
-		wlr_scene_node_destroy(&toplevel->scene_tree->node);
-		free(toplevel);
-		return;
-	}
-
-	toplevel->scene_tree->node.data = toplevel;
-	xdg_toplevel->base->data = toplevel;
-
-	wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
-
-	// create image capture
-	toplevel->image_capture = wlr_scene_create();
-	toplevel->image_capture_tree = wlr_scene_tree_create(&toplevel->image_capture->tree);
-
-	toplevel->output_handler = wlr_scene_buffer_create(toplevel->scene_tree, NULL);
-	if (!toplevel->output_handler) {
-		wlr_log(WLR_ERROR, "Failed to create output handler for toplevel");
-	} else {
-		toplevel->output_handler->point_accepts_input = toplevel_output_handler_point_accepts_input;
-	}
-
-	// register event listeners
-	toplevel->map.notify = toplevel_map;
-	wl_signal_add(&xdg_toplevel->base->surface->events.map, &toplevel->map);
-
-	toplevel->commit.notify = toplevel_commit;
-	wl_signal_add(&xdg_toplevel->base->surface->events.commit, &toplevel->commit);
-
-	toplevel->new_xdg_popup.notify = handle_new_xdg_popup;
-	wl_signal_add(&xdg_toplevel->base->events.new_popup, &toplevel->new_xdg_popup);
-
-	toplevel->destroy.notify = toplevel_destroy;
-	wl_signal_add(&xdg_toplevel->events.destroy, &toplevel->destroy);
-
-	toplevel->request_move.notify = toplevel_request_move;
-	wl_signal_add(&xdg_toplevel->events.request_move, &toplevel->request_move);
-
-	toplevel->request_resize.notify = toplevel_request_resize;
-	wl_signal_add(&xdg_toplevel->events.request_resize, &toplevel->request_resize);
-
-	toplevel->request_maximize.notify = toplevel_request_maximize;
-	wl_signal_add(&xdg_toplevel->events.request_maximize, &toplevel->request_maximize);
-
-	toplevel->request_fullscreen.notify = toplevel_request_fullscreen;
-	wl_signal_add(&xdg_toplevel->events.request_fullscreen, &toplevel->request_fullscreen);
-
-	toplevel->request_minimize.notify = toplevel_request_minimize;
-	wl_signal_add(&xdg_toplevel->events.request_minimize, &toplevel->request_minimize);
-
-	toplevel->set_title.notify = toplevel_set_title;
-	wl_signal_add(&xdg_toplevel->events.set_title, &toplevel->set_title);
-
-	toplevel->set_app_id.notify = toplevel_set_app_id;
-	wl_signal_add(&xdg_toplevel->events.set_app_id, &toplevel->set_app_id);
-
-	if (toplevel->output_handler) {
-		toplevel->outputs_update.notify = handle_outputs_update;
-		wl_signal_add(&toplevel->output_handler->events.outputs_update, &toplevel->outputs_update);
-	}
-
-	// add to toplevels list
-	wl_list_insert(&server.toplevels, &toplevel->link);
-}
-
 bool toplevel_is_ready(struct toplevel_t *toplevel) {
 	return toplevel && toplevel->mapped && toplevel->xdg_toplevel && toplevel->xdg_toplevel->base &&
 		toplevel->xdg_toplevel->base->surface && toplevel->xdg_toplevel->base->surface->mapped;
@@ -1614,51 +1467,6 @@ void handle_new_toplevel_capture_request(struct wl_listener *listener, void *dat
 		*image_capture_source_ptr);
 }
 
-static struct toplevel_t *toplevel_for_xdg_surface(struct wlr_xdg_surface *surface) {
-	toplevel_t *tl;
-	wl_list_for_each(tl, &server.toplevels, link)
-		if (tl->xdg_toplevel && tl->xdg_toplevel->base == surface)
-			return tl;
-
-	return NULL;
-}
-
-static void handle_decoration_destroy(struct wl_listener *listener, void *data) {
-	(void)data;
-	toplevel_t *tl = wl_container_of(listener, tl, decoration_destroy);
-
-	wl_list_remove(&tl->decoration_destroy.link);
-	wl_list_remove(&tl->decoration_request_mode.link);
-	tl->xdg_decoration = NULL;
-}
-
-static void handle_decoration_request_mode(struct wl_listener *listener, void *data) {
-	(void)data;
-	toplevel_t *tl = wl_container_of(listener, tl, decoration_request_mode);
-	toplevel_apply_decoration_mode(tl);
-}
-
-void handle_new_xdg_decoration(struct wl_listener *listener, void *data) {
-	(void)listener;
-	struct wlr_xdg_toplevel_decoration_v1 *deco = data;
-	struct wlr_xdg_surface *xdg_surface = deco->toplevel->base;
-	toplevel_t *tl = toplevel_for_xdg_surface(xdg_surface);
-
-	if (tl == NULL)
-		return;
-
-	tl->xdg_decoration = deco;
-
-	tl->decoration_destroy.notify = handle_decoration_destroy;
-	wl_signal_add(&deco->events.destroy, &tl->decoration_destroy);
-
-	tl->decoration_request_mode.notify = handle_decoration_request_mode;
-	wl_signal_add(&deco->events.request_mode, &tl->decoration_request_mode);
-
-	if (xdg_surface->initialized && tl->node)
-		toplevel_apply_decoration_mode(tl);
-}
-
 bool toplevel_can_tear(struct toplevel_t *toplevel) {
 	// per-window rule override takes precedence
 	if (toplevel->node && toplevel->node->client &&
@@ -1674,4 +1482,112 @@ bool toplevel_can_tear(struct toplevel_t *toplevel) {
 		return true;
 
 	return false;
+}
+
+toplevel_t *toplevel_create(struct wlr_xdg_toplevel *xdg_toplevel) {
+	toplevel_t *toplevel = calloc(1, sizeof(*toplevel));
+	if (!toplevel) {
+		wlr_log(WLR_ERROR, "allocation failed");
+		return NULL;
+	}
+
+	toplevel->xdg_toplevel = xdg_toplevel;
+	toplevel->mapped = false;
+	toplevel->configured = false;
+	toplevel->client_maximized = false;
+
+	// create parent scene tree container
+	toplevel->scene_tree = wlr_scene_tree_create(server.tile_tree);
+	if (!toplevel->scene_tree) {
+		wlr_log(WLR_ERROR, "Failed to create scene tree for toplevel");
+		free(toplevel);
+		return NULL;
+	}
+
+	// keep scene invisible until arrange_node_geometry positions and enables it
+	wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
+
+	// create content tree as child and add surface
+	toplevel->content_tree = wlr_scene_tree_create(toplevel->scene_tree);
+	if (!toplevel->content_tree) {
+		wlr_log(WLR_ERROR, "Failed to create content tree for toplevel");
+		wlr_scene_node_destroy(&toplevel->scene_tree->node);
+		free(toplevel);
+		return NULL;
+	}
+
+	// initialize border fields
+	toplevel->border_tree = NULL;
+	for (int i = 0; i < 4; i++)
+		toplevel->border_rects[i] = NULL;
+
+	toplevel->unmap.notify = toplevel_unmap;
+	wl_signal_add(&xdg_toplevel->base->surface->events.unmap, &toplevel->unmap);
+
+	// create surface scene within the content tree
+	struct wlr_scene_tree *xdg_tree = wlr_scene_xdg_surface_create(toplevel->content_tree,
+		xdg_toplevel->base);
+	if (!xdg_tree) {
+		wlr_log(WLR_ERROR, "Failed to create XDG surface scene for toplevel");
+		wlr_scene_node_destroy(&toplevel->scene_tree->node);
+		free(toplevel);
+		return NULL;
+	}
+
+	toplevel->scene_tree->node.data = toplevel;
+	xdg_toplevel->base->data = toplevel;
+
+	wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
+
+	// create image capture
+	toplevel->image_capture = wlr_scene_create();
+	toplevel->image_capture_tree = wlr_scene_tree_create(&toplevel->image_capture->tree);
+
+	toplevel->output_handler = wlr_scene_buffer_create(toplevel->scene_tree, NULL);
+	if (!toplevel->output_handler) {
+		wlr_log(WLR_ERROR, "Failed to create output handler for toplevel");
+	} else {
+		toplevel->output_handler->point_accepts_input = toplevel_output_handler_point_accepts_input;
+	}
+
+	// register event listeners
+	toplevel->map.notify = toplevel_map;
+	wl_signal_add(&xdg_toplevel->base->surface->events.map, &toplevel->map);
+
+	toplevel->commit.notify = toplevel_commit;
+	wl_signal_add(&xdg_toplevel->base->surface->events.commit, &toplevel->commit);
+
+	toplevel->new_xdg_popup.notify = handle_new_xdg_popup;
+	wl_signal_add(&xdg_toplevel->base->events.new_popup, &toplevel->new_xdg_popup);
+
+	toplevel->destroy.notify = toplevel_destroy;
+	wl_signal_add(&xdg_toplevel->events.destroy, &toplevel->destroy);
+
+	toplevel->request_move.notify = toplevel_request_move;
+	wl_signal_add(&xdg_toplevel->events.request_move, &toplevel->request_move);
+
+	toplevel->request_resize.notify = toplevel_request_resize;
+	wl_signal_add(&xdg_toplevel->events.request_resize, &toplevel->request_resize);
+
+	toplevel->request_maximize.notify = toplevel_request_maximize;
+	wl_signal_add(&xdg_toplevel->events.request_maximize, &toplevel->request_maximize);
+
+	toplevel->request_fullscreen.notify = toplevel_request_fullscreen;
+	wl_signal_add(&xdg_toplevel->events.request_fullscreen, &toplevel->request_fullscreen);
+
+	toplevel->request_minimize.notify = toplevel_request_minimize;
+	wl_signal_add(&xdg_toplevel->events.request_minimize, &toplevel->request_minimize);
+
+	toplevel->set_title.notify = toplevel_set_title;
+	wl_signal_add(&xdg_toplevel->events.set_title, &toplevel->set_title);
+
+	toplevel->set_app_id.notify = toplevel_set_app_id;
+	wl_signal_add(&xdg_toplevel->events.set_app_id, &toplevel->set_app_id);
+
+	if (toplevel->output_handler) {
+		toplevel->outputs_update.notify = handle_outputs_update;
+		wl_signal_add(&toplevel->output_handler->events.outputs_update, &toplevel->outputs_update);
+	}
+
+	return toplevel;
 }

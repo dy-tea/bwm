@@ -17,6 +17,7 @@ typedef struct seat_t {
 
 	struct wl_list tablets; // tablet_t.link
 	struct wl_list tablet_pads; // tablet_pad_t.link
+	struct wl_list touches; // touch_t.link
 
 	char name[32];
 	struct wl_list link;

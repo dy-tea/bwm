@@ -9,27 +9,6 @@
 
 struct seat_t;
 
-typedef struct pointer_t {
-	struct seat_t *seat;
-	struct wlr_pointer *wlr_pointer;
-	struct wl_list link;
-} pointer_t;
-
-typedef struct touch_t {
-	struct wlr_touch *wlr_touch;
-	struct wl_listener down;
-	struct wl_listener up;
-	struct wl_listener motion;
-	struct wl_listener frame;
-	struct wl_list link;
-} touch_t;
-
-typedef struct cursor_constraint_t {
-	struct wlr_pointer_constraint_v1 *constraint;
-	struct wl_listener set_region;
-	struct wl_listener destroy;
-} cursor_constraint_t;
-
 typedef struct cursor_t {
 	gesture_tracker_t gesture_tracker;
 	struct wl_listener hold_begin;
@@ -42,29 +21,9 @@ typedef struct cursor_t {
 	struct wl_listener swipe_end;
 } cursor_t;
 
-void cursor_motion(struct wl_listener *listener, void *data);
-void cursor_motion_absolute(struct wl_listener *listener, void *data);
-void cursor_button(struct wl_listener *listener, void *data);
-void cursor_axis(struct wl_listener *listener, void *data);
-void cursor_frame(struct wl_listener *listener, void *data);
-
-void request_cursor(struct wl_listener *listener, void *data);
-void seat_pointer_focus_change(struct wl_listener *listener, void *data);
-
-void handle_new_input(struct wl_listener *listener, void *data);
-void handle_pointer_constraint(struct wl_listener *listener, void *data);
-void handle_cursor_request_set_shape(struct wl_listener *listener, void *data);
-
 void begin_interactive(struct toplevel_t *toplevel, enum cursor_mode mode, uint32_t edges);
-void cursor_init_gestures(void);
 void cursor_rebase(void);
 void *desktop_type_at(double lx, double ly, struct wlr_surface **surface, double *sx, double *sy);
 
-void handle_new_virtual_pointer(struct wl_listener *listener, void *data);
-void handle_pointer_warp(struct wl_listener *listener, void *data);
-
-// tablet cursor events
-void handle_tablet_tool_axis(struct wl_listener *listener, void *data);
-void handle_tablet_tool_proximity(struct wl_listener *listener, void *data);
-void handle_tablet_tool_tip(struct wl_listener *listener, void *data);
-void handle_tablet_tool_button(struct wl_listener *listener, void *data);
+void cursor_init(void);
+void cursor_fini(void);

@@ -49,3 +49,17 @@ void handle_new_idle_inhibitor(struct wl_listener *listener, void *data) {
 
 	update_idle_inhibitors(NULL);
 }
+
+void idle_init(void) {
+	server.idle_inhibit_manager = wlr_idle_inhibit_v1_create(server.wl_display);
+	if (!server.idle_inhibit_manager) {
+		wlr_log(WLR_ERROR, "Failed to create idle inhibit manager");
+		exit(EXIT_FAILURE);
+	}
+	server.new_idle_inhibitor.notify = handle_new_idle_inhibitor;
+	wl_signal_add(&server.idle_inhibit_manager->events.new_inhibitor, &server.new_idle_inhibitor);
+}
+
+void idle_fini(void) {
+	wl_list_remove(&server.new_idle_inhibitor.link);
+}

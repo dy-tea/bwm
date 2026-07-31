@@ -122,13 +122,13 @@ static output_t *find_monitor_for_desktop(desktop_t *d) {
 	return NULL;
 }
 
-void handle_new_keyboard(struct wlr_input_device *device) {
+keyboard_t *keyboard_create(struct wlr_input_device *device) {
 	struct wlr_keyboard *wlr_keyboard = wlr_keyboard_from_input_device(device);
 
 	keyboard_t *keyboard = calloc(1, sizeof(*keyboard));
 	if (!keyboard) {
 		wlr_log(WLR_ERROR, "allocation failed");
-		return;
+		return NULL;
 	}
 	keyboard->wlr_keyboard = wlr_keyboard;
 	keyboard->seat = seat_default();
@@ -161,6 +161,7 @@ void handle_new_keyboard(struct wlr_input_device *device) {
 		wlr_seat_set_keyboard(server.seat, keyboard->wlr_keyboard);
 
 	wlr_log(WLR_INFO, "New keyboard configured: %s", device->name);
+	return keyboard;
 }
 
 void keyboard_modifiers(struct wl_listener *listener, void *data) {
@@ -1539,10 +1540,4 @@ void keyboard_reapply_grouping(void) {
 		if (first)
 			wlr_seat_set_keyboard(server.seat, first->wlr_keyboard);
 	}
-}
-
-void handle_new_virtual_keyboard(struct wl_listener *listener, void *data) {
-	(void)listener;
-	struct wlr_virtual_keyboard_v1 *virtual_keyboard = data;
-	handle_new_keyboard(&virtual_keyboard->keyboard.base);
 }

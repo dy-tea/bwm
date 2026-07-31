@@ -35,7 +35,7 @@ typedef struct keyboard_group_t {
 } keyboard_group_t;
 
 // keyboard lifecycle
-void handle_new_keyboard(struct wlr_input_device *device);
+keyboard_t *keyboard_create(struct wlr_input_device *device);
 void keyboard_modifiers(struct wl_listener *listener, void *data);
 void keyboard_key(struct wl_listener *listener, void *data);
 void keyboard_destroy(struct wl_listener *listener, void *data);
@@ -100,5 +100,3 @@ void cancel_presel(void);
 
 // keybind processing
 bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym);
-
-void handle_new_virtual_keyboard(struct wl_listener *listener, void *data);

@@ -31,10 +31,13 @@ static void attach_tablet_pad(tablet_pad_t *pad, tablet_t *tablet) {
 	wl_signal_add(&tablet->wlr_tablet->base.events.destroy, &pad->tablet_destroy);
 }
 
-tablet_t *tablet_create(seat_t *seat, struct wlr_input_device *device) {
+tablet_t *tablet_create(struct wlr_input_device *device) {
 	tablet_t *tablet = calloc(1, sizeof(*tablet));
 	if (!tablet)
 		return NULL;
+
+	wlr_cursor_attach_input_device(server.cursor, device);
+	seat_t *seat = seat_default();
 
 	tablet->wlr_tablet = wlr_tablet_from_input_device(device);
 	tablet->seat = seat;
@@ -203,9 +206,13 @@ static void handle_pad_surface_destroy(struct wl_listener *listener, void *data)
 	tablet_pad_set_focus(pad, NULL);
 }
 
-tablet_pad_t *tablet_pad_create(seat_t *seat, struct wlr_input_device *device) {
+tablet_pad_t *tablet_pad_create(struct wlr_input_device *device) {
 	tablet_pad_t *pad = calloc(1, sizeof(*pad));
 	if (!pad)
+		return NULL;
+
+	seat_t *seat = seat_default();
+	if (!seat)
 		return NULL;
 
 	pad->wlr_pad = wlr_tablet_pad_from_input_device(device);

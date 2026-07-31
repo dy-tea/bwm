@@ -1,6 +1,6 @@
-#include "cursor.h"
 #include "input.h"
 #include "keyboard.h"
+#include "pointer.h"
 #include "server.h"
 #include <float.h>
 #include <libinput.h>
@@ -559,7 +559,7 @@ void input_apply_config_all_keyboards(void) {
 }
 
 void input_apply_config_all_pointers(void) {
-	struct pointer_t *pointer;
+	pointer_t *pointer;
 	wl_list_for_each(pointer, &server.pointers, link)
 		input_apply_config(&pointer->wlr_pointer->base);
 }

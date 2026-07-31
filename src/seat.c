@@ -1,8 +1,8 @@
-#include "cursor.h"
 #include "input_method.h"
 #include "seat.h"
 #include "server.h"
 #include "tablet.h"
+#include "touch.h"
 #include <stdlib.h>
 #include <string.h>
 #include <wlr/types/wlr_cursor.h>
@@ -12,20 +12,27 @@
 #include <wlr/types/wlr_seat.h>
 #include <wlr/util/log.h>
 
-void seat_pointer_focus_change(struct wl_listener *listener, void *data) {
+static void request_cursor(struct wl_listener *listener, void *data) {
+	(void)listener;
+	struct wlr_seat_pointer_request_set_cursor_event *event = data;
+	if (event->seat_client == server.seat->pointer_state.focused_client)
+		wlr_cursor_set_surface(server.cursor, event->surface, event->hotspot_x, event->hotspot_y);
+}
+
+static void seat_pointer_focus_change(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_seat_pointer_focus_change_event *event = data;
 	if (event->new_surface == NULL)
 		wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, "default");
 }
 
-void handle_request_set_selection(struct wl_listener *listener, void *data) {
+static void handle_request_set_selection(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_seat_request_set_selection_event *event = data;
 	wlr_seat_set_selection(server.seat, event->source, event->serial);
 }
 
-void handle_request_start_drag(struct wl_listener *listener, void *data) {
+static void handle_request_start_drag(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_seat_request_start_drag_event *event = data;
 	if (wlr_seat_validate_pointer_grab_serial(server.seat, event->origin, event->serial))
@@ -34,13 +41,13 @@ void handle_request_start_drag(struct wl_listener *listener, void *data) {
 		wlr_data_source_destroy(event->drag->source);
 }
 
-void handle_drag_icon_destroy(struct wl_listener *listener, void *data) {
+static void handle_drag_icon_destroy(struct wl_listener *listener, void *data) {
 	(void)data;
 	wl_list_remove(&listener->link);
 	free(listener);
 }
 
-void handle_start_drag(struct wl_listener *listener, void *data) {
+static void handle_start_drag(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_drag *drag = data;
 	if (!drag->icon)

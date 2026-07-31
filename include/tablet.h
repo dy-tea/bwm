@@ -41,13 +41,13 @@ typedef struct tablet_pad_t {
 	struct wlr_surface *current_surface;
 } tablet_pad_t;
 
-tablet_t *tablet_create(struct seat_t *seat, struct wlr_input_device *device);
+tablet_t *tablet_create(struct wlr_input_device *device);
 void tablet_configure(tablet_t *tablet);
 void tablet_destroy(tablet_t *tablet);
 
 tablet_tool_t *tablet_tool_configure(tablet_t *tablet, struct wlr_tablet_tool *wlr_tool);
 
-tablet_pad_t *tablet_pad_create(struct seat_t *seat, struct wlr_input_device *device);
+tablet_pad_t *tablet_pad_create(struct wlr_input_device *device);
 void tablet_pad_configure(tablet_pad_t *pad);
 void tablet_pad_destroy(tablet_pad_t *pad);
 void tablet_pad_set_focus(tablet_pad_t *pad, struct wlr_surface *surface);

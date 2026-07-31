@@ -1,13 +1,11 @@
 #include "config.h"
 #include "cursor.h"
 #include "idle_power.h"
-#include "input.h"
 #include "input_method.h"
-#include "keyboard.h"
 #include "layer.h"
 #include "output.h"
+#include "pointer_constraint.h"
 #include "scroller.h"
-#include "seat.h"
 #include "server.h"
 #include "tablet.h"
 #include "tabs.h"
@@ -25,17 +23,15 @@
 #include <wayland-util.h>
 #include <wlr/backend.h>
 #include <wlr/types/wlr_cursor.h>
-#include <wlr/types/wlr_cursor_shape_v1.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_pointer_constraints_v1.h>
-#include <wlr/types/wlr_pointer_warp_v1.h>
 #include <wlr/types/wlr_relative_pointer_v1.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
-#include <wlr/types/wlr_virtual_pointer_v1.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/box.h>
@@ -60,12 +56,6 @@ extern bool gapless_monocle;
 #define RESIZE_RATIO_MIN 0.1
 #define RESIZE_RATIO_MAX 0.9
 
-// touch event handlers
-static void handle_touch_down(struct wl_listener *listener, void *data);
-static void handle_touch_up(struct wl_listener *listener, void *data);
-static void handle_touch_motion(struct wl_listener *listener, void *data);
-static void handle_touch_frame(struct wl_listener *listener, void *data);
-
 // Hot corner settings
 static int hotcorner_threshold = 20;
 static int hotcorner_cooldown_ms = 300;
@@ -79,8 +69,6 @@ static uint32_t get_time_ms(void) {
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
-
-static void cursor_constrain(struct wlr_pointer_constraint_v1 *constraint);
 
 static void reset_cursor_mode(void) {
 	if (server.tiled_resize_node) {
@@ -512,7 +500,7 @@ static void process_cursor_motion(uint32_t time, double dx, double dy, double dx
 				if (server.active_pointer_constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED)
 					return;
 			} else {
-				cursor_constrain(NULL);
+				pointer_constrain(NULL);
 			}
 		}
 	}
@@ -1051,244 +1039,6 @@ void cursor_frame(struct wl_listener *listener, void *data) {
 	wlr_seat_pointer_notify_frame(server.seat);
 }
 
-void request_cursor(struct wl_listener *listener, void *data) {
-	(void)listener;
-	struct wlr_seat_pointer_request_set_cursor_event *event = data;
-	if (event->seat_client == server.seat->pointer_state.focused_client)
-		wlr_cursor_set_surface(server.cursor, event->surface, event->hotspot_x, event->hotspot_y);
-}
-
-void handle_new_input(struct wl_listener *listener, void *data) {
-	(void)listener;
-	struct wlr_input_device *device = data;
-	seat_t *def = seat_default();
-
-	switch (device->type) {
-	case WLR_INPUT_DEVICE_KEYBOARD:
-		handle_new_keyboard(device);
-		input_apply_config(device);
-		break;
-	case WLR_INPUT_DEVICE_POINTER:
-		wlr_cursor_attach_input_device(server.cursor, device);
-		struct wlr_pointer *pointer = wlr_pointer_from_input_device(device);
-		pointer_t *ptr = calloc(1, sizeof(*ptr));
-		if (!ptr) {
-			wlr_log(WLR_ERROR, "allocation failed");
-			return;
-		}
-		ptr->wlr_pointer = pointer;
-		ptr->seat = def;
-		wl_list_insert(&server.pointers, &ptr->link);
-		input_apply_config(device);
-		break;
-	case WLR_INPUT_DEVICE_TABLET:
-		if (!def)
-			break;
-		wlr_cursor_attach_input_device(server.cursor, device);
-		tablet_t *tablet = tablet_create(def, device);
-		if (tablet)
-			tablet_configure(tablet);
-		input_apply_config(device);
-		break;
-	case WLR_INPUT_DEVICE_TABLET_PAD:
-		if (!def)
-			break;
-		tablet_pad_t *pad = tablet_pad_create(def, device);
-		if (pad)
-			tablet_pad_configure(pad);
-		input_apply_config(device);
-		break;
-	case WLR_INPUT_DEVICE_TOUCH:
-		wlr_cursor_attach_input_device(server.cursor, device);
-		touch_t *t = calloc(1, sizeof(*t));
-		if (!t) {
-			wlr_log(WLR_ERROR, "allocation failed");
-			return;
-		}
-		t->wlr_touch = wlr_touch_from_input_device(device);
-		t->wlr_touch->data = t;
-
-		t->down.notify = handle_touch_down;
-		wl_signal_add(&t->wlr_touch->events.down, &t->down);
-
-		t->up.notify = handle_touch_up;
-		wl_signal_add(&t->wlr_touch->events.up, &t->up);
-
-		t->motion.notify = handle_touch_motion;
-		wl_signal_add(&t->wlr_touch->events.motion, &t->motion);
-
-		t->frame.notify = handle_touch_frame;
-		wl_signal_add(&t->wlr_touch->events.frame, &t->frame);
-
-		wl_list_insert(&server.touches, &t->link);
-		server.num_touches++;
-		input_apply_config(device);
-		break;
-	default:
-		input_apply_config(device);
-		break;
-	}
-
-	if (def) {
-		uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
-		if (!wl_list_empty(&server.keyboards))
-			caps |= WL_SEAT_CAPABILITY_KEYBOARD;
-		if (server.num_touches > 0)
-			caps |= WL_SEAT_CAPABILITY_TOUCH;
-		wlr_seat_set_capabilities(def->wlr_seat, caps);
-	}
-}
-
-void cursor_check_constraint_region(void) {
-	struct wlr_pointer_constraint_v1 *constraint = server.active_pointer_constraint;
-	pixman_region32_t *region = &constraint->region;
-	toplevel_t *toplevel = constraint->surface->data;
-	if (server.cursor_requires_warp && toplevel) {
-		server.cursor_requires_warp = false;
-
-		double sx = server.cursor->x + toplevel->node->rectangle.x;
-		double sy = server.cursor->y + toplevel->node->rectangle.y;
-
-		if (!pixman_region32_contains_point(region, floor(sx), floor(sy), NULL)) {
-			int count;
-			pixman_box32_t *boxes = pixman_region32_rectangles(region, &count);
-			if (count > 0) {
-				sx = (boxes[0].x1 + boxes[0].x2) / 2.0;
-				sy = (boxes[0].y1 + boxes[0].y2) / 2.0;
-
-				wlr_cursor_warp_closest(server.cursor, NULL, sx + toplevel->node->rectangle.x,
-					sy + toplevel->node->rectangle.y);
-			}
-		}
-	}
-
-	// empty region if locked
-	if (constraint->type == WLR_POINTER_CONSTRAINT_V1_CONFINED)
-		pixman_region32_copy(&server.pointer_confine, region);
-	else
-		pixman_region32_clear(&server.pointer_confine);
-}
-
-static void cursor_warp_to_constraint_hint(void) {
-	struct wlr_pointer_constraint_v1 *active = server.active_pointer_constraint;
-	if (active == NULL)
-		return;
-
-	if (active->current.cursor_hint.enabled) {
-		double sx = active->current.cursor_hint.x;
-		double sy = active->current.cursor_hint.y;
-
-		toplevel_t *toplevel = active->surface->data;
-		if (!toplevel)
-			return;
-
-		double lx = sx - toplevel->node->rectangle.x;
-		double ly = sy - toplevel->node->rectangle.y;
-
-		wlr_cursor_warp(server.cursor, NULL, lx, ly);
-		wlr_seat_pointer_warp(active->seat, sx, sy);
-	}
-}
-
-void handle_cursor_contraint_commit(struct wl_listener *listener, void *data) {
-	(void)listener;
-	(void)data;
-	cursor_check_constraint_region();
-}
-
-static void cursor_constrain(struct wlr_pointer_constraint_v1 *constraint) {
-	if (server.active_pointer_constraint == constraint)
-		return;
-
-	wl_list_remove(&server.pointer_constraint_commit.link);
-	if (server.active_pointer_constraint) {
-		if (!constraint)
-			cursor_warp_to_constraint_hint();
-
-		// deactivate current constraint
-		wlr_pointer_constraint_v1_send_deactivated(server.active_pointer_constraint);
-	}
-
-	// set the new constraint
-	server.active_pointer_constraint = constraint;
-
-	if (!constraint) {
-		wl_list_init(&server.pointer_constraint_commit.link);
-		return;
-	}
-
-	server.cursor_requires_warp = true;
-
-	if (pixman_region32_not_empty(&constraint->current.region))
-		pixman_region32_intersect(&constraint->region, &constraint->surface->input_region,
-			&constraint->current.region);
-	else
-		pixman_region32_copy(&constraint->region, &constraint->surface->input_region);
-
-	cursor_check_constraint_region();
-
-	wlr_pointer_constraint_v1_send_activated(constraint);
-
-	server.pointer_constraint_commit.notify = handle_cursor_contraint_commit;
-	wl_signal_add(&constraint->surface->events.commit, &server.pointer_constraint_commit);
-}
-
-void handle_constraint_set_region(struct wl_listener *listener, void *data) {
-	(void)listener;
-	(void)data;
-	server.cursor_requires_warp = true;
-}
-
-void handle_constraint_destroy(struct wl_listener *listener, void *data) {
-	cursor_constraint_t *constraint = wl_container_of(listener, constraint, destroy);
-	struct wlr_pointer_constraint_v1 *wlr_constraint = data;
-
-	wl_list_remove(&constraint->set_region.link);
-	wl_list_remove(&constraint->destroy.link);
-
-	if (server.active_pointer_constraint == wlr_constraint) {
-		cursor_warp_to_constraint_hint();
-
-		if (server.pointer_constraint_commit.link.next != NULL)
-			wl_list_remove(&server.pointer_constraint_commit.link);
-
-		wl_list_init(&server.pointer_constraint_commit.link);
-		server.active_pointer_constraint = NULL;
-	}
-
-	free(constraint);
-}
-
-void handle_pointer_constraint(struct wl_listener *listener, void *data) {
-	(void)listener;
-	struct wlr_pointer_constraint_v1 *constraint = data;
-
-	cursor_constraint_t *cursor_constraint = calloc(1, sizeof(*cursor_constraint));
-	if (!cursor_constraint) {
-		wlr_log(WLR_ERROR, "allocation failed");
-		return;
-	}
-	cursor_constraint->constraint = constraint;
-	cursor_constraint->set_region.notify = handle_constraint_set_region;
-	wl_signal_add(&constraint->events.set_region, &cursor_constraint->set_region);
-	cursor_constraint->destroy.notify = handle_constraint_destroy;
-	wl_signal_add(&constraint->events.destroy, &cursor_constraint->destroy);
-
-	if (constraint->surface == server.seat->pointer_state.focused_surface)
-		server.active_pointer_constraint = constraint;
-}
-
-void handle_cursor_request_set_shape(struct wl_listener *listener, void *data) {
-	(void)listener;
-	struct wlr_cursor_shape_manager_v1_request_set_shape_event *event = data;
-
-	if (server.cursor_mode != CURSOR_PASSTHROUGH)
-		return;
-
-	if (event->seat_client == server.seat->pointer_state.focused_client)
-		wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, wlr_cursor_shape_v1_name(event->shape));
-}
-
 static bool gesture_binding_check(enum gesture_type type, uint8_t fingers) {
 	for (size_t i = 0; i < num_gesturebinds; i++)
 		if (gesturebind_matches(&gesture_bindings[i], type, fingers))
@@ -1490,79 +1240,7 @@ void cursor_rebase(void) {
 		wlr_seat_pointer_clear_focus(server.seat);
 }
 
-void cursor_init_gestures(void) {
-	server.hold_begin.notify = handle_pointer_hold_begin;
-	wl_signal_add(&server.cursor->events.hold_begin, &server.hold_begin);
-
-	server.hold_end.notify = handle_pointer_hold_end;
-	wl_signal_add(&server.cursor->events.hold_end, &server.hold_end);
-
-	server.pinch_begin.notify = handle_pointer_pinch_begin;
-	wl_signal_add(&server.cursor->events.pinch_begin, &server.pinch_begin);
-
-	server.pinch_update.notify = handle_pointer_pinch_update;
-	wl_signal_add(&server.cursor->events.pinch_update, &server.pinch_update);
-
-	server.pinch_end.notify = handle_pointer_pinch_end;
-	wl_signal_add(&server.cursor->events.pinch_end, &server.pinch_end);
-
-	server.swipe_begin.notify = handle_pointer_swipe_begin;
-	wl_signal_add(&server.cursor->events.swipe_begin, &server.swipe_begin);
-
-	server.swipe_update.notify = handle_pointer_swipe_update;
-	wl_signal_add(&server.cursor->events.swipe_update, &server.swipe_update);
-
-	server.swipe_end.notify = handle_pointer_swipe_end;
-	wl_signal_add(&server.cursor->events.swipe_end, &server.swipe_end);
-}
-
-void handle_new_virtual_pointer(struct wl_listener *listener, void *data) {
-	(void)listener;
-	struct wlr_virtual_pointer_v1_new_pointer_event *event = data;
-	struct wlr_virtual_pointer_v1 *pointer = event->new_pointer;
-	struct wlr_input_device *device = &pointer->pointer.base;
-
-	wlr_cursor_attach_input_device(server.cursor, device);
-	if (event->suggested_output)
-		wlr_cursor_map_input_to_output(server.cursor, device, event->suggested_output);
-}
-
-void handle_pointer_warp(struct wl_listener *listener, void *data) {
-	(void)listener;
-	struct wlr_pointer_warp_v1_event_warp *event = data;
-
-	struct wl_client *focused_client = NULL;
-	struct wlr_surface *focused_surface = server.seat->pointer_state.focused_surface;
-	if (focused_surface != NULL)
-		focused_client = wl_resource_get_client(focused_surface->resource);
-
-	if (focused_surface != NULL || event->seat_client->client != focused_client) {
-		wlr_log(WLR_DEBUG, "denying request to warp cursor from unfocused client");
-		return;
-	}
-
-	struct wlr_box surface_box = {
-		.width = event->surface->current.width,
-		.height = event->surface->current.height
-	};
-
-	if (!wlr_box_contains_point(&surface_box, event->x, event->y)) {
-		wlr_log(WLR_DEBUG, "denying request to warp cursor outside of surface");
-		return;
-	}
-
-	toplevel_t *toplevel = event->surface->data;
-	if (toplevel == NULL)
-		return;
-
-	double lx = event->x + toplevel->node->pending.rectangle.x - toplevel->node->rectangle.x;
-	double ly = event->y + toplevel->node->pending.rectangle.y - toplevel->node->rectangle.y;
-	wlr_cursor_warp(server.cursor, NULL, lx, ly);
-	wlr_seat_pointer_warp(event->seat_client->seat, event->x, event->y);
-	cursor_rebase();
-}
-
-void handle_tablet_tool_axis(struct wl_listener *listener, void *data) {
+static void handle_tablet_tool_axis(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_tablet_tool_axis_event *event = data;
 	tablet_t *tablet = event->tablet->data;
@@ -1597,7 +1275,7 @@ void handle_tablet_tool_axis(struct wl_listener *listener, void *data) {
 	}
 }
 
-void handle_tablet_tool_proximity(struct wl_listener *listener, void *data) {
+static void handle_tablet_tool_proximity(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_tablet_tool_proximity_event *event = data;
 	tablet_t *tablet = event->tablet->data;
@@ -1619,7 +1297,7 @@ void handle_tablet_tool_proximity(struct wl_listener *listener, void *data) {
 	}
 }
 
-void handle_tablet_tool_tip(struct wl_listener *listener, void *data) {
+static void handle_tablet_tool_tip(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_tablet_tool_tip_event *event = data;
 	tablet_t *tablet = event->tablet->data;
@@ -1634,7 +1312,7 @@ void handle_tablet_tool_tip(struct wl_listener *listener, void *data) {
 		event->y, event->time_msec);
 }
 
-void handle_tablet_tool_button(struct wl_listener *listener, void *data) {
+static void handle_tablet_tool_button(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_tablet_tool_button_event *event = data;
 	tablet_t *tablet = event->tablet->data;
@@ -1649,78 +1327,99 @@ void handle_tablet_tool_button(struct wl_listener *listener, void *data) {
 		(enum zwp_tablet_pad_v2_button_state)event->state);
 }
 
-static void handle_touch_down(struct wl_listener *listener, void *data) {
-	touch_t *touch = wl_container_of(listener, touch, down);
-	struct wlr_touch_down_event *event = data;
-
-	double lx, ly;
-	wlr_cursor_absolute_to_layout_coords(server.cursor, &event->touch->base, event->x, event->y, &lx,
-		&ly);
-
-	double sx, sy;
-	struct wlr_surface *surface = NULL;
-	void *type = desktop_type_at(lx, ly, &surface, &sx, &sy);
-
-	if (surface) {
-		wlr_seat_touch_notify_down(server.seat, surface, event->time_msec, event->touch_id, sx, sy);
-		wlr_idle_notifier_v1_notify_activity(server.idle_notifier, server.seat);
-		idle_power_notify_activity();
-
-		// touch-to-focus
-		if (type) {
-			output_t *output = output_at(lx, ly);
-
-			struct wlr_xdg_surface *xdg_surface = wlr_xdg_surface_try_from_wlr_surface(surface);
-			if (xdg_surface != NULL && xdg_surface->role != WLR_XDG_SURFACE_ROLE_POPUP) {
-				toplevel_t *toplevel = type;
-				if (toplevel && toplevel->node) {
-					if (output)
-						focus_node(output, toplevel->node->desktop, toplevel->node);
-				}
-			} else if (wlr_layer_surface_v1_try_from_wlr_surface(surface)) {
-				layer_surface_t *layer = type;
-				if (layer)
-					focus_layer_surface(layer);
-			} else {
-				struct wlr_xwayland_surface *xwayland_surface =
-					wlr_xwayland_surface_try_from_wlr_surface(surface);
-				if (xwayland_surface != NULL) {
-					xwayland_toplevel_t *xwayland_view = type;
-					if (xwayland_view && xwayland_view->node) {
-						if (output)
-							focus_node(output, xwayland_view->node->desktop, xwayland_view->node);
-					}
-				}
-			}
-		}
+void cursor_init(void) {
+	server.cursor = wlr_cursor_create();
+	if (!server.cursor) {
+		wlr_log(WLR_ERROR, "Failed to create cursor");
+		exit(EXIT_FAILURE);
 	}
+	wlr_cursor_attach_output_layout(server.cursor, server.output_layout);
+
+	server.cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
+	if (!server.cursor_mgr) {
+		wlr_log(WLR_ERROR, "Failed to create cursor manager");
+		exit(EXIT_FAILURE);
+	}
+	wlr_xcursor_manager_load(server.cursor_mgr, 1);
+
+	server.cursor_mode = CURSOR_PASSTHROUGH;
+	server.last_focused_xwayland_view = NULL;
+
+	server.cursor_motion.notify = cursor_motion;
+	wl_signal_add(&server.cursor->events.motion, &server.cursor_motion);
+
+	server.cursor_motion_absolute.notify = cursor_motion_absolute;
+	wl_signal_add(&server.cursor->events.motion_absolute, &server.cursor_motion_absolute);
+
+	server.cursor_button.notify = cursor_button;
+	wl_signal_add(&server.cursor->events.button, &server.cursor_button);
+
+	server.cursor_axis.notify = cursor_axis;
+	wl_signal_add(&server.cursor->events.axis, &server.cursor_axis);
+
+	server.cursor_frame.notify = cursor_frame;
+	wl_signal_add(&server.cursor->events.frame, &server.cursor_frame);
+
+	server.cursor_tablet_tool_axis.notify = handle_tablet_tool_axis;
+	wl_signal_add(&server.cursor->events.tablet_tool_axis, &server.cursor_tablet_tool_axis);
+
+	server.cursor_tablet_tool_proximity.notify = handle_tablet_tool_proximity;
+	wl_signal_add(&server.cursor->events.tablet_tool_proximity, &server.cursor_tablet_tool_proximity);
+
+	server.cursor_tablet_tool_tip.notify = handle_tablet_tool_tip;
+	wl_signal_add(&server.cursor->events.tablet_tool_tip, &server.cursor_tablet_tool_tip);
+
+	server.cursor_tablet_tool_button.notify = handle_tablet_tool_button;
+	wl_signal_add(&server.cursor->events.tablet_tool_button, &server.cursor_tablet_tool_button);
+
+	server.hold_begin.notify = handle_pointer_hold_begin;
+	wl_signal_add(&server.cursor->events.hold_begin, &server.hold_begin);
+
+	server.hold_end.notify = handle_pointer_hold_end;
+	wl_signal_add(&server.cursor->events.hold_end, &server.hold_end);
+
+	server.pinch_begin.notify = handle_pointer_pinch_begin;
+	wl_signal_add(&server.cursor->events.pinch_begin, &server.pinch_begin);
+
+	server.pinch_update.notify = handle_pointer_pinch_update;
+	wl_signal_add(&server.cursor->events.pinch_update, &server.pinch_update);
+
+	server.pinch_end.notify = handle_pointer_pinch_end;
+	wl_signal_add(&server.cursor->events.pinch_end, &server.pinch_end);
+
+	server.swipe_begin.notify = handle_pointer_swipe_begin;
+	wl_signal_add(&server.cursor->events.swipe_begin, &server.swipe_begin);
+
+	server.swipe_update.notify = handle_pointer_swipe_update;
+	wl_signal_add(&server.cursor->events.swipe_update, &server.swipe_update);
+
+	server.swipe_end.notify = handle_pointer_swipe_end;
+	wl_signal_add(&server.cursor->events.swipe_end, &server.swipe_end);
 }
 
-static void handle_touch_up(struct wl_listener *listener, void *data) {
-	(void)listener;
-	struct wlr_touch_up_event *event = data;
+void cursor_fini(void) {
+	wl_list_remove(&server.cursor_motion.link);
+	wl_list_remove(&server.cursor_motion_absolute.link);
+	wl_list_remove(&server.cursor_button.link);
+	wl_list_remove(&server.cursor_axis.link);
+	wl_list_remove(&server.cursor_frame.link);
 
-	wlr_seat_touch_notify_up(server.seat, event->time_msec, event->touch_id);
-}
+	wl_list_remove(&server.cursor_tablet_tool_axis.link);
+	wl_list_remove(&server.cursor_tablet_tool_proximity.link);
+	wl_list_remove(&server.cursor_tablet_tool_tip.link);
+	wl_list_remove(&server.cursor_tablet_tool_button.link);
 
-static void handle_touch_motion(struct wl_listener *listener, void *data) {
-	(void)listener;
-	struct wlr_touch_motion_event *event = data;
+	wl_list_remove(&server.swipe_begin.link);
+	wl_list_remove(&server.swipe_update.link);
+	wl_list_remove(&server.swipe_end.link);
 
-	double lx, ly;
-	wlr_cursor_absolute_to_layout_coords(server.cursor, &event->touch->base, event->x, event->y, &lx,
-		&ly);
+	wl_list_remove(&server.pinch_begin.link);
+	wl_list_remove(&server.pinch_update.link);
+	wl_list_remove(&server.pinch_end.link);
 
-	double sx, sy;
-	struct wlr_surface *surface = NULL;
-	desktop_type_at(lx, ly, &surface, &sx, &sy);
+	wl_list_remove(&server.hold_begin.link);
+	wl_list_remove(&server.hold_end.link);
 
-	if (surface)
-		wlr_seat_touch_notify_motion(server.seat, event->time_msec, event->touch_id, sx, sy);
-}
-
-static void handle_touch_frame(struct wl_listener *listener, void *data) {
-	(void)listener;
-	(void)data;
-	wlr_seat_touch_notify_frame(server.seat);
+	wlr_cursor_destroy(server.cursor);
+	wlr_xcursor_manager_destroy(server.cursor_mgr);
 }

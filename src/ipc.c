@@ -152,7 +152,12 @@ void ipc_handle_incoming(int client_fd) {
 		close(client_fd);
 }
 
-void ipc_cleanup(void) {
+void ipc_fini(void) {
+	if (server.ipc_event_source) {
+		wl_event_source_remove(server.ipc_event_source);
+		server.ipc_event_source = NULL;
+	}
+
 	if (ipc_socket_fd != -1) {
 		close(ipc_socket_fd);
 		unlink(socket_path);

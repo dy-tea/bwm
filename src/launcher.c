@@ -127,7 +127,7 @@ const char *launcher_ctx_get_token_name(launcher_ctx_t *ctx) {
 	return wlr_xdg_activation_token_v1_get_name(ctx->token);
 }
 
-void handle_xdg_activation_request_activate(struct wl_listener *listener, void *data) {
+static void handle_xdg_activation_request_activate(struct wl_listener *listener, void *data) {
 	(void)listener;
 	const struct wlr_xdg_activation_v1_request_activate_event *event = data;
 
@@ -163,7 +163,7 @@ void handle_xdg_activation_request_activate(struct wl_listener *listener, void *
 		activate_node(toplevel->node->output, toplevel->node->desktop, toplevel->node);
 }
 
-void handle_xdg_activation_new_token(struct wl_listener *listener, void *data) {
+static void handle_xdg_activation_new_token(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_xdg_activation_token_v1 *token = data;
 
@@ -184,4 +184,29 @@ void handle_xdg_activation_new_token(struct wl_listener *listener, void *data) {
 	}
 
 	wlr_log(WLR_DEBUG, "xdg_activation: new token for desktop '%s'", desktop_name);
+}
+
+void launcher_init(void) {
+	wl_list_init(&server.pending_launcher_ctxs);
+
+	// xdg activation
+	server.xdg_activation_v1 = wlr_xdg_activation_v1_create(server.wl_display);
+	if (!server.xdg_activation_v1) {
+		wlr_log(WLR_ERROR, "Failed to create xdg activation");
+		exit(EXIT_FAILURE);
+	}
+	server.xdg_activation_request_activate.notify = handle_xdg_activation_request_activate;
+	wl_signal_add(&server.xdg_activation_v1->events.request_activate,
+		&server.xdg_activation_request_activate);
+	server.xdg_activation_new_token.notify = handle_xdg_activation_new_token;
+	wl_signal_add(&server.xdg_activation_v1->events.new_token, &server.xdg_activation_new_token);
+}
+
+void launcher_fini(void) {
+	wl_list_remove(&server.xdg_activation_request_activate.link);
+	wl_list_remove(&server.xdg_activation_new_token.link);
+
+	launcher_ctx_t *ctx, *tmp;
+	wl_list_for_each_safe(ctx, tmp, &server.pending_launcher_ctxs, link)
+		launcher_ctx_destroy(ctx);
 }

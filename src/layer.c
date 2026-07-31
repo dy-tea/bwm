@@ -346,3 +346,18 @@ struct wlr_scene_tree *output_shell_layer(output_t *output, enum zwlr_layer_shel
 		return output->layer_top;
 	}
 }
+
+void layer_init(void) {
+	server.layer_shell = wlr_layer_shell_v1_create(server.wl_display, 5);
+	if (!server.layer_shell) {
+		wlr_log(WLR_ERROR, "Failed to create layer shell");
+		exit(EXIT_FAILURE);
+	}
+
+	server.new_layer_surface.notify = handle_new_layer_surface;
+	wl_signal_add(&server.layer_shell->events.new_surface, &server.new_layer_surface);
+}
+
+void layer_fini(void) {
+	wl_list_remove(&server.new_layer_surface.link);
+}
