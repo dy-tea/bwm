@@ -2,7 +2,7 @@
 - Per-window animation overrides
 - Ensure animations and blur work together without visual artifacts
 - Custom animation shaders for windows (e.g. open/close animations)
-- Tiled resize does not have stable position (edge(s) that should not move does not have stable position)
+- Tiled and interactive resize does not have stable position (edge(s) that should not move do(es) not have stable position)
 
 # Effects
 - Effects per window state (e.g. unfocused, focused, ...)
