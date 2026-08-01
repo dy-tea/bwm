@@ -5,6 +5,9 @@ project(
 )
 
 add_project_arguments('-DWLR_USE_UNSTABLE', language: 'c')
+if get_option('debug')
+	add_project_arguments('-DDEBUG', language: 'c')
+endif
 
 wayland_protos = dependency('wayland-protocols')
 
@@ -106,6 +109,7 @@ executable(
 		'src' / 'effects.c',
 		'src' / 'effects_gles2.c',
 		'src' / 'effects_vk.c',
+		'src' / 'foreign_capture.c',
 		'src' / 'gesture.c',
 		'src' / 'global_shortcuts.c',
 		'src' / 'idle.c',

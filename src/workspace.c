@@ -1,5 +1,6 @@
 #include "animation.h"
 #include "ipc.h"
+#include "once.h"
 #include "output.h"
 #include "server.h"
 #include "transaction.h"
@@ -9,9 +10,6 @@
 #include <stdint.h>
 #include <string.h>
 #include <wlr/types/wlr_scene.h>
-#include <wlr/util/log.h>
-
-extern struct server_t server;
 
 static void handle_workspace_request(struct wl_listener *listener, void *data);
 static void update_all_toplevels_visibility(output_t *m, desktop_t *current_desktop);
@@ -57,26 +55,6 @@ struct desktop_t *find_desktop_by_name(const char *name) {
 	return NULL;
 }
 
-void workspace_init(void) {
-	server.workspace_manager = wlr_ext_workspace_manager_v1_create(server.wl_display, 1);
-	if (!server.workspace_manager) {
-		wlr_log(WLR_ERROR, "Failed to create workspace manager");
-		return;
-	}
-
-	server.workspace_commit.notify = handle_workspace_request;
-	wl_signal_add(&server.workspace_manager->events.commit, &server.workspace_commit);
-
-	struct wlr_ext_workspace_group_handle_v1 *group =
-		wlr_ext_workspace_group_handle_v1_create(server.workspace_manager, 0);
-	if (!group) {
-		wlr_log(WLR_ERROR, "Failed to create workspace group");
-		return;
-	}
-
-	wlr_log(WLR_INFO, "Workspace manager initialized");
-}
-
 void workspace_sync(void) {
 	if (!server.workspace_manager)
 		return;
@@ -117,21 +95,6 @@ void workspace_sync(void) {
 		wlr_ext_workspace_handle_v1_set_active(active, true);
 
 	wlr_log(WLR_INFO, "Workspace manager synced");
-}
-
-void workspace_fini(void) {
-	if (!server.workspace_manager)
-		return;
-
-	struct wlr_ext_workspace_handle_v1 *workspace, *tmp;
-	wl_list_for_each_safe(workspace, tmp, &server.workspace_manager->workspaces, link)
-		wlr_ext_workspace_handle_v1_destroy(workspace);
-
-	struct wlr_ext_workspace_group_handle_v1 *group, *tmp_group;
-	wl_list_for_each_safe(group, tmp_group, &server.workspace_manager->groups, link)
-		wlr_ext_workspace_group_handle_v1_destroy(group);
-
-	wl_list_remove(&server.workspace_commit.link);
 }
 
 void workspace_create_desktop(const char *name) {
@@ -598,4 +561,41 @@ static void handle_workspace_request(struct wl_listener *listener, void *data) {
 			break;
 		}
 	}
+}
+
+void workspace_init(void) {
+	ONCE();
+	server.workspace_manager = wlr_ext_workspace_manager_v1_create(server.wl_display, 1);
+	if (!server.workspace_manager) {
+		wlr_log(WLR_ERROR, "Failed to create workspace manager");
+		return;
+	}
+
+	server.workspace_commit.notify = handle_workspace_request;
+	wl_signal_add(&server.workspace_manager->events.commit, &server.workspace_commit);
+
+	struct wlr_ext_workspace_group_handle_v1 *group =
+		wlr_ext_workspace_group_handle_v1_create(server.workspace_manager, 0);
+	if (!group) {
+		wlr_log(WLR_ERROR, "Failed to create workspace group");
+		return;
+	}
+
+	wlr_log(WLR_INFO, "Workspace manager initialized");
+}
+
+void workspace_fini(void) {
+	ONCE();
+	if (!server.workspace_manager)
+		return;
+
+	struct wlr_ext_workspace_handle_v1 *workspace, *tmp;
+	wl_list_for_each_safe(workspace, tmp, &server.workspace_manager->workspaces, link)
+		wlr_ext_workspace_handle_v1_destroy(workspace);
+
+	struct wlr_ext_workspace_group_handle_v1 *group, *tmp_group;
+	wl_list_for_each_safe(group, tmp_group, &server.workspace_manager->groups, link)
+		wlr_ext_workspace_group_handle_v1_destroy(group);
+
+	wl_list_remove(&server.workspace_commit.link);
 }

@@ -1,3 +1,4 @@
+#include "once.h"
 #include "output.h"
 #include "output_config.h"
 #include "output_mgmt.h"
@@ -6,7 +7,6 @@
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_output_power_management_v1.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
-#include <wlr/util/log.h>
 
 static void handle_output_power_set_mode(struct wl_listener *listener, void *data) {
 	(void)listener;
@@ -88,6 +88,7 @@ static void handle_output_manager_test(struct wl_listener *listener, void *data)
 }
 
 void output_mgmt_init(void) {
+	ONCE();
 	server.output_layout = wlr_output_layout_create(server.wl_display);
 	if (!server.output_layout) {
 		wlr_log(WLR_ERROR, "Failed to create output layout");
@@ -121,6 +122,7 @@ void output_mgmt_init(void) {
 }
 
 void output_mgmt_fini(void) {
+	ONCE();
 	wl_list_remove(&server.output_power_set_mode.link);
 	wl_list_remove(&server.output_manager_apply.link);
 	wl_list_remove(&server.output_manager_test.link);

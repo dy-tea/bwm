@@ -1,5 +1,6 @@
 #include "global_shortcuts.h"
 #include "server.h"
+#include "once.h"
 
 #ifdef HAVE_SYSTEMD
 #include <stdlib.h>
@@ -9,10 +10,8 @@
 #include <time.h>
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_keyboard.h>
-#include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon.h>
 
-extern struct server_t server;
 static gs_state_t gs;
 
 static int gs_method_create_session(sd_bus_message *m, void *userdata, sd_bus_error *ret_error);
@@ -594,6 +593,7 @@ static int bus_dispatch(int fd, uint32_t mask, void *data) {
 }
 
 void global_shortcuts_init(void) {
+	ONCE();
 	memset(&gs, 0, sizeof(gs));
 	wl_list_init(&gs.sessions);
 
@@ -642,6 +642,7 @@ void global_shortcuts_init(void) {
 }
 
 void global_shortcuts_fini(void) {
+	ONCE();
 	if (!gs.initialized)
 		return;
 
@@ -775,10 +776,12 @@ void global_shortcuts_list(char *buf, size_t buf_size) {
 
 void global_shortcuts_init(void) {
 	// noop
+	ONCE();
 }
 
 void global_shortcuts_fini(void) {
 	// noop
+	ONCE();
 }
 
 bool global_shortcuts_handle_key(uint32_t modifiers, uint32_t keycode, const xkb_keysym_t *syms,

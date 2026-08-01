@@ -1,7 +1,7 @@
+#include "once.h"
 #include "server.h"
 #include <wlr/config.h>
 #include <wlr/types/wlr_drm_lease_v1.h>
-#include <wlr/util/log.h>
 
 #if WLR_HAS_DRM_BACKEND
 static void handle_drm_lease_request(struct wl_listener *listener, void *data) {
@@ -15,6 +15,7 @@ static void handle_drm_lease_request(struct wl_listener *listener, void *data) {
 }
 
 void drm_lease_init(void) {
+	ONCE();
 	server.drm_lease_manager = wlr_drm_lease_v1_manager_create(server.wl_display, server.backend);
 	if (server.drm_lease_manager) {
 		server.drm_lease_request.notify = handle_drm_lease_request;
@@ -25,9 +26,9 @@ void drm_lease_init(void) {
 }
 
 void drm_lease_fini(void) {
+	ONCE();
 	if (server.drm_lease_manager)
 		wl_list_remove(&server.drm_lease_request.link);
 }
-
 
 #endif

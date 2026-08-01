@@ -1,11 +1,11 @@
 #include "idle.h"
+#include "once.h"
 #include "server.h"
 #include <stdbool.h>
 #include <stdlib.h>
 #include <wlr/types/wlr_idle_inhibit_v1.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_scene.h>
-#include <wlr/util/log.h>
 
 void update_idle_inhibitors(struct wlr_surface *sans) {
 	bool inhibited = false;
@@ -33,7 +33,7 @@ void handle_idle_inhibitor_destroy(struct wl_listener *listener, void *data) {
 	free(idle);
 }
 
-void handle_new_idle_inhibitor(struct wl_listener *listener, void *data) {
+static void handle_new_idle_inhibitor(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_idle_inhibitor_v1 *idle_inhibitor = data;
 
@@ -51,6 +51,7 @@ void handle_new_idle_inhibitor(struct wl_listener *listener, void *data) {
 }
 
 void idle_init(void) {
+	ONCE();
 	server.idle_inhibit_manager = wlr_idle_inhibit_v1_create(server.wl_display);
 	if (!server.idle_inhibit_manager) {
 		wlr_log(WLR_ERROR, "Failed to create idle inhibit manager");
@@ -61,5 +62,6 @@ void idle_init(void) {
 }
 
 void idle_fini(void) {
+	ONCE();
 	wl_list_remove(&server.new_idle_inhibitor.link);
 }

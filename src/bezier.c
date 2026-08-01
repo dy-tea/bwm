@@ -1,12 +1,13 @@
 #include "bezier.h"
+#include "once.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <wlr/util/log.h>
 
 static struct wl_list bezier_curves;
 
 void bezier_init(void) {
+	ONCE();
 	wl_list_init(&bezier_curves);
 
 	bezier_add("default", 1.0 / 3.0, 1.0, 2.0 / 3.0, 1.0);
@@ -18,6 +19,7 @@ void bezier_init(void) {
 }
 
 void bezier_fini(void) {
+	ONCE();
 	bezier_curve_t *curve, *tmp;
 	wl_list_for_each_safe(curve, tmp, &bezier_curves, link) {
 		wl_list_remove(&curve->link);

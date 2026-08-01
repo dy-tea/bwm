@@ -1,4 +1,5 @@
 #include "ipc.h"
+#include "once.h"
 #include "output.h"
 #include "output_config.h"
 #include "server.h"
@@ -11,13 +12,8 @@
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_output_management_v1.h>
 #include <wlr/types/wlr_output_power_management_v1.h>
-#include <wlr/util/log.h>
 
 static struct wl_list output_configs;
-
-void output_config_init(void) {
-	wl_list_init(&output_configs);
-}
 
 struct output_config *output_config_create(const char *name) {
 	struct output_config *oc = calloc(1, sizeof(*oc));
@@ -48,14 +44,6 @@ struct output_config *output_config_create(const char *name) {
 	oc->hdr_enabled = false;
 
 	return oc;
-}
-
-void output_config_fini(void) {
-	struct output_config *oc, *tmp;
-	wl_list_for_each_safe(oc, tmp, &output_configs, link) {
-		wl_list_remove(&oc->link);
-		output_config_destroy(oc);
-	}
 }
 
 void output_config_destroy(struct output_config *oc) {
@@ -309,4 +297,18 @@ void output_update_manager_config(void) {
 	}
 
 	wlr_output_manager_v1_set_configuration(server.output_manager, config);
+}
+
+void output_config_init(void) {
+	ONCE();
+	wl_list_init(&output_configs);
+}
+
+void output_config_fini(void) {
+	ONCE();
+	struct output_config *oc, *tmp;
+	wl_list_for_each_safe(oc, tmp, &output_configs, link) {
+		wl_list_remove(&oc->link);
+		output_config_destroy(oc);
+	}
 }

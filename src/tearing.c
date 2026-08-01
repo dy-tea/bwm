@@ -1,9 +1,9 @@
+#include "once.h"
 #include "server.h"
 #include "toplevel.h"
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_tearing_control_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
-#include <wlr/util/log.h>
 
 typedef struct {
 	struct wlr_tearing_control_v1 *tearing_control;
@@ -71,6 +71,7 @@ static void handle_new_tearing_hint(struct wl_listener *listener, void *data) {
 }
 
 void tearing_init(void) {
+	ONCE();
 	server.tearing_control_v1 = wlr_tearing_control_manager_v1_create(server.wl_display, 1);
 	if (!server.tearing_control_v1) {
 		wlr_log(WLR_ERROR, "Failed to create tearing control manager");
@@ -82,5 +83,6 @@ void tearing_init(void) {
 }
 
 void tearing_fini(void) {
+	ONCE();
 	wl_list_remove(&server.tearing_control_new_object.link);
 }

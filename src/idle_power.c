@@ -1,5 +1,6 @@
 #include "idle.h"
 #include "idle_power.h"
+#include "once.h"
 #include "output.h"
 #include "server.h"
 #include "types.h"
@@ -7,7 +8,6 @@
 #include <wlr/types/wlr_idle_inhibit_v1.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_scene.h>
-#include <wlr/util/log.h>
 
 int idle_timeout = 0;
 bool idle_dpms = true;
@@ -110,6 +110,7 @@ static struct wl_event_loop *event_loop(void) {
 }
 
 void idle_power_init(void) {
+	ONCE();
 	idle_timer = wl_event_loop_add_timer(event_loop(), handle_idle_timer, NULL);
 	dpms_poll_timer = wl_event_loop_add_timer(event_loop(), handle_dpms_poll_timer, NULL);
 	displays_off = false;
@@ -122,6 +123,7 @@ void idle_power_init(void) {
 }
 
 void idle_power_fini(void) {
+	ONCE();
 	turn_displays_on();
 	if (idle_timer) {
 		wl_event_source_remove(idle_timer);

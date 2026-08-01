@@ -1,5 +1,5 @@
 #include "log.h"
-
+#include "once.h"
 #include <errno.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -9,7 +9,6 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-#include <wlr/util/log.h>
 
 #if defined(__linux__) && (defined(__GLIBC__) || defined(__GNU_LIBRARY__))
 #include <execinfo.h>
@@ -171,7 +170,29 @@ static void signal_handler(int sig) {
 	_exit(128 + sig);
 }
 
+int log_setup_signals(void) {
+	struct sigaction sa;
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = signal_handler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = SA_NODEFER;
+
+	sigaction(SIGSEGV, &sa, NULL);
+	sigaction(SIGBUS, &sa, NULL);
+	sigaction(SIGABRT, &sa, NULL);
+	sigaction(SIGFPE, &sa, NULL);
+	sigaction(SIGILL, &sa, NULL);
+	signal(SIGPIPE, SIG_IGN); // TO PREVENT LOG CRASHES
+
+	return 0;
+}
+
+const char *log_get_path(void) {
+	return log_path[0] != '\0' ? log_path : NULL;
+}
+
 int log_init(const char *log_file_path) {
+	ONCE();
 	// determine log file path and directory
 	if (log_file_path) {
 		snprintf(log_path, sizeof(log_path), "%s", log_file_path);
@@ -244,32 +265,12 @@ int log_init(const char *log_file_path) {
 	return 0;
 }
 
-int log_setup_signals(void) {
-	struct sigaction sa;
-	memset(&sa, 0, sizeof(sa));
-	sa.sa_handler = signal_handler;
-	sigemptyset(&sa.sa_mask);
-	sa.sa_flags = SA_NODEFER;
-
-	sigaction(SIGSEGV, &sa, NULL);
-	sigaction(SIGBUS, &sa, NULL);
-	sigaction(SIGABRT, &sa, NULL);
-	sigaction(SIGFPE, &sa, NULL);
-	sigaction(SIGILL, &sa, NULL);
-	signal(SIGPIPE, SIG_IGN); // TO PREVENT LOG CRASHES
-
-	return 0;
-}
-
 void log_fini(void) {
+	ONCE();
 	if (log_file) {
 		fprintf(log_file, "########## doors shutdown ##########\n\n");
 		fflush(log_file);
 		fclose(log_file);
 		log_file = NULL;
 	}
-}
-
-const char *log_get_path(void) {
-	return log_path[0] != '\0' ? log_path : NULL;
 }

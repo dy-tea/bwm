@@ -1,4 +1,5 @@
 #include "cursor.h"
+#include "once.h"
 #include "server.h"
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_pointer_warp_v1.h>
@@ -40,6 +41,7 @@ static void handle_pointer_warp(struct wl_listener *listener, void *data) {
 }
 
 void pointer_warp_init(void) {
+	ONCE();
 	server.pointer_warp_manager = wlr_pointer_warp_v1_create(server.wl_display, 1);
 	if (!server.pointer_warp_manager) {
 		wlr_log(WLR_ERROR, "Failed to create pointer warp manager");
@@ -50,5 +52,6 @@ void pointer_warp_init(void) {
 }
 
 void pointer_warp_fini(void) {
+	ONCE();
 	wl_list_remove(&server.pointer_warp.link);
 }

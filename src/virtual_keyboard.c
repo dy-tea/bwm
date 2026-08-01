@@ -1,7 +1,7 @@
 #include "keyboard.h"
+#include "once.h"
 #include "server.h"
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
-#include <wlr/util/log.h>
 
 static void handle_new_virtual_keyboard(struct wl_listener *listener, void *data) {
 	(void)listener;
@@ -10,6 +10,7 @@ static void handle_new_virtual_keyboard(struct wl_listener *listener, void *data
 }
 
 void virtual_keyboard_init(void) {
+	ONCE();
 	server.virtual_keyboard_manager = wlr_virtual_keyboard_manager_v1_create(server.wl_display);
 	if (!server.virtual_keyboard_manager) {
 		wlr_log(WLR_ERROR, "Failed to create virtual keyboard manager");
@@ -21,5 +22,6 @@ void virtual_keyboard_init(void) {
 }
 
 void virtual_keyboard_fini(void) {
+	ONCE();
 	wl_list_remove(&server.new_virtual_keyboard.link);
 }

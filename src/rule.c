@@ -1,29 +1,13 @@
+#include "once.h"
 #include "rule.h"
 #include "scroller.h"
 #include "types.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <wlr/util/log.h>
 
 rule_t *rule_head = NULL;
 rule_t *rule_tail = NULL;
-
-void rule_init(void) {
-	rule_head = NULL;
-	rule_tail = NULL;
-}
-
-void rule_fini(void) {
-	rule_t *r = rule_head;
-	while (r != NULL) {
-		rule_t *next = r->next;
-		free(r);
-		r = next;
-	}
-	rule_head = NULL;
-	rule_tail = NULL;
-}
 
 rule_t *make_rule(void) {
 	rule_t *r = calloc(1, sizeof(rule_t));
@@ -309,4 +293,22 @@ void rule_apply_consequence(node_t *node, client_t *client, const rule_consequen
 		client->shadow_offset_y = shadow_offset_y;
 		memcpy(client->shadow_color, shadow_color, sizeof(shadow_color));
 	}
+}
+
+void rule_init(void) {
+	ONCE();
+	rule_head = NULL;
+	rule_tail = NULL;
+}
+
+void rule_fini(void) {
+	ONCE();
+	rule_t *r = rule_head;
+	while (r != NULL) {
+		rule_t *next = r->next;
+		free(r);
+		r = next;
+	}
+	rule_head = NULL;
+	rule_tail = NULL;
 }

@@ -1,5 +1,6 @@
 #include "input.h"
 #include "keyboard.h"
+#include "once.h"
 #include "output.h"
 #include "pointer.h"
 #include "seat.h"
@@ -66,7 +67,17 @@ static void handle_new_input(struct wl_listener *listener, void *data) {
 	}
 }
 
+static void handle_new_output(struct wl_listener *listener, void *data) {
+	(void)listener;
+	struct wlr_output *wlr_output = data;
+	if (!wlr_output)
+		return;
+
+	output_create(wlr_output);
+}
+
 void backend_init(void) {
+	ONCE();
 	server.backend = wlr_backend_autocreate(wl_display_get_event_loop(server.wl_display),
 		&server.session);
 	if (server.backend == NULL) {
@@ -93,6 +104,7 @@ void backend_init(void) {
 }
 
 void backend_fini(void) {
+	ONCE();
 	wl_list_remove(&server.new_input.link);
 	wl_list_remove(&server.new_output.link);
 }

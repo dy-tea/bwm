@@ -1,5 +1,6 @@
 #include "input.h"
 #include "keyboard.h"
+#include "once.h"
 #include "pointer.h"
 #include "server.h"
 #include <float.h>
@@ -8,9 +9,6 @@
 #include <string.h>
 #include <wlr/backend/libinput.h>
 #include <wlr/types/wlr_keyboard.h>
-#include <wlr/util/log.h>
-
-extern struct server_t server;
 
 input_config_t *input_configs[MAX_INPUT_CONFIGS];
 size_t num_input_configs = 0;
@@ -564,30 +562,6 @@ void input_apply_config_all_pointers(void) {
 		input_apply_config(&pointer->wlr_pointer->base);
 }
 
-void input_init(void) {
-	for (size_t i = 0; i < num_input_configs; i++) {
-		input_config_destroy(input_configs[i]);
-		input_configs[i] = NULL;
-	}
-	num_input_configs = 0;
-
-	input_config_t *wildcard = input_config_create("*");
-	if (wildcard)
-		input_config_add(wildcard);
-
-	wlr_log(WLR_INFO, "Input subsystem initialized");
-}
-
-void input_fini(void) {
-	for (size_t i = 0; i < num_input_configs; i++) {
-		input_config_destroy(input_configs[i]);
-		input_configs[i] = NULL;
-	}
-	num_input_configs = 0;
-
-	wlr_log(WLR_INFO, "Input subsystem finalized");
-}
-
 const char *input_config_type_str(enum input_config_type type) {
 	switch (type) {
 	case INPUT_CONFIG_TYPE_ANY:
@@ -609,4 +583,30 @@ const char *input_config_type_str(enum input_config_type type) {
 	default:
 		return "unknown";
 	}
+}
+
+void input_init(void) {
+	ONCE();
+	for (size_t i = 0; i < num_input_configs; i++) {
+		input_config_destroy(input_configs[i]);
+		input_configs[i] = NULL;
+	}
+	num_input_configs = 0;
+
+	input_config_t *wildcard = input_config_create("*");
+	if (wildcard)
+		input_config_add(wildcard);
+
+	wlr_log(WLR_INFO, "Input subsystem initialized");
+}
+
+void input_fini(void) {
+	ONCE();
+	for (size_t i = 0; i < num_input_configs; i++) {
+		input_config_destroy(input_configs[i]);
+		input_configs[i] = NULL;
+	}
+	num_input_configs = 0;
+
+	wlr_log(WLR_INFO, "Input subsystem finalized");
 }

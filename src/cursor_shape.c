@@ -1,7 +1,7 @@
+#include "once.h"
 #include "server.h"
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_cursor_shape_v1.h>
-#include <wlr/util/log.h>
 
 static void handle_cursor_request_set_shape(struct wl_listener *listener, void *data) {
 	(void)listener;
@@ -15,6 +15,7 @@ static void handle_cursor_request_set_shape(struct wl_listener *listener, void *
 }
 
 void cursor_shape_init(void) {
+	ONCE();
 	server.cursor_shape_manager = wlr_cursor_shape_manager_v1_create(server.wl_display, 1);
 	if (!server.cursor_shape_manager) {
 		wlr_log(WLR_ERROR, "Failed to create cursor shape manager");
@@ -27,5 +28,6 @@ void cursor_shape_init(void) {
 }
 
 void cursor_shape_fini(void) {
+	ONCE();
 	wl_list_remove(&server.cursor_request_set_shape.link);
 }

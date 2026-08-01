@@ -1,6 +1,7 @@
 #include "cursor.h"
 #include "idle_power.h"
 #include "layer.h"
+#include "once.h"
 #include "server.h"
 #include "touch.h"
 #include "tree.h"
@@ -9,7 +10,6 @@
 #include <wlr/types/wlr_idle_inhibit_v1.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
-#include <wlr/util/log.h>
 
 static void handle_touch_down(struct wl_listener *listener, void *data) {
 	touch_t *touch = wl_container_of(listener, touch, down);
@@ -116,6 +116,7 @@ touch_t *touch_create(struct wlr_input_device *device) {
 }
 
 void touch_fini(void) {
+	ONCE();
 	touch_t *t, *next;
 	wl_list_for_each_safe(t, next, &server.touches, link) {
 		wl_list_remove(&t->down.link);

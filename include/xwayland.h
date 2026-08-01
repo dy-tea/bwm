@@ -97,12 +97,12 @@ typedef struct xwayland_unmanaged_t {
 	struct wl_listener override_redirect;
 } xwayland_unmanaged_t;
 
-void handle_xwayland_ready(struct wl_listener *listener, void *data);
-void handle_xwayland_surface(struct wl_listener *listener, void *data);
-
 void xwayland_view_close(xwayland_toplevel_t *xwayland_view);
 void xwayland_view_set_activated(xwayland_toplevel_t *xwayland_view, bool activated);
 
 void xwayland_set_effect(xwayland_toplevel_t *xwayland_view, surface_effect_t effect, bool enabled);
 void xwayland_set_border_radius(xwayland_toplevel_t *xwayland_view, float radius);
 void xwayland_set_shadow(xwayland_toplevel_t *xwayland_view, bool enabled);
+
+void xwayland_init(void);
+void xwayland_fini(void);

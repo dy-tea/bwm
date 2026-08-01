@@ -1,6 +1,7 @@
 #include "copy_capture.h"
 #include "ext-image-capture-source-v1-protocol.h"
 #include "ext-image-copy-capture-v1-protocol.h"
+#include "once.h"
 #include "server.h"
 #include "toplevel.h"
 #include "types.h"
@@ -20,7 +21,6 @@
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
-#include <wlr/util/log.h>
 
 const struct wlr_drm_format_set *wlr_renderer_get_render_formats(struct wlr_renderer *renderer);
 
@@ -1094,6 +1094,7 @@ static output_capture_mgr_t *output_mgr = NULL;
 static copy_mgr_t *copy_mgr = NULL;
 
 void image_copy_capture_init(void) {
+	ONCE();
 	output_mgr = calloc(1, sizeof(*output_mgr));
 	if (!output_mgr)
 		goto err_out;
@@ -1127,6 +1128,7 @@ err_out:
 }
 
 void image_copy_capture_fini(void) {
+	ONCE();
 	if (output_mgr) {
 		wl_list_remove(&output_mgr->display_destroy.link);
 		if (output_mgr->global)

@@ -1,4 +1,5 @@
 #include "ipc.h"
+#include "once.h"
 #include "output.h"
 #include "server.h"
 #include "tree.h"
@@ -8,7 +9,6 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <wlr/util/log.h>
 
 static int ipc_socket_fd = -1;
 static char socket_path[256];
@@ -50,59 +50,6 @@ static bool desktop_has_urgent(desktop_t *d) {
 
 const char *ipc_get_socket_path(void) {
 	return socket_path;
-}
-
-void ipc_init(void) {
-	struct sockaddr_un addr;
-	socklen_t len;
-
-	ipc_socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-	if (ipc_socket_fd == -1) {
-		wlr_log(WLR_ERROR, "Failed to create IPC socket");
-		return;
-	}
-
-	fcntl(ipc_socket_fd, F_SETFD, FD_CLOEXEC);
-
-	addr.sun_family = AF_UNIX;
-	snprintf(socket_path, sizeof(socket_path), DOORS_SOCKET_PATH_TEMPLATE, getuid(), getpid());
-
-	char *last_slash = strrchr(socket_path, '/');
-	if (last_slash != NULL) {
-		*last_slash = '\0';
-		mkdir(socket_path, 0700);
-		*last_slash = '/';
-	}
-
-	unlink(socket_path);
-
-	size_t path_len = strlen(socket_path);
-	if (path_len >= sizeof(addr.sun_path)) {
-		wlr_log(WLR_ERROR, "Socket path too long");
-		close(ipc_socket_fd);
-		ipc_socket_fd = -1;
-		return;
-	}
-	strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
-	addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
-
-	len = sizeof(addr.sun_family) + path_len + 1;
-	if (bind(ipc_socket_fd, (struct sockaddr *)&addr, len) == -1) {
-		wlr_log(WLR_ERROR, "Failed to bind IPC socket: %s", socket_path);
-		close(ipc_socket_fd);
-		ipc_socket_fd = -1;
-		return;
-	}
-
-	if (listen(ipc_socket_fd, SOMAXCONN) == -1) {
-		wlr_log(WLR_ERROR, "Failed to listen on IPC socket");
-		close(ipc_socket_fd);
-		ipc_socket_fd = -1;
-		return;
-	}
-
-	setenv(DOORS_SOCKET_ENV, socket_path, true);
-	wlr_log(WLR_INFO, "IPC socket: %s", socket_path);
 }
 
 int ipc_get_socket_fd(void) {
@@ -147,37 +94,8 @@ void ipc_handle_incoming(int client_fd) {
 	}
 
 	msg[n] = '\0';
-	/* Long-lived commands such as subscribe keep client_fd open. */
 	if (!process_ipc_message(msg, (int)n, client_fd))
 		close(client_fd);
-}
-
-void ipc_fini(void) {
-	if (server.ipc_event_source) {
-		wl_event_source_remove(server.ipc_event_source);
-		server.ipc_event_source = NULL;
-	}
-
-	if (ipc_socket_fd != -1) {
-		close(ipc_socket_fd);
-		unlink(socket_path);
-		ipc_socket_fd = -1;
-	}
-
-	subscriber_t *sb = subscriber_head;
-	while (sb != NULL) {
-		subscriber_t *next = sb->next;
-		if (sb->event_source)
-			wl_event_source_remove(sb->event_source);
-		close(sb->client_fd);
-		if (sb->fifo_path) {
-			unlink(sb->fifo_path);
-			free(sb->fifo_path);
-		}
-		free(sb);
-		sb = next;
-	}
-	subscriber_head = subscriber_tail = NULL;
 }
 
 bool ipc_print_report(int fd) {
@@ -273,4 +191,87 @@ void ipc_put_status(subscriber_mask_t mask, const char *fmt, ...) {
 		}
 		sb = next;
 	}
+}
+
+void ipc_init(void) {
+	ONCE();
+	struct sockaddr_un addr;
+	socklen_t len;
+
+	ipc_socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (ipc_socket_fd == -1) {
+		wlr_log(WLR_ERROR, "Failed to create IPC socket");
+		return;
+	}
+
+	fcntl(ipc_socket_fd, F_SETFD, FD_CLOEXEC);
+
+	addr.sun_family = AF_UNIX;
+	snprintf(socket_path, sizeof(socket_path), DOORS_SOCKET_PATH_TEMPLATE, getuid(), getpid());
+
+	char *last_slash = strrchr(socket_path, '/');
+	if (last_slash != NULL) {
+		*last_slash = '\0';
+		mkdir(socket_path, 0700);
+		*last_slash = '/';
+	}
+
+	unlink(socket_path);
+
+	size_t path_len = strlen(socket_path);
+	if (path_len >= sizeof(addr.sun_path)) {
+		wlr_log(WLR_ERROR, "Socket path too long");
+		close(ipc_socket_fd);
+		ipc_socket_fd = -1;
+		return;
+	}
+	strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
+	addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
+
+	len = sizeof(addr.sun_family) + path_len + 1;
+	if (bind(ipc_socket_fd, (struct sockaddr *)&addr, len) == -1) {
+		wlr_log(WLR_ERROR, "Failed to bind IPC socket: %s", socket_path);
+		close(ipc_socket_fd);
+		ipc_socket_fd = -1;
+		return;
+	}
+
+	if (listen(ipc_socket_fd, SOMAXCONN) == -1) {
+		wlr_log(WLR_ERROR, "Failed to listen on IPC socket");
+		close(ipc_socket_fd);
+		ipc_socket_fd = -1;
+		return;
+	}
+
+	setenv(DOORS_SOCKET_ENV, socket_path, true);
+	wlr_log(WLR_INFO, "IPC socket: %s", socket_path);
+}
+
+void ipc_fini(void) {
+	ONCE();
+	if (server.ipc_event_source) {
+		wl_event_source_remove(server.ipc_event_source);
+		server.ipc_event_source = NULL;
+	}
+
+	if (ipc_socket_fd != -1) {
+		close(ipc_socket_fd);
+		unlink(socket_path);
+		ipc_socket_fd = -1;
+	}
+
+	subscriber_t *sb = subscriber_head;
+	while (sb != NULL) {
+		subscriber_t *next = sb->next;
+		if (sb->event_source)
+			wl_event_source_remove(sb->event_source);
+		close(sb->client_fd);
+		if (sb->fifo_path) {
+			unlink(sb->fifo_path);
+			free(sb->fifo_path);
+		}
+		free(sb);
+		sb = next;
+	}
+	subscriber_head = subscriber_tail = NULL;
 }

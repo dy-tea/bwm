@@ -1,9 +1,9 @@
+#include "once.h"
 #include "rule.h"
 #include "server.h"
 #include "toplevel.h"
 #include <wlr/types/wlr_keyboard_shortcuts_inhibit_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
-#include <wlr/util/log.h>
 #include <wlr/xwayland.h>
 
 void handle_keyboard_shortcuts_inhibit_new_inhibitor(struct wl_listener *listener, void *data) {
@@ -41,6 +41,7 @@ void handle_keyboard_shortcuts_inhibit_new_inhibitor(struct wl_listener *listene
 }
 
 void shortcuts_inhibit_init(void) {
+	ONCE();
 	server.keyboard_shortcuts_inhibit_manager =
 		wlr_keyboard_shortcuts_inhibit_v1_create(server.wl_display);
 	if (!server.keyboard_shortcuts_inhibit_manager) {
@@ -54,5 +55,6 @@ void shortcuts_inhibit_init(void) {
 }
 
 void shortcuts_inhibit_fini(void) {
+	ONCE();
 	wl_list_remove(&server.keyboard_shortcuts_inhibit_new_inhibitor.link);
 }

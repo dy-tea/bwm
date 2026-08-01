@@ -1,7 +1,7 @@
+#include "once.h"
 #include "server.h"
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
-#include <wlr/util/log.h>
 
 static void handle_new_virtual_pointer(struct wl_listener *listener, void *data) {
 	(void)listener;
@@ -15,6 +15,7 @@ static void handle_new_virtual_pointer(struct wl_listener *listener, void *data)
 }
 
 void virtual_pointer_init(void) {
+	ONCE();
 	server.virtual_pointer_manager = wlr_virtual_pointer_manager_v1_create(server.wl_display);
 	if (!server.virtual_pointer_manager) {
 		wlr_log(WLR_ERROR, "Failed to create virtual pointer manager");
@@ -26,5 +27,6 @@ void virtual_pointer_init(void) {
 }
 
 void virtual_pointer_fini(void) {
+	ONCE();
 	wl_list_remove(&server.new_virtual_pointer.link);
 }

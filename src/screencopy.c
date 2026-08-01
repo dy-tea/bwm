@@ -1,3 +1,4 @@
+#include "once.h"
 #include "output.h"
 #include "screencopy.h"
 #include "server.h"
@@ -19,7 +20,6 @@
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/box.h>
-#include <wlr/util/log.h>
 #include <wlr/util/transform.h>
 
 #define SCREENCOPY_MANAGER_VERSION 3
@@ -752,7 +752,12 @@ static void handle_display_destroy(struct wl_listener *listener, void *data) {
 
 static screencopy_mgr_t *screencopy_manager = NULL;
 
+struct wl_global *screencopy_get_global(void) {
+	return screencopy_manager ? screencopy_manager->global : NULL;
+}
+
 void screencopy_init(void) {
+	ONCE();
 	screencopy_manager = calloc(1, sizeof(*screencopy_manager));
 	if (!screencopy_manager)
 		return;
@@ -774,6 +779,7 @@ void screencopy_init(void) {
 }
 
 void screencopy_fini(void) {
+	ONCE();
 	if (!screencopy_manager)
 		return;
 
@@ -785,8 +791,4 @@ void screencopy_fini(void) {
 	wl_global_destroy(screencopy_manager->global);
 	free(screencopy_manager);
 	screencopy_manager = NULL;
-}
-
-struct wl_global *screencopy_get_global(void) {
-	return screencopy_manager ? screencopy_manager->global : NULL;
 }

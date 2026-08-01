@@ -44,9 +44,8 @@ static bool filter_global(const struct wl_client *client, const struct wl_global
 
 void security_ctx_init(void) {
 	server.security_context_manager_v1 = wlr_security_context_manager_v1_create(server.wl_display);
-	if (!server.security_context_manager_v1) {
+	if (!server.security_context_manager_v1)
 		wlr_log(WLR_ERROR, "Failed to create security context manager");
-	} else {
+	else
 		wl_display_set_global_filter(server.wl_display, filter_global, NULL);
-	}
 }

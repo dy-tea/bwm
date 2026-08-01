@@ -1,8 +1,8 @@
+#include "once.h"
 #include "server.h"
 #include "toplevel.h"
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
-#include <wlr/util/log.h>
 
 static void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	(void)listener;
@@ -21,6 +21,7 @@ static void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 }
 
 void xdg_shell_init(void) {
+	ONCE();
 	server.xdg_shell = wlr_xdg_shell_create(server.wl_display, 5);
 	if (!server.xdg_shell) {
 		wlr_log(WLR_ERROR, "Failed to create xdg shell");
@@ -34,5 +35,6 @@ void xdg_shell_init(void) {
 }
 
 void xdg_shell_fini(void) {
+	ONCE();
 	wl_list_remove(&server.new_xdg_toplevel.link);
 }

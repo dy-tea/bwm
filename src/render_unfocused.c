@@ -1,3 +1,4 @@
+#include "once.h"
 #include "render_unfocused.h"
 #include "server.h"
 #include "tree.h"
@@ -52,22 +53,6 @@ static int handle_render_unfocused_timer(void *data) {
 	return 0;
 }
 
-void render_unfocused_init(void) {
-	wl_list_init(&render_unfocused_clients);
-}
-
-void render_unfocused_fini(void) {
-	if (render_unfocused_timer) {
-		wl_event_source_remove(render_unfocused_timer);
-		render_unfocused_timer = NULL;
-	}
-	struct render_unfocused_link *rfl, *tmp;
-	wl_list_for_each_safe(rfl, tmp, &render_unfocused_clients, link) {
-		wl_list_remove(&rfl->link);
-		free(rfl);
-	}
-}
-
 void render_unfocused_client_update(client_t *client) {
 	if (!client)
 		return;
@@ -113,5 +98,23 @@ void render_unfocused_client_remove(client_t *client) {
 			free(rfl);
 			return;
 		}
+	}
+}
+
+void render_unfocused_init(void) {
+	ONCE();
+	wl_list_init(&render_unfocused_clients);
+}
+
+void render_unfocused_fini(void) {
+	ONCE();
+	if (render_unfocused_timer) {
+		wl_event_source_remove(render_unfocused_timer);
+		render_unfocused_timer = NULL;
+	}
+	struct render_unfocused_link *rfl, *tmp;
+	wl_list_for_each_safe(rfl, tmp, &render_unfocused_clients, link) {
+		wl_list_remove(&rfl->link);
+		free(rfl);
 	}
 }

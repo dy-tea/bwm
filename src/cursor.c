@@ -3,6 +3,7 @@
 #include "idle_power.h"
 #include "input_method.h"
 #include "layer.h"
+#include "once.h"
 #include "output.h"
 #include "pointer_constraint.h"
 #include "scroller.h"
@@ -35,7 +36,6 @@
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/box.h>
-#include <wlr/util/log.h>
 #include <wlr/util/region.h>
 #include <wlr/xwayland.h>
 
@@ -1328,6 +1328,7 @@ static void handle_tablet_tool_button(struct wl_listener *listener, void *data) 
 }
 
 void cursor_init(void) {
+	ONCE();
 	server.cursor = wlr_cursor_create();
 	if (!server.cursor) {
 		wlr_log(WLR_ERROR, "Failed to create cursor");
@@ -1398,6 +1399,7 @@ void cursor_init(void) {
 }
 
 void cursor_fini(void) {
+	ONCE();
 	wl_list_remove(&server.cursor_motion.link);
 	wl_list_remove(&server.cursor_motion_absolute.link);
 	wl_list_remove(&server.cursor_button.link);

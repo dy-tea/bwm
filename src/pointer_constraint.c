@@ -1,8 +1,8 @@
+#include "once.h"
 #include "pointer_constraint.h"
 #include "server.h"
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_pointer_constraints_v1.h>
-#include <wlr/util/log.h>
 
 static void cursor_warp_to_constraint_hint(void) {
 	struct wlr_pointer_constraint_v1 *active = server.active_pointer_constraint;
@@ -144,6 +144,7 @@ static void handle_pointer_constraint(struct wl_listener *listener, void *data) 
 }
 
 void pointer_constraint_init(void) {
+	ONCE();
 	server.pointer_constraints = wlr_pointer_constraints_v1_create(server.wl_display);
 	if (!server.pointer_constraints) {
 		wlr_log(WLR_ERROR, "Failed to create pointer constraints");
@@ -158,5 +159,6 @@ void pointer_constraint_init(void) {
 }
 
 void pointer_constraint_fini(void) {
+	ONCE();
 	wl_list_remove(&server.new_pointer_constraint.link);
 }

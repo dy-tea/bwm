@@ -433,9 +433,7 @@ static void handle_output_destroy(struct wl_listener *listener, void *data) {
 	free(output);
 }
 
-void handle_new_output(struct wl_listener *listener, void *data) {
-	(void)listener;
-	struct wlr_output *wlr_output = data;
+void output_create(struct wlr_output *wlr_output) {
 	output_t *output = calloc(1, sizeof(*output));
 	if (!output)
 		return;

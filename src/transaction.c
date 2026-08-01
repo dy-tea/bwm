@@ -1,6 +1,7 @@
 #include "animation.h"
 #include "cursor.h"
 #include "idle.h"
+#include "once.h"
 #include "output.h"
 #include "server.h"
 #include "toplevel.h"
@@ -12,7 +13,6 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/box.h>
-#include <wlr/util/log.h>
 
 // transaction state
 static struct {
@@ -726,38 +726,6 @@ bool transaction_notify_view_ready_by_geometry(toplevel_t *toplevel, int x, int 
 	return false;
 }
 
-void transaction_init(void) {
-	txn_state.pending_transaction = NULL;
-	txn_state.queued_transaction = NULL;
-	txn_state.dirty_nodes = NULL;
-	txn_state.dirty_count = 0;
-	txn_state.dirty_capacity = 0;
-
-	wlr_log(WLR_INFO, "Transaction system initialized");
-}
-
-void transaction_fini(void) {
-	if (txn_state.pending_transaction) {
-		transaction_destroy(txn_state.pending_transaction);
-		txn_state.pending_transaction = NULL;
-	}
-
-	if (txn_state.queued_transaction) {
-		transaction_destroy(txn_state.queued_transaction);
-		txn_state.queued_transaction = NULL;
-	}
-
-	if (txn_state.dirty_nodes) {
-		free(txn_state.dirty_nodes);
-		txn_state.dirty_nodes = NULL;
-	}
-
-	txn_state.dirty_count = 0;
-	txn_state.dirty_capacity = 0;
-
-	wlr_log(WLR_INFO, "Transaction system cleaned up");
-}
-
 void transaction_add_dirty_node(node_t *node) {
 	if (!node || node->dirty)
 		return;
@@ -778,4 +746,38 @@ void transaction_add_dirty_node(node_t *node) {
 
 	wlr_log(WLR_DEBUG, "transaction_add_dirty_node: node %u (total=%zu)", node->id,
 		txn_state.dirty_count);
+}
+
+void transaction_init(void) {
+	ONCE();
+	txn_state.pending_transaction = NULL;
+	txn_state.queued_transaction = NULL;
+	txn_state.dirty_nodes = NULL;
+	txn_state.dirty_count = 0;
+	txn_state.dirty_capacity = 0;
+
+	wlr_log(WLR_INFO, "Transaction system initialized");
+}
+
+void transaction_fini(void) {
+	ONCE();
+	if (txn_state.pending_transaction) {
+		transaction_destroy(txn_state.pending_transaction);
+		txn_state.pending_transaction = NULL;
+	}
+
+	if (txn_state.queued_transaction) {
+		transaction_destroy(txn_state.queued_transaction);
+		txn_state.queued_transaction = NULL;
+	}
+
+	if (txn_state.dirty_nodes) {
+		free(txn_state.dirty_nodes);
+		txn_state.dirty_nodes = NULL;
+	}
+
+	txn_state.dirty_count = 0;
+	txn_state.dirty_capacity = 0;
+
+	wlr_log(WLR_INFO, "Transaction system cleaned up");
 }

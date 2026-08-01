@@ -9,6 +9,7 @@
 #include "dialog.h"
 #include "drm_lease.h"
 #include "effects.h"
+#include "foreign_capture.h"
 #include "global_shortcuts.h"
 #include "idle.h"
 #include "idle_power.h"
@@ -59,7 +60,6 @@
 #include <wlr/types/wlr_export_dmabuf_v1.h>
 #include <wlr/types/wlr_ext_data_control_v1.h>
 #include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
-#include <wlr/types/wlr_ext_image_capture_source_v1.h>
 #include <wlr/types/wlr_fixes.h>
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
@@ -200,6 +200,8 @@ void server_init(void) {
 	shortcuts_inhibit_init();
 	bell_init();
 	idle_init();
+	session_lock_init();
+	xwayland_init();
 
 	server.relative_pointer_manager = wlr_relative_pointer_manager_v1_create(server.wl_display);
 	if (!server.relative_pointer_manager) {
@@ -219,45 +221,6 @@ void server_init(void) {
 		wlr_log(WLR_ERROR, "Failed to create idle notifier");
 		exit(EXIT_FAILURE);
 	}
-
-	// xwayland support
-	wl_list_init(&server.xwayland.views);
-	server.xwayland.wlr_xwayland = wlr_xwayland_create(server.wl_display, server.compositor, true);
-	if (server.xwayland.wlr_xwayland) {
-		server.xwayland.xcursor_manager = server.cursor_mgr;
-
-		server.xwayland_surface.notify = handle_xwayland_surface;
-		wl_signal_add(&server.xwayland.wlr_xwayland->events.new_surface, &server.xwayland_surface);
-
-		server.xwayland_ready.notify = handle_xwayland_ready;
-		wl_signal_add(&server.xwayland.wlr_xwayland->events.ready, &server.xwayland_ready);
-
-		setenv("DISPLAY", server.xwayland.wlr_xwayland->display_name, true);
-	}
-
-	// session lock
-	server.session_lock_manager = wlr_session_lock_manager_v1_create(server.wl_display);
-	if (!server.session_lock_manager) {
-		wlr_log(WLR_ERROR, "Failed to create session lock manager");
-		exit(EXIT_FAILURE);
-	}
-
-	server.new_session_lock.notify = handle_new_session_lock;
-	wl_signal_add(&server.session_lock_manager->events.new_lock, &server.new_session_lock);
-
-	server.locked = false;
-	server.current_session_lock = NULL;
-	const float lockcolor[] = {
-		0.1f,
-		0.1f,
-		0.1f,
-		1.0f
-	};
-	struct wlr_box full_geo = {0};
-	wlr_output_layout_get_box(server.output_layout, NULL, &full_geo);
-	server.lock_background = wlr_scene_rect_create(server.lock_tree, full_geo.width, full_geo.height,
-		lockcolor);
-	wlr_scene_node_set_enabled(&server.lock_background->node, false);
 
 	// content type manager
 	server.content_type_manager = wlr_content_type_manager_v1_create(server.wl_display, 1);
@@ -382,21 +345,11 @@ void server_init(void) {
 	wlr_xdg_foreign_v1_create(server.wl_display, xdg_foreign_registry);
 	wlr_xdg_foreign_v2_create(server.wl_display, xdg_foreign_registry);
 
-	// foreign toplevel image capture source
-	server.foreign_toplevel_image_capture_source_manager =
-		wlr_ext_foreign_toplevel_image_capture_source_manager_v1_create(server.wl_display, 1);
-	if (!server.foreign_toplevel_image_capture_source_manager) {
-		wlr_log(WLR_ERROR, "Failed to create foreign toplevel image capture source manager");
-		exit(EXIT_FAILURE);
-	}
-	server.new_toplevel_capture_request.notify = handle_new_toplevel_capture_request;
-	wl_signal_add(&server.foreign_toplevel_image_capture_source_manager->events.capture_request,
-		&server.new_toplevel_capture_request);
-
 	// default seat
 	seat_t *default_seat = seat_create("seat0");
 	server.seat = default_seat ? default_seat->wlr_seat : NULL;
 
+	foreign_capture_init();
 	tearing_init();
 	screencopy_init();
 	transaction_init();
@@ -472,13 +425,7 @@ void server_restart(void) {
 }
 
 void server_fini(void) {
-	if (server.xwayland.wlr_xwayland) {
-		wl_list_remove(&server.xwayland_ready.link);
-		wl_list_remove(&server.xwayland_surface.link);
-		wlr_xwayland_destroy(server.xwayland.wlr_xwayland);
-		server.xwayland.wlr_xwayland = NULL;
-	}
-
+	xwayland_fini();
 	screencopy_fini();
 	image_copy_capture_fini();
 	render_unfocused_fini();
@@ -505,9 +452,7 @@ void server_fini(void) {
 	virtual_pointer_fini();
 	virtual_keyboard_fini();
 	tearing_fini();
-
-	wl_list_remove(&server.new_session_lock.link);
-
+	session_lock_fini();
 	launcher_fini();
 	output_mgmt_fini();
 	toplevel_tag_fini();
@@ -516,8 +461,7 @@ void server_fini(void) {
 	idle_fini();
 	bell_fini();
 	cursor_shape_fini();
-
-	wl_list_remove(&server.new_toplevel_capture_request.link);
+	foreign_capture_fini();
 
 #ifdef WLR_HAS_DRM_BACKEND
 	drm_lease_fini();

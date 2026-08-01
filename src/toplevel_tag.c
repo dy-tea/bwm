@@ -1,13 +1,13 @@
 #include "ipc.h"
+#include "once.h"
 #include "rule.h"
 #include "server.h"
 #include "toplevel.h"
 #include "transaction.h"
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/types/wlr_xdg_toplevel_tag_v1.h>
-#include <wlr/util/log.h>
 
-void xdg_toplevel_tag_manager_v1_handle_set_tag(struct wl_listener *listener, void *data) {
+static void xdg_toplevel_tag_manager_v1_handle_set_tag(struct wl_listener *listener, void *data) {
 	(void)listener;
 	const struct wlr_xdg_toplevel_tag_manager_v1_set_tag_event *event = data;
 	toplevel_t *toplevel = event->toplevel->base->data;
@@ -33,6 +33,7 @@ void xdg_toplevel_tag_manager_v1_handle_set_tag(struct wl_listener *listener, vo
 }
 
 void toplevel_tag_init(void) {
+	ONCE();
 	struct wlr_xdg_toplevel_tag_manager_v1 *xdg_toplevel_tag_manager_v1 =
 		wlr_xdg_toplevel_tag_manager_v1_create(server.wl_display, 1);
 	if (!xdg_toplevel_tag_manager_v1) {
@@ -45,5 +46,6 @@ void toplevel_tag_init(void) {
 }
 
 void toplevel_tag_fini(void) {
+	ONCE();
 	wl_list_remove(&server.xdg_toplevel_tag_manager_v1_set_tag.link);
 }

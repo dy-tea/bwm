@@ -1,7 +1,7 @@
 #include "config.h"
+#include "once.h"
 #include "server.h"
 #include <wlr/types/wlr_xdg_system_bell_v1.h>
-#include <wlr/util/log.h>
 
 static int handle_system_bell_timer(void *data) {
 	(void)data;
@@ -24,6 +24,7 @@ static void handle_ring_system_bell(struct wl_listener *listener, void *data) {
 }
 
 void bell_init(void) {
+	ONCE();
 	server.xdg_system_bell = wlr_xdg_system_bell_v1_create(server.wl_display, 1);
 	if (!server.xdg_system_bell) {
 		wlr_log(WLR_ERROR, "Failed to create xdg system bell");
@@ -34,5 +35,6 @@ void bell_init(void) {
 }
 
 void bell_fini(void) {
+	ONCE();
 	wl_list_remove(&server.ring_system_bell.link);
 }

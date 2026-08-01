@@ -1,6 +1,6 @@
+#include "once.h"
 #include "server.h"
 #include <wlr/types/wlr_xdg_decoration_v1.h>
-#include <wlr/util/log.h>
 
 static struct toplevel_t *toplevel_for_xdg_surface(struct wlr_xdg_surface *surface) {
 	toplevel_t *tl;
@@ -48,6 +48,7 @@ static void handle_new_xdg_decoration(struct wl_listener *listener, void *data) 
 }
 
 void xdg_decoration_init(void) {
+	ONCE();
 	server.xdg_decoration_manager = wlr_xdg_decoration_manager_v1_create(server.wl_display, 2);
 	if (!server.xdg_decoration_manager) {
 		wlr_log(WLR_ERROR, "Failed to create xdg decoration manager");
@@ -59,5 +60,6 @@ void xdg_decoration_init(void) {
 }
 
 void xdg_decoration_fini(void) {
+	ONCE();
 	wl_list_remove(&server.new_xdg_decoration.link);
 }

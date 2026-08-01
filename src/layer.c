@@ -2,6 +2,7 @@
 #include "effects.h"
 #include "input_method.h"
 #include "layer.h"
+#include "once.h"
 #include "output.h"
 #include "popup.h"
 #include "seat.h"
@@ -18,7 +19,6 @@
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
-#include <wlr/util/log.h>
 
 extern struct server_t server;
 
@@ -348,6 +348,7 @@ struct wlr_scene_tree *output_shell_layer(output_t *output, enum zwlr_layer_shel
 }
 
 void layer_init(void) {
+	ONCE();
 	server.layer_shell = wlr_layer_shell_v1_create(server.wl_display, 5);
 	if (!server.layer_shell) {
 		wlr_log(WLR_ERROR, "Failed to create layer shell");
@@ -359,5 +360,6 @@ void layer_init(void) {
 }
 
 void layer_fini(void) {
+	ONCE();
 	wl_list_remove(&server.new_layer_surface.link);
 }

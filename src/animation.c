@@ -1,6 +1,7 @@
 #include "animation.h"
 #include "bezier.h"
 #include "layer.h"
+#include "once.h"
 #include "output.h"
 #include "spring.h"
 #include "surface.h"
@@ -12,7 +13,6 @@
 #include <stdlib.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_scene.h>
-#include <wlr/util/log.h>
 
 #define SPRING_FIXED_DT 0.001
 #define SPRING_MAX_STEPS 10
@@ -295,6 +295,7 @@ bool animation_type_get_enabled(const char *type_name) {
 }
 
 void animation_init(void) {
+	ONCE();
 	wl_list_init(&animations);
 
 	for (int i = 0; i < ANIM_TYPE_COUNT; i++)
@@ -302,6 +303,7 @@ void animation_init(void) {
 }
 
 void animation_fini(void) {
+	ONCE();
 	animation_entry_t *entry, *tmp;
 	wl_list_for_each_safe(entry, tmp, &animations, link) {
 		if (entry->from_opacity != entry->to_opacity && entry->scene_tree) {

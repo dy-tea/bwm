@@ -65,7 +65,7 @@ typedef struct output_t {
 	struct output_t *prev, *next;
 } output_t;
 
-void handle_new_output(struct wl_listener *listener, void *data);
+void output_create(struct wlr_output *wlr_output);
 void output_enable(output_t *output);
 void output_disable(output_t *output);
 void output_destroy(output_t *output);

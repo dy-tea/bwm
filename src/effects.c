@@ -2,6 +2,7 @@
 #include "effects.h"
 #include "effects_backend.h"
 #include "layer.h"
+#include "once.h"
 #include "output.h"
 #include "server.h"
 #include "toplevel.h"
@@ -24,7 +25,6 @@
 #include <wlr/types/wlr_damage_ring.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_scene.h>
-#include <wlr/util/log.h>
 #include <wlr/util/region.h>
 
 // private wlroots functions
@@ -216,6 +216,7 @@ static bool ensure_sized_buf(struct wlr_buffer **buf_out, uint64_t native[2], in
 }
 
 bool effects_init(void) {
+	ONCE();
 	effects_state = (effects_state_t){0};
 	char *renderer_name = NULL;
 
@@ -264,6 +265,7 @@ bool effects_init(void) {
 }
 
 void effects_fini(void) {
+	ONCE();
 	if (!effects_state.available)
 		return;
 	effects_state.backend->fini();

@@ -2,7 +2,6 @@
 #include "seat.h"
 #include "server.h"
 #include "tablet.h"
-#include "touch.h"
 #include <stdlib.h>
 #include <string.h>
 #include <wlr/types/wlr_cursor.h>

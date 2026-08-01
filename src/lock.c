@@ -1,4 +1,5 @@
 #include "lock.h"
+#include "once.h"
 #include "output.h"
 #include "server.h"
 #include "tree.h"
@@ -10,7 +11,16 @@
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_session_lock_v1.h>
 
-void destroy_unlock(session_lock_t *session_lock, const bool unlock) {
+typedef struct session_lock_t {
+	struct wlr_session_lock_v1 *session_lock;
+	struct wlr_scene_tree *scene_tree;
+
+	struct wl_listener new_surface;
+	struct wl_listener unlock;
+	struct wl_listener destroy;
+} session_lock_t;
+
+static void destroy_unlock(session_lock_t *session_lock, const bool unlock) {
 	if (server.current_session_lock == NULL)
 		return;
 
@@ -61,7 +71,7 @@ void destroy_lock_surface(struct wl_listener *listener, void *data) {
 	wlr_seat_keyboard_notify_clear_focus(server.seat);
 }
 
-void map_lock_surface(struct wl_listener *listener, void *data) {
+static void map_lock_surface(struct wl_listener *listener, void *data) {
 	(void)data;
 	output_t *output = wl_container_of(listener, output, map_lock_surface);
 	struct wlr_session_lock_surface_v1 *surface = output->lock_surface;
@@ -77,7 +87,7 @@ void map_lock_surface(struct wl_listener *listener, void *data) {
 			keyboard->num_keycodes, &keyboard->modifiers);
 }
 
-void lock_new_surface(struct wl_listener *listener, void *data) {
+static void lock_new_surface(struct wl_listener *listener, void *data) {
 	session_lock_t *session_lock = wl_container_of(listener, session_lock, new_surface);
 	struct wlr_session_lock_surface_v1 *surface = data;
 	output_t *output = surface->output->data;
@@ -105,19 +115,19 @@ void lock_new_surface(struct wl_listener *listener, void *data) {
 	}
 }
 
-void lock_unlock(struct wl_listener *listener, void *data) {
+static void lock_unlock(struct wl_listener *listener, void *data) {
 	(void)data;
 	session_lock_t *session_lock = wl_container_of(listener, session_lock, unlock);
 	destroy_unlock(session_lock, true);
 }
 
-void lock_destroy(struct wl_listener *listener, void *data) {
+static void lock_destroy(struct wl_listener *listener, void *data) {
 	(void)data;
 	session_lock_t *session_lock = wl_container_of(listener, session_lock, destroy);
 	destroy_unlock(session_lock, false);
 }
 
-void handle_new_session_lock(struct wl_listener *listener, void *data) {
+static void handle_new_session_lock(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_session_lock_v1 *lock = data;
 
@@ -160,4 +170,35 @@ void handle_new_session_lock(struct wl_listener *listener, void *data) {
 
 	wlr_session_lock_v1_send_locked(lock);
 	server.locked = true;
+}
+
+void session_lock_init(void) {
+	ONCE();
+	server.session_lock_manager = wlr_session_lock_manager_v1_create(server.wl_display);
+	if (!server.session_lock_manager) {
+		wlr_log(WLR_ERROR, "Failed to create session lock manager");
+		exit(EXIT_FAILURE);
+	}
+
+	server.new_session_lock.notify = handle_new_session_lock;
+	wl_signal_add(&server.session_lock_manager->events.new_lock, &server.new_session_lock);
+
+	server.locked = false;
+	server.current_session_lock = NULL;
+	const float lockcolor[] = {
+		0.1f,
+		0.1f,
+		0.1f,
+		1.0f
+	};
+	struct wlr_box full_geo = {0};
+	wlr_output_layout_get_box(server.output_layout, NULL, &full_geo);
+	server.lock_background = wlr_scene_rect_create(server.lock_tree, full_geo.width, full_geo.height,
+		lockcolor);
+	wlr_scene_node_set_enabled(&server.lock_background->node, false);
+}
+
+void session_lock_fini(void) {
+	ONCE();
+	wl_list_remove(&server.new_session_lock.link);
 }

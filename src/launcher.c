@@ -1,4 +1,5 @@
 #include "launcher.h"
+#include "once.h"
 #include "output.h"
 #include "server.h"
 #include "toplevel.h"
@@ -9,7 +10,6 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_activation_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
-#include <wlr/util/log.h>
 
 static pid_t get_parent_pid(pid_t child) {
 	pid_t parent = -1;
@@ -187,6 +187,7 @@ static void handle_xdg_activation_new_token(struct wl_listener *listener, void *
 }
 
 void launcher_init(void) {
+	ONCE();
 	wl_list_init(&server.pending_launcher_ctxs);
 
 	// xdg activation
@@ -203,6 +204,7 @@ void launcher_init(void) {
 }
 
 void launcher_fini(void) {
+	ONCE();
 	wl_list_remove(&server.xdg_activation_request_activate.link);
 	wl_list_remove(&server.xdg_activation_new_token.link);
 

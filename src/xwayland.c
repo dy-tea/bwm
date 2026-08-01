@@ -5,6 +5,7 @@
 #include "input_method.h"
 #include "ipc.h"
 #include "launcher.h"
+#include "once.h"
 #include "output.h"
 #include "render_unfocused.h"
 #include "rule.h"
@@ -29,7 +30,6 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_activation_v1.h>
-#include <wlr/util/log.h>
 #include <wlr/xwayland.h>
 #include <xcb/xcb.h>
 #include <xcb/xcb_icccm.h>
@@ -1323,7 +1323,7 @@ static void begin_xwayland_interactive(xwayland_toplevel_t *xwayland_view, enum 
 	}
 }
 
-void handle_xwayland_surface(struct wl_listener *listener, void *data) {
+static void handle_xwayland_surface(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_xwayland_surface *xsurface = data;
 
@@ -1335,7 +1335,7 @@ void handle_xwayland_surface(struct wl_listener *listener, void *data) {
 	create_xwayland_view(xsurface);
 }
 
-void handle_xwayland_ready(struct wl_listener *listener, void *data) {
+static void handle_xwayland_ready(struct wl_listener *listener, void *data) {
 	(void)listener;
 	(void)data;
 	xwayland_t *xwayland = &server.xwayland;
@@ -1365,4 +1365,31 @@ void handle_xwayland_ready(struct wl_listener *listener, void *data) {
 
 	seat_t *s = seat_default();
 	wlr_xwayland_set_seat(xwayland->wlr_xwayland, s ? s->wlr_seat : NULL);
+}
+
+void xwayland_init(void) {
+	ONCE();
+	wl_list_init(&server.xwayland.views);
+	server.xwayland.wlr_xwayland = wlr_xwayland_create(server.wl_display, server.compositor, true);
+	if (server.xwayland.wlr_xwayland) {
+		server.xwayland.xcursor_manager = server.cursor_mgr;
+
+		server.xwayland_surface.notify = handle_xwayland_surface;
+		wl_signal_add(&server.xwayland.wlr_xwayland->events.new_surface, &server.xwayland_surface);
+
+		server.xwayland_ready.notify = handle_xwayland_ready;
+		wl_signal_add(&server.xwayland.wlr_xwayland->events.ready, &server.xwayland_ready);
+
+		setenv("DISPLAY", server.xwayland.wlr_xwayland->display_name, true);
+	}
+}
+
+void xwayland_fini(void) {
+	ONCE();
+	if (server.xwayland.wlr_xwayland) {
+		wl_list_remove(&server.xwayland_ready.link);
+		wl_list_remove(&server.xwayland_surface.link);
+		wlr_xwayland_destroy(server.xwayland.wlr_xwayland);
+		server.xwayland.wlr_xwayland = NULL;
+	}
 }

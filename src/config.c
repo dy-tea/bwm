@@ -2,6 +2,7 @@
 #include "global_shortcuts.h"
 #include "keyboard.h"
 #include "master_stack.h"
+#include "once.h"
 #include "server.h"
 #include "tree.h"
 #include "types.h"
@@ -16,7 +17,6 @@
 #include <unistd.h>
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_keyboard.h>
-#include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon.h>
 
 #define DOORS_CONFIG_DIR "/.config/doors"
@@ -948,6 +948,7 @@ void config_init(void) {
 }
 
 void config_init_with_config_dir(const char *config_dir) {
+	ONCE();
 	custom_config_dir = config_dir;
 
 	const char *config_home = get_config_home();
@@ -973,6 +974,7 @@ void config_init_with_config_dir(const char *config_dir) {
 }
 
 void config_fini(void) {
+	ONCE();
 	if (hotkey_event_source) {
 		wl_event_source_remove(hotkey_event_source);
 		hotkey_event_source = NULL;

@@ -1,4 +1,5 @@
 #include "ipc.h"
+#include "once.h"
 #include "output.h"
 #include "scratchpad.h"
 #include "server.h"
@@ -10,8 +11,6 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
-extern struct server_t server;
-
 typedef struct scratchpad_entry_t {
 	struct wl_list link;
 	node_t *node;
@@ -20,22 +19,6 @@ typedef struct scratchpad_entry_t {
 } scratchpad_entry_t;
 
 static struct wl_list scratchpad_list;
-
-void scratchpad_init(void) {
-	wl_list_init(&scratchpad_list);
-	wlr_log(WLR_INFO, "Scratchpad initialized");
-}
-
-void scratchpad_fini(void) {
-	scratchpad_entry_t *entry, *tmp;
-	wl_list_for_each_safe(entry, tmp, &scratchpad_list, link) {
-		if (entry->node)
-			entry->node->scratchpad = false;
-		wl_list_remove(&entry->link);
-		free(entry);
-	}
-	wlr_log(WLR_INFO, "Scratchpad finalized");
-}
 
 static scratchpad_entry_t *scratchpad_find_entry(node_t *n) {
 	scratchpad_entry_t *entry;
@@ -398,4 +381,22 @@ node_t *scratchpad_find_by_title(const char *title) {
 			return entry->node;
 	}
 	return NULL;
+}
+
+void scratchpad_init(void) {
+	ONCE();
+	wl_list_init(&scratchpad_list);
+	wlr_log(WLR_INFO, "Scratchpad initialized");
+}
+
+void scratchpad_fini(void) {
+	ONCE();
+	scratchpad_entry_t *entry, *tmp;
+	wl_list_for_each_safe(entry, tmp, &scratchpad_list, link) {
+		if (entry->node)
+			entry->node->scratchpad = false;
+		wl_list_remove(&entry->link);
+		free(entry);
+	}
+	wlr_log(WLR_INFO, "Scratchpad finalized");
 }

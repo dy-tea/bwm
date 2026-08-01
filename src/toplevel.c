@@ -41,8 +41,6 @@
 #include <wlr/types/wlr_xdg_toplevel_tag_v1.h>
 #include <wlr/util/log.h>
 
-extern struct server_t server;
-
 static struct wlr_fbox clamp_scene_buffer_source_box(struct wlr_scene_buffer *buffer,
 		struct wlr_fbox box) {
 	if (!buffer || !buffer->buffer)
@@ -1424,47 +1422,6 @@ void toplevel_send_frame_done(struct toplevel_t *toplevel) {
 	struct wlr_scene_node *node;
 	wl_list_for_each(node, &toplevel->content_tree->children, link)
 		wlr_scene_node_for_each_buffer(node, toplevel_send_frame_done_interator, &when);
-}
-
-void handle_new_toplevel_capture_request(struct wl_listener *listener, void *data) {
-	(void)listener;
-	struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request_event *request = data;
-	void *handle_data = request->toplevel_handle->data;
-
-	struct wlr_ext_image_capture_source_v1 **image_capture_source_ptr = NULL;
-	struct wlr_scene *image_capture = NULL;
-
-	toplevel_t *tl;
-	wl_list_for_each(tl, &server.toplevels, link) {
-		if (tl == handle_data) {
-			image_capture_source_ptr = &tl->image_capture_source;
-			image_capture = tl->image_capture;
-			break;
-		}
-	}
-
-	if (image_capture_source_ptr == NULL) {
-		xwayland_toplevel_t *xwayland_view = handle_data;
-		image_capture_source_ptr = &xwayland_view->image_capture_source;
-		image_capture = xwayland_view->image_capture;
-	}
-
-	if (image_capture_source_ptr == NULL || image_capture == NULL) {
-		wlr_log(WLR_ERROR, "Failed to determine toplevel type for image capture");
-		return;
-	}
-
-	if (*image_capture_source_ptr == NULL) {
-		*image_capture_source_ptr =
-			wlr_ext_image_capture_source_v1_create_with_scene_node(&image_capture->tree.node,
-			wl_display_get_event_loop(server.wl_display), server.allocator, server.renderer);
-
-		if (*image_capture_source_ptr == NULL)
-			return;
-	}
-
-	wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request_accept(request,
-		*image_capture_source_ptr);
 }
 
 bool toplevel_can_tear(struct toplevel_t *toplevel) {

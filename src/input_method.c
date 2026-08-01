@@ -8,8 +8,6 @@
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
 
-extern struct server_t server;
-
 static bool is_keyboard_emulated_by_input_method(struct wlr_keyboard *keyboard,
 		struct wlr_input_method_v2 *input_method) {
 	struct wlr_virtual_keyboard_v1 *virtual_keyboard;

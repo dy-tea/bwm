@@ -1,30 +1,12 @@
+#include "once.h"
 #include "spring.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <wlr/util/log.h>
 
 static struct wl_list springs;
-
 static const double TWO_PI = 6.283185307179586;
-
-void spring_init(void) {
-	wl_list_init(&springs);
-
-	spring_add("default", 300.0, 20.0, 1.0, SPRING_EPSILON_DEFAULT, SPRING_EPSILON_DEFAULT);
-	spring_add("bouncy", 400.0, 10.0, 1.0, SPRING_EPSILON_DEFAULT, SPRING_EPSILON_DEFAULT);
-	spring_add("gentle", 100.0, 15.0, 1.0, SPRING_EPSILON_DEFAULT, SPRING_EPSILON_DEFAULT);
-	spring_add("slow", 50.0, 10.0, 2.0, SPRING_EPSILON_DEFAULT, SPRING_EPSILON_DEFAULT);
-}
-
-void spring_fini(void) {
-	spring_curve_t *c, *tmp;
-	wl_list_for_each_safe(c, tmp, &springs, link) {
-		wl_list_remove(&c->link);
-		free(c);
-	}
-}
 
 spring_curve_t *spring_add(const char *name, double stiffness, double damping, double mass,
 		double value_epsilon, double velocity_epsilon) {
@@ -133,4 +115,23 @@ double spring_evaluate(const spring_curve_t *curve, double dt, double *position,
 		*done = settled;
 
 	return p;
+}
+
+void spring_init(void) {
+	ONCE();
+	wl_list_init(&springs);
+
+	spring_add("default", 300.0, 20.0, 1.0, SPRING_EPSILON_DEFAULT, SPRING_EPSILON_DEFAULT);
+	spring_add("bouncy", 400.0, 10.0, 1.0, SPRING_EPSILON_DEFAULT, SPRING_EPSILON_DEFAULT);
+	spring_add("gentle", 100.0, 15.0, 1.0, SPRING_EPSILON_DEFAULT, SPRING_EPSILON_DEFAULT);
+	spring_add("slow", 50.0, 10.0, 2.0, SPRING_EPSILON_DEFAULT, SPRING_EPSILON_DEFAULT);
+}
+
+void spring_fini(void) {
+	ONCE();
+	spring_curve_t *c, *tmp;
+	wl_list_for_each_safe(c, tmp, &springs, link) {
+		wl_list_remove(&c->link);
+		free(c);
+	}
 }
