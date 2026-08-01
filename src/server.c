@@ -87,7 +87,13 @@
 #include <wlr/util/log.h>
 #include <wlr/xwayland.h>
 
-static void renderer_init(void) {
+void server_init(void) {
+	server = (struct server_t){0};
+
+	server.wl_display = wl_display_create();
+
+	backend_init();
+
 	server.renderer = wlr_renderer_autocreate(server.backend);
 	if (server.renderer == NULL) {
 		wlr_log(WLR_ERROR, "Failed to create renderer");
@@ -95,62 +101,24 @@ static void renderer_init(void) {
 	}
 
 	wlr_renderer_init_wl_display(server.renderer, server.wl_display);
-}
 
-static void allocator_init(void) {
 	server.allocator = wlr_allocator_autocreate(server.backend, server.renderer);
 	if (server.allocator == NULL) {
 		wlr_log(WLR_ERROR, "Failed to create allocator");
 		exit(EXIT_FAILURE);
 	}
-}
 
-static void compositor_init(void) {
+	effects_init();
+
+	server.bg_effect_manager = wlr_ext_background_effect_manager_v1_create(server.wl_display, 1,
+		EXT_BACKGROUND_EFFECT_MANAGER_V1_CAPABILITY_BLUR);
+
 	server.compositor = wlr_compositor_create(server.wl_display, 6, server.renderer);
 	if (!server.compositor) {
 		wlr_log(WLR_ERROR, "Failed to create compositor");
 		exit(EXIT_FAILURE);
 	}
 	wlr_subcompositor_create(server.wl_display);
-}
-
-static void scene_init(void) {
-	server.scene = wlr_scene_create();
-	if (!server.scene) {
-		wlr_log(WLR_ERROR, "Failed to create scene");
-		exit(EXIT_FAILURE);
-	}
-	server.scene_layout = wlr_scene_attach_output_layout(server.scene, server.output_layout);
-	if (server.linux_dmabuf)
-		wlr_scene_set_linux_dmabuf_v1(server.scene, server.linux_dmabuf);
-
-	// scene trees for layering
-	server.bg_tree = wlr_scene_tree_create(&server.scene->tree);
-	server.bot_tree = wlr_scene_tree_create(&server.scene->tree);
-	server.tile_tree = wlr_scene_tree_create(&server.scene->tree);
-	server.float_tree = wlr_scene_tree_create(&server.scene->tree);
-	server.top_tree = wlr_scene_tree_create(&server.scene->tree);
-	server.full_tree = wlr_scene_tree_create(&server.scene->tree);
-	server.over_tree = wlr_scene_tree_create(&server.scene->tree);
-	server.shader_tree = wlr_scene_tree_create(&server.scene->tree);
-	server.drag_tree = wlr_scene_tree_create(&server.scene->tree);
-	server.lock_tree = wlr_scene_tree_create(&server.scene->tree);
-}
-
-void server_init(void) {
-	server = (struct server_t){0};
-
-	server.wl_display = wl_display_create();
-
-	backend_init();
-	renderer_init();
-	allocator_init();
-	effects_init();
-
-	server.bg_effect_manager = wlr_ext_background_effect_manager_v1_create(server.wl_display, 1,
-		EXT_BACKGROUND_EFFECT_MANAGER_V1_CAPABILITY_BLUR);
-
-	compositor_init();
 
 	// dmabuf support
 	if (wlr_renderer_get_texture_formats(server.renderer, WLR_BUFFER_CAP_DMABUF)) {
@@ -184,7 +152,29 @@ void server_init(void) {
 	wl_list_init(&server.physical_keyboards);
 
 	output_mgmt_init();
-	scene_init();
+
+	// scene
+	server.scene = wlr_scene_create();
+	if (!server.scene) {
+		wlr_log(WLR_ERROR, "Failed to create scene");
+		exit(EXIT_FAILURE);
+	}
+	server.scene_layout = wlr_scene_attach_output_layout(server.scene, server.output_layout);
+	if (server.linux_dmabuf)
+		wlr_scene_set_linux_dmabuf_v1(server.scene, server.linux_dmabuf);
+
+	// scene trees for layering
+	server.bg_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.bot_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.tile_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.float_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.top_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.full_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.over_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.shader_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.drag_tree = wlr_scene_tree_create(&server.scene->tree);
+	server.lock_tree = wlr_scene_tree_create(&server.scene->tree);
+
 	xdg_shell_init();
 	xdg_decoration_init();
 	dialog_init();

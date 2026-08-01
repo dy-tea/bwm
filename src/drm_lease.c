@@ -31,4 +31,5 @@ void drm_lease_fini(void) {
 		wl_list_remove(&server.drm_lease_request.link);
 }
 
+
 #endif
