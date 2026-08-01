@@ -342,6 +342,7 @@ void server_init(void) {
 	foreign_capture_init();
 	tearing_init();
 	screencopy_init();
+	image_copy_capture_init();
 	transaction_init();
 	animation_init();
 	bezier_init();
