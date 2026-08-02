@@ -468,9 +468,9 @@ static bool gles2_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 	g->prog_corner_mask = link_program(gl_border_corner_mask_frag_src);
 	g->prog_shadow = link_program(gl_shadow_frag_src);
 
-	if (!g->prog_kawase || !g->prog_blur_down || !g->prog_blur_up || !g->prog_gauss_h || !g->prog_gauss_v ||
-			!g->prog_box_h || !g->prog_box_v || !g->prog_blit || !g->prog_mica_tint || !g->prog_acrylic_tint ||
-			!g->prog_refraction) {
+	if (!g->prog_kawase || !g->prog_blur_down || !g->prog_blur_up || !g->prog_gauss_h ||
+			!g->prog_gauss_v || !g->prog_box_h || !g->prog_box_v || !g->prog_blit || !g->prog_mica_tint ||
+			!g->prog_acrylic_tint || !g->prog_refraction) {
 		wlr_log(WLR_ERROR, "gles2: one or more required shaders failed to compile");
 		egl_unset_current();
 		free(g);
@@ -835,8 +835,7 @@ static bool gles2_blur(be_output_state_t *state, uint64_t src_handle, int src_w,
 			bool final = (i == 0);
 			int uw = final ? src_w : lw[i - 1];
 			int uh = final ? src_h : lh[i - 1];
-			GLuint target = final ? (dst ? dst : (GLuint)state->ping.native_handle[0])
-				: level_fbo[i - 1];
+			GLuint target = final ? (dst ? dst : (GLuint)state->ping.native_handle[0]) : level_fbo[i - 1];
 
 			glBindFramebuffer(GL_FRAMEBUFFER, target);
 			glViewport(0, 0, uw, uh);

@@ -1,6 +1,6 @@
 #include "config.h"
-#include "effects.h"
 #include "cursor.h"
+#include "effects.h"
 #include "idle_power.h"
 #include "input_method.h"
 #include "layer.h"
@@ -206,8 +206,8 @@ static void apply_leaf_positions(desktop_t *d) {
 					int new_fh = r.height + 2 * (int)bw;
 					if (new_fw > 0 && new_fh > 0) {
 						float scale = n->client->toplevel && n->client->toplevel->node &&
-								n->client->toplevel->node->output ?
-							n->client->toplevel->node->output->wlr_output->scale : 1.0f;
+							n->client->toplevel->node->output ? n->client->toplevel->node->output->wlr_output->scale :
+							1.0f;
 						int pfw = (int)((double)new_fw * scale + 0.5);
 						int pfh = (int)((double)new_fh * scale + 0.5);
 						if (rounded->border_shader_buf_w != pfw || rounded->border_shader_buf_h != pfh) {
@@ -496,8 +496,8 @@ static void process_cursor_resize(void) {
 			int new_fw = new_width + 2 * (int)bw;
 			int new_fh = new_height + 2 * (int)bw;
 			if (new_fw > 0 && new_fh > 0) {
-				float scale = toplevel->node && toplevel->node->output ?
-					toplevel->node->output->wlr_output->scale : 1.0f;
+				float scale = toplevel->node &&
+					toplevel->node->output ? toplevel->node->output->wlr_output->scale : 1.0f;
 				int pfw = (int)((double)new_fw * scale + 0.5);
 				int pfh = (int)((double)new_fh * scale + 0.5);
 				if (toplevel->rounded->border_shader_buf_w != pfw ||

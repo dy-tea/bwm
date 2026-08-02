@@ -154,12 +154,25 @@ static bool master_stack_swap(output_t *m, desktop_t *d, direction_t dir) {
 	return false;
 }
 
+static bool tiled_swap(output_t *m, desktop_t *d, direction_t dir) {
+	(void)m;
+	node_t *n = find_fence(d->focus, dir);
+	if (n != NULL) {
+		n = first_extrema(n);
+		if (n != NULL) {
+			swap_nodes(mon, d, d->focus, mon, d, n);
+			return true;
+		}
+	}
+	return false;
+}
+
 static const layout_impl_t tiled_impl = {
 	.name = "tiled",
 	.arrange = tiled_arrange,
 	.on_focus = NULL,
 	.focus = NULL,
-	.swap = NULL,
+	.swap = tiled_swap,
 	.init_client = NULL,
 	.collect = tiled_collect,
 	.single_visible = false,

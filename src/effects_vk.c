@@ -1846,8 +1846,8 @@ static bool vk_blur(be_output_state_t *state, uint64_t src_handle, int src_w, in
 	}
 
 	VkRect2D sc[64];
-	int n_sc = (scissor && n_scissor > 0) ? vk_scissor_boxes(scissor, n_scissor, src_w, src_h, sc, 64)
-		: 0;
+	int n_sc = (scissor && n_scissor > 0) ? vk_scissor_boxes(scissor, n_scissor, src_w, src_h, sc,
+		64) : 0;
 	VkRect2D *scp = n_sc ? sc : NULL;
 
 	for (int i = 0; i < p->passes; i++) {
@@ -1948,8 +1948,8 @@ static bool vk_blur(be_output_state_t *state, uint64_t src_handle, int src_w, in
 			pc.refraction.rf = fringing;
 			pc.refraction.rm = p->refraction_texture_repeat_mode;
 			pc.refraction.mode = mode;
-			vk_draw_full(vk->pipe_refraction, current, dfbo->fb, src_w, src_h, dfbo->img.image, &pc, 128,
-				scp, n_sc);
+			vk_draw_full(vk->pipe_refraction, current, dfbo->fb, src_w, src_h, dfbo->img.image, &pc, 128, scp,
+				n_sc);
 			current = dimg;
 		} else {
 			struct vk_fbo *dfbo = (i & 1) ? fbo1 : fbo0;

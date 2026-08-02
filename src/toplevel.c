@@ -334,8 +334,8 @@ void toplevel_center_and_clip_surface(toplevel_t *toplevel) {
 				int new_fw = border_w + 2 * (int)bw;
 				int new_fh = border_h + 2 * (int)bw;
 				if (new_fw > 0 && new_fh > 0) {
-					float scale = toplevel->node && toplevel->node->output ?
-						toplevel->node->output->wlr_output->scale : 1.0f;
+					float scale = toplevel->node &&
+						toplevel->node->output ? toplevel->node->output->wlr_output->scale : 1.0f;
 					int pfw = (int)((double)new_fw * scale + 0.5);
 					int pfh = (int)((double)new_fh * scale + 0.5);
 					if (toplevel->rounded->border_shader_buf_w != pfw ||
@@ -360,8 +360,8 @@ void toplevel_center_and_clip_surface(toplevel_t *toplevel) {
 				int new_fw = container_rect->width + 2 * (int)bw;
 				int new_fh = container_rect->height + 2 * (int)bw;
 				if (new_fw > 0 && new_fh > 0) {
-					float scale = toplevel->node && toplevel->node->output ?
-						toplevel->node->output->wlr_output->scale : 1.0f;
+					float scale = toplevel->node &&
+						toplevel->node->output ? toplevel->node->output->wlr_output->scale : 1.0f;
 					int pfw = (int)((double)new_fw * scale + 0.5);
 					int pfh = (int)((double)new_fh * scale + 0.5);
 					if (toplevel->rounded->border_shader_buf_w != pfw ||

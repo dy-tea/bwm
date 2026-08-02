@@ -476,68 +476,28 @@ void swap_west(void) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
 
-	desktop_t *d = mon->desk;
-
-	if (layout_swap_direction(mon, d, DIR_WEST))
-		return;
-
-	node_t *n = find_fence(d->focus, DIR_WEST);
-	if (n != NULL) {
-		n = second_extrema(n);
-		if (n != NULL)
-			swap_nodes(mon, d, d->focus, mon, d, n);
-	}
+	layout_swap_direction(mon, mon->desk, DIR_WEST);
 }
 
 void swap_east(void) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
 
-	desktop_t *d = mon->desk;
-
-	if (layout_swap_direction(mon, d, DIR_EAST))
-		return;
-
-	node_t *n = find_fence(d->focus, DIR_EAST);
-	if (n != NULL) {
-		n = first_extrema(n);
-		if (n != NULL)
-			swap_nodes(mon, d, d->focus, mon, d, n);
-	}
+	layout_swap_direction(mon, mon->desk, DIR_EAST);
 }
 
 void swap_north(void) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
 
-	desktop_t *d = mon->desk;
-
-	if (layout_swap_direction(mon, d, DIR_NORTH))
-		return;
-
-	node_t *n = find_fence(d->focus, DIR_NORTH);
-	if (n != NULL) {
-		n = second_extrema(n);
-		if (n != NULL)
-			swap_nodes(mon, d, d->focus, mon, d, n);
-	}
+	layout_swap_direction(mon, mon->desk, DIR_NORTH);
 }
 
 void swap_south(void) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
 
-	desktop_t *d = mon->desk;
-
-	if (layout_swap_direction(mon, d, DIR_SOUTH))
-		return;
-
-	node_t *n = find_fence(d->focus, DIR_SOUTH);
-	if (n != NULL) {
-		n = first_extrema(n);
-		if (n != NULL)
-			swap_nodes(mon, d, d->focus, mon, d, n);
-	}
+	layout_swap_direction(mon, mon->desk, DIR_SOUTH);
 }
 
 void close_focused(void) {
