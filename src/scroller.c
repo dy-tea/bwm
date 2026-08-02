@@ -608,6 +608,69 @@ bool scroller_focus_down(desktop_t *d) {
 	return true;
 }
 
+bool scroller_swap(struct output_t *m, desktop_t *d, direction_t dir) {
+	scroller_state_t *s = d ? d->scroller_state : NULL;
+	if (!s || s->column_count == 0)
+		return false;
+	if (!d->focus || !d->focus->client)
+		return false;
+
+	int src_col, src_tile;
+	if (!find_tile(s, d->focus->client, &src_col, &src_tile))
+		return false;
+
+	int dst_col = src_col;
+	int dst_tile = src_tile;
+
+	switch (dir) {
+	case DIR_WEST:
+		if (src_col == 0)
+			return false;
+		dst_col = src_col - 1;
+		dst_tile = s->columns[dst_col].tile_count - 1;
+		break;
+	case DIR_EAST:
+		if (src_col >= s->column_count - 1)
+			return false;
+		dst_col = src_col + 1;
+		dst_tile = 0;
+		break;
+	case DIR_NORTH:
+		if (src_tile == 0)
+			return false;
+		dst_col = src_col;
+		dst_tile = src_tile - 1;
+		break;
+	case DIR_SOUTH:
+		if (src_tile >= s->columns[src_col].tile_count - 1)
+			return false;
+		dst_col = src_col;
+		dst_tile = src_tile + 1;
+		break;
+	default:
+		return false;
+	}
+
+	scroller_column_t *src = &s->columns[src_col];
+	scroller_column_t *dst = &s->columns[dst_col];
+	if (dst_tile < 0 || dst_tile >= dst->tile_count)
+		return false;
+
+	scroller_tile_t tmp = src->tiles[src_tile];
+	src->tiles[src_tile] = dst->tiles[dst_tile];
+	dst->tiles[dst_tile] = tmp;
+
+	// keep focus on the window that was swapped
+	s->active_column_idx = dst_col;
+	s->columns[dst_col].active_tile_idx = dst_tile;
+	s->view_offset = 0.0;
+	s->activate_prev_column_on_removal = false;
+
+	if (m)
+		arrange(m, d, true);
+	return true;
+}
+
 bool scroller_focus_up(desktop_t *d) {
 	scroller_state_t *s = d->scroller_state;
 	if (!s || s->column_count == 0)

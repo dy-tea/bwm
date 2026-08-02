@@ -6,6 +6,9 @@
 #include <wlr/util/box.h>
 
 struct output_t;
+typedef struct client_t client_t;
+typedef struct desktop_t desktop_t;
+typedef struct node_t node_t;
 
 #define SCROLLER_MIN_WIDTH 1
 #define SCROLLER_MIN_HEIGHT 1
@@ -60,6 +63,7 @@ bool scroller_focus_next(desktop_t *d);
 bool scroller_focus_prev(desktop_t *d);
 bool scroller_focus_down(desktop_t *d);
 bool scroller_focus_up(desktop_t *d);
+bool scroller_swap(struct output_t *m, desktop_t *d, direction_t dir);
 void scroller_center_window(desktop_t *d, client_t *client);
 
 bool scroller_consume_into_column(desktop_t *d);
