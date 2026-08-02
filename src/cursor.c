@@ -1,4 +1,5 @@
 #include "config.h"
+#include "effects.h"
 #include "cursor.h"
 #include "idle_power.h"
 #include "input_method.h"
@@ -176,7 +177,11 @@ static void apply_leaf_positions(desktop_t *d) {
 		if (!st)
 			continue;
 
-		wlr_scene_node_set_position(&st->node, r.x, r.y);
+		if (st->node.x != r.x || st->node.y != r.y) {
+			wlr_scene_node_set_position(&st->node, r.x, r.y);
+			if (n->output)
+				effects_dirty_corner_masks(n->output);
+		}
 
 		if (n->client->toplevel)
 			wlr_xdg_toplevel_set_size(n->client->toplevel->xdg_toplevel, r.width, r.height);
@@ -199,10 +204,16 @@ static void apply_leaf_positions(desktop_t *d) {
 				if (rounded) {
 					int new_fw = r.width + 2 * (int)bw;
 					int new_fh = r.height + 2 * (int)bw;
-					if (new_fw > 0 && new_fh > 0 && (rounded->border_shader_buf_w != new_fw ||
-							rounded->border_shader_buf_h != new_fh)) {
-						rounded->border_dirty = true;
-						rounded->corner_mask_dirty = true;
+					if (new_fw > 0 && new_fh > 0) {
+						float scale = n->client->toplevel && n->client->toplevel->node &&
+								n->client->toplevel->node->output ?
+							n->client->toplevel->node->output->wlr_output->scale : 1.0f;
+						int pfw = (int)((double)new_fw * scale + 0.5);
+						int pfh = (int)((double)new_fh * scale + 0.5);
+						if (rounded->border_shader_buf_w != pfw || rounded->border_shader_buf_h != pfh) {
+							rounded->border_dirty = true;
+							rounded->corner_mask_dirty = true;
+						}
 					}
 				}
 			}
@@ -338,8 +349,14 @@ static void process_cursor_move(void) {
 		xwayland_view->node->client->floating_rectangle.x = (int)x;
 		xwayland_view->node->client->floating_rectangle.y = (int)y;
 
-		if (xwayland_view->scene_tree)
-			wlr_scene_node_set_position(&xwayland_view->scene_tree->node, x, y);
+		if (xwayland_view->scene_tree) {
+			struct wlr_scene_node *stn = &xwayland_view->scene_tree->node;
+			if (stn->x != x || stn->y != y) {
+				wlr_scene_node_set_position(stn, x, y);
+				if (xwayland_view->node->output)
+					effects_dirty_corner_masks(xwayland_view->node->output);
+			}
+		}
 
 		wlr_xwayland_surface_configure(xwayland_view->xwayland_surface, (int)x, (int)y,
 			xwayland_view->xwayland_surface->width, xwayland_view->xwayland_surface->height);
@@ -356,7 +373,12 @@ static void process_cursor_move(void) {
 	toplevel->node->client->floating_rectangle.x = (int)x;
 	toplevel->node->client->floating_rectangle.y = (int)y;
 
-	wlr_scene_node_set_position(&toplevel->scene_tree->node, x, y);
+	struct wlr_scene_node *stn = &toplevel->scene_tree->node;
+	if (stn->x != x || stn->y != y) {
+		wlr_scene_node_set_position(stn, x, y);
+		if (toplevel->node->output)
+			effects_dirty_corner_masks(toplevel->node->output);
+	}
 }
 
 static void process_cursor_resize(void) {
@@ -410,8 +432,14 @@ static void process_cursor_resize(void) {
 		xwayland_view->node->client->floating_rectangle.width = new_width;
 		xwayland_view->node->client->floating_rectangle.height = new_height;
 
-		if (xwayland_view->scene_tree)
-			wlr_scene_node_set_position(&xwayland_view->scene_tree->node, new_left, new_top);
+		if (xwayland_view->scene_tree) {
+			struct wlr_scene_node *stn = &xwayland_view->scene_tree->node;
+			if (stn->x != new_left || stn->y != new_top) {
+				wlr_scene_node_set_position(stn, new_left, new_top);
+				if (xwayland_view->node->output)
+					effects_dirty_corner_masks(xwayland_view->node->output);
+			}
+		}
 
 		wlr_xwayland_surface_configure(xwayland_view->xwayland_surface, new_left, new_top, new_width,
 			new_height);
@@ -445,7 +473,12 @@ static void process_cursor_resize(void) {
 	client->floating_rectangle.width = new_width;
 	client->floating_rectangle.height = new_height;
 
-	wlr_scene_node_set_position(&toplevel->scene_tree->node, new_left, new_top);
+	struct wlr_scene_node *stn = &toplevel->scene_tree->node;
+	if (stn->x != new_left || stn->y != new_top) {
+		wlr_scene_node_set_position(stn, new_left, new_top);
+		if (toplevel->node->output)
+			effects_dirty_corner_masks(toplevel->node->output);
+	}
 	wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, new_width, new_height);
 
 	// update borders
@@ -462,10 +495,16 @@ static void process_cursor_resize(void) {
 		if (client->border_radius > 0.0f && toplevel->rounded) {
 			int new_fw = new_width + 2 * (int)bw;
 			int new_fh = new_height + 2 * (int)bw;
-			if (new_fw > 0 && new_fh > 0 && (toplevel->rounded->border_shader_buf_w != new_fw ||
-					toplevel->rounded->border_shader_buf_h != new_fh)) {
-				toplevel->rounded->border_dirty = true;
-				toplevel->rounded->corner_mask_dirty = true;
+			if (new_fw > 0 && new_fh > 0) {
+				float scale = toplevel->node && toplevel->node->output ?
+					toplevel->node->output->wlr_output->scale : 1.0f;
+				int pfw = (int)((double)new_fw * scale + 0.5);
+				int pfh = (int)((double)new_fh * scale + 0.5);
+				if (toplevel->rounded->border_shader_buf_w != pfw ||
+						toplevel->rounded->border_shader_buf_h != pfh) {
+					toplevel->rounded->border_dirty = true;
+					toplevel->rounded->corner_mask_dirty = true;
+				}
 			}
 		}
 	}

@@ -32,6 +32,8 @@ const struct wlr_drm_format_set *wlr_renderer_get_render_formats(struct wlr_rend
 #include "vk_blur_gauss_h_frag_src.h"
 #include "vk_blur_gauss_v_frag_src.h"
 #include "vk_blur_kawase_frag_src.h"
+#include "vk_blur_down_frag_src.h"
+#include "vk_blur_up_frag_src.h"
 #include "vk_blur_mica_frag_src.h"
 #include "vk_blur_refraction_frag_src.h"
 #include "vk_border_corner_mask_frag_src.h"
@@ -66,6 +68,17 @@ union vk_push_data {
 		float br;
 		float cont;
 	} kawase;
+	struct {
+		float hp[2];
+		float off;
+		float adjust;
+		float sat;
+		float vib;
+		float vd;
+		float br;
+		float cont;
+		float noise;
+	} pyramid;
 	struct {
 		float texel[2];
 		float radius;
@@ -160,6 +173,8 @@ struct vk_data {
 	VkShaderModule vert_module;
 	VkShaderModule frag_blit;
 	VkShaderModule frag_kawase;
+	VkShaderModule frag_blur_down;
+	VkShaderModule frag_blur_up;
 	VkShaderModule frag_gauss_h, frag_gauss_v;
 	VkShaderModule frag_box_h, frag_box_v;
 	VkShaderModule frag_mica;
@@ -171,6 +186,8 @@ struct vk_data {
 
 	VkPipeline pipe_blit;
 	VkPipeline pipe_kawase;
+	VkPipeline pipe_blur_down;
+	VkPipeline pipe_blur_up;
 	VkPipeline pipe_gauss_h, pipe_gauss_v;
 	VkPipeline pipe_box_h, pipe_box_v;
 	VkPipeline pipe_mica;
@@ -706,6 +723,39 @@ static VkImage vk_img_of(uint64_t h) {
 	return (VkImage)h;
 }
 
+static struct vk_fbo *vk_ensure_blur_level(be_output_state_t *state, int i, int w, int h) {
+	if (w <= 0 || h <= 0)
+		return NULL;
+	be_buffer_t *lv = &state->blur_levels[i];
+	if (lv->native_handle[0] && lv->width == w && lv->height == h)
+		return vk_fbo_of(lv->native_handle[0]);
+	if (lv->native_handle[0]) {
+		vk_destroy_fbo(vk_fbo_of(lv->native_handle[0]));
+		free(vk_fbo_of(lv->native_handle[0]));
+		lv->native_handle[0] = lv->native_handle[1] = 0;
+	}
+	struct vk_fbo *fbo = calloc(1, sizeof(*fbo));
+	if (!fbo || !vk_create_fbo(w, h, vk->vk_fmt, fbo)) {
+		free(fbo);
+		return NULL;
+	}
+	lv->native_handle[0] = (uint64_t)(intptr_t)fbo;
+	lv->native_handle[1] = (uint64_t)fbo->img.image;
+	lv->width = w;
+	lv->height = h;
+	return fbo;
+}
+
+static void vk_destroy_blur_levels(be_output_state_t *state) {
+	for (int i = 0; i < BLUR_MAX_LEVELS; i++) {
+		if (state->blur_levels[i].native_handle[0]) {
+			vk_destroy_fbo(vk_fbo_of(state->blur_levels[i].native_handle[0]));
+			free(vk_fbo_of(state->blur_levels[i].native_handle[0]));
+		}
+	}
+	memset(state->blur_levels, 0, sizeof(state->blur_levels));
+}
+
 static bool vk_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 	vk = calloc(1, sizeof(struct vk_data));
 	if (!vk)
@@ -883,6 +933,8 @@ static bool vk_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 	shader_entry_t frag_shaders[] = {
 		{vk_blit_frag_src, &vk->frag_blit},
 		{vk_blur_kawase_frag_src, &vk->frag_kawase},
+		{vk_blur_down_frag_src, &vk->frag_blur_down},
+		{vk_blur_up_frag_src, &vk->frag_blur_up},
 		{vk_blur_gauss_h_frag_src, &vk->frag_gauss_h},
 		{vk_blur_gauss_v_frag_src, &vk->frag_gauss_v},
 		{vk_blur_box_h_frag_src, &vk->frag_box_h},
@@ -911,6 +963,8 @@ static bool vk_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 	pipe_entry_t pipelines[] = {
 		{vk->frag_blit, &vk->pipe_blit, false, false},
 		{vk->frag_kawase, &vk->pipe_kawase, false, false},
+		{vk->frag_blur_down, &vk->pipe_blur_down, false, false},
+		{vk->frag_blur_up, &vk->pipe_blur_up, false, false},
 		{vk->frag_gauss_h, &vk->pipe_gauss_h, false, false},
 		{vk->frag_gauss_v, &vk->pipe_gauss_v, false, false},
 		{vk->frag_box_h, &vk->pipe_box_h, false, false},
@@ -927,7 +981,8 @@ static bool vk_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 		*pipelines[i].dest = vk_create_pipe(pipelines[i].frag, pipelines[i].border_layout,
 			pipelines[i].corner_mask);
 
-	if (!vk->pipe_blit || !vk->pipe_kawase || !vk->pipe_corner_mask || !vk->pipe_corner_mask_clear) {
+	if (!vk->pipe_blit || !vk->pipe_kawase || !vk->pipe_blur_down || !vk->pipe_blur_up ||
+			!vk->pipe_corner_mask || !vk->pipe_corner_mask_clear) {
 		wlr_log(WLR_ERROR, "vk: pipelines failed to create");
 		return false;
 	}
@@ -1217,6 +1272,8 @@ static void vk_fini(void) {
 	VkPipeline *destroy_pipes[] = {
 		&vk->pipe_blit,
 		&vk->pipe_kawase,
+		&vk->pipe_blur_down,
+		&vk->pipe_blur_up,
 		&vk->pipe_gauss_h,
 		&vk->pipe_gauss_v,
 		&vk->pipe_box_h,
@@ -1233,6 +1290,8 @@ static void vk_fini(void) {
 		&vk->vert_module,
 		&vk->frag_blit,
 		&vk->frag_kawase,
+		&vk->frag_blur_down,
+		&vk->frag_blur_up,
 		&vk->frag_gauss_h,
 		&vk->frag_gauss_v,
 		&vk->frag_box_h,
@@ -1389,6 +1448,7 @@ static void vk_output_fini(be_output_state_t *state) {
 		vk_destroy_image(staging);
 		free(staging);
 	}
+	vk_destroy_blur_levels(state);
 	memset(&state->ping, 0, sizeof(state->ping));
 	memset(&state->pong, 0, sizeof(state->pong));
 	memset(&state->staging, 0, sizeof(state->staging));
@@ -1646,19 +1706,152 @@ static bool vk_blit(uint64_t src_tex, uint64_t dst_fbo, int w, int h, const pixm
 	return true;
 }
 
+static void vk_transition_to_shader_read_after_draw(VkImage image) {
+	VkImageMemoryBarrier barrier = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+		.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+		.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		.image = image,
+		.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+		.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+	};
+	vkCmdPipelineBarrier(vk->frame_cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+}
+
+static int vk_scissor_boxes(const pixman_box32_t *scissor, int n_scissor, int w, int h,
+		VkRect2D *out, int max) {
+	int n = 0;
+	for (int i = 0; i < n_scissor && n < max; i++) {
+		int x1 = scissor[i].x1;
+		int y1 = scissor[i].y1;
+		int x2 = scissor[i].x2;
+		int y2 = scissor[i].y2;
+		if (x1 < 0)
+			x1 = 0;
+		if (y1 < 0)
+			y1 = 0;
+		if (x2 > w)
+			x2 = w;
+		if (y2 > h)
+			y2 = h;
+		if (x2 <= x1 || y2 <= y1)
+			continue;
+		out[n].offset.x = x1;
+		out[n].offset.y = y1;
+		out[n].extent.width = (uint32_t)(x2 - x1);
+		out[n].extent.height = (uint32_t)(y2 - y1);
+		n++;
+	}
+	return n;
+}
+
 static bool vk_blur(be_output_state_t *state, uint64_t src_handle, int src_w, int src_h,
-		struct be_blur_params *p, uint64_t *out_handle) {
+		struct be_blur_params *p, uint64_t dst_fbo, const pixman_box32_t *scissor, int n_scissor,
+		uint64_t *out_handle) {
 	if (p->passes <= 0 || p->algorithm == BLUR_ALGORITHM_NONE) {
-		*out_handle = src_handle;
+		if (dst_fbo) {
+			vk_blit(src_handle, dst_fbo, src_w, src_h, NULL, 0);
+			if (out_handle)
+				*out_handle = 0;
+		} else {
+			*out_handle = src_handle;
+		}
 		return true;
 	}
+
 	VkImage current = vk_img_of(src_handle);
 	struct vk_fbo *fbo0 = vk_fbo_of(state->ping.native_handle[0]);
 	struct vk_fbo *fbo1 = vk_fbo_of(state->pong.native_handle[0]);
 	VkImage tex0 = vk_img_of(state->ping.native_handle[1]);
 	VkImage tex1 = vk_img_of(state->pong.native_handle[1]);
+	struct vk_fbo *dst = dst_fbo ? vk_fbo_of(dst_fbo) : NULL;
+	VkImage dst_img = dst ? dst->img.image : VK_NULL_HANDLE;
+
+	// full-res dual-kawase pyramid
+	if (p->full_res && p->algorithm == BLUR_ALGORITHM_KAWASE) {
+		int passes = p->passes > BLUR_MAX_LEVELS ? BLUR_MAX_LEVELS : p->passes;
+		VkImage level_img[BLUR_MAX_LEVELS];
+		int lw[BLUR_MAX_LEVELS], lh[BLUR_MAX_LEVELS];
+		VkImage cur_img = vk_img_of(src_handle);
+		int cur_w = src_w, cur_h = src_h;
+
+		for (int i = 0; i < passes; i++) {
+			int dw = cur_w > 1 ? cur_w / 2 : 1;
+			int dh = cur_h > 1 ? cur_h / 2 : 1;
+			struct vk_fbo *lfbo = vk_ensure_blur_level(state, i, dw, dh);
+			if (!lfbo)
+				return false;
+			level_img[i] = lfbo->img.image;
+			lw[i] = dw;
+			lh[i] = dh;
+
+			union vk_push_data pc = {
+				{
+					{0}
+				}
+			};
+			pc.pyramid.hp[0] = 0.5f / dw;
+			pc.pyramid.hp[1] = 0.5f / dh;
+			pc.pyramid.off = p->offset;
+			vk_draw_full(vk->pipe_blur_down, cur_img, lfbo->fb, dw, dh, lfbo->img.image, &pc, 128, NULL, 0);
+			cur_img = level_img[i];
+			cur_w = dw;
+			cur_h = dh;
+		}
+
+		struct vk_fbo *final_fbo = dst;
+		VkImage final_img = dst_img;
+		if (!final_fbo)
+			final_fbo = fbo0;
+		if (!final_img)
+			final_img = tex0;
+		for (int i = passes - 1; i >= 0; i--) {
+			bool final = (i == 0);
+			int uw = final ? src_w : lw[i - 1];
+			int uh = final ? src_h : lh[i - 1];
+			struct vk_fbo *dfbo = final ? final_fbo : vk_ensure_blur_level(state, i - 1, uw, uh);
+			if (!dfbo)
+				return false;
+			VkImage dimg = dfbo->img.image;
+
+			union vk_push_data pc = {
+				{
+					{0}
+				}
+			};
+			pc.pyramid.hp[0] = 0.5f / lw[i];
+			pc.pyramid.hp[1] = 0.5f / lh[i];
+			pc.pyramid.off = p->offset;
+			pc.pyramid.adjust = final ? 1.0f : 0.0f;
+			pc.pyramid.sat = p->saturation;
+			pc.pyramid.vib = p->vibrancy;
+			pc.pyramid.vd = p->vibrancy_darkness;
+			pc.pyramid.br = p->brightness;
+			pc.pyramid.cont = p->contrast;
+			pc.pyramid.noise = p->noise_strength;
+			vk_draw_full(vk->pipe_blur_up, cur_img, dfbo->fb, uw, uh, dimg, &pc, 128, NULL, 0);
+			cur_img = dimg;
+		}
+
+		if (dst_fbo) {
+			vk_transition_to_shader_read_after_draw(dst_img);
+			if (out_handle)
+				*out_handle = 0;
+		} else {
+			*out_handle = (uint64_t)tex0;
+		}
+		return true;
+	}
+
+	VkRect2D sc[64];
+	int n_sc = (scissor && n_scissor > 0) ? vk_scissor_boxes(scissor, n_scissor, src_w, src_h, sc, 64)
+		: 0;
+	VkRect2D *scp = n_sc ? sc : NULL;
 
 	for (int i = 0; i < p->passes; i++) {
+		bool last = dst && (i == p->passes - 1);
 		if (p->algorithm == BLUR_ALGORITHM_GAUSSIAN) {
 			union vk_push_data pc = {
 				{
@@ -1673,10 +1866,16 @@ static bool vk_blur(be_output_state_t *state, uint64_t src_handle, int src_w, in
 			pc.gauss.vd = p->vibrancy_darkness;
 			pc.gauss.br = p->brightness;
 			pc.gauss.cont = p->contrast;
-			vk_draw_full(vk->pipe_gauss_h, current, fbo0->fb, src_w, src_h, fbo0->img.image, &pc, 128, NULL,
-				0);
-			vk_draw_full(vk->pipe_gauss_v, tex0, fbo1->fb, src_w, src_h, fbo1->img.image, &pc, 128, NULL, 0);
-			current = tex1;
+			vk_draw_full(vk->pipe_gauss_h, current, fbo0->fb, src_w, src_h, fbo0->img.image, &pc, 128, scp,
+				n_sc);
+			if (last) {
+				vk_draw_full(vk->pipe_gauss_v, tex0, dst->fb, src_w, src_h, dst_img, &pc, 128, scp, n_sc);
+				current = dst_img;
+			} else {
+				vk_draw_full(vk->pipe_gauss_v, tex0, fbo1->fb, src_w, src_h, fbo1->img.image, &pc, 128, scp,
+					n_sc);
+				current = tex1;
+			}
 		} else if (p->algorithm == BLUR_ALGORITHM_BOX) {
 			union vk_push_data pc = {
 				{
@@ -1691,15 +1890,25 @@ static bool vk_blur(be_output_state_t *state, uint64_t src_handle, int src_w, in
 			pc.gauss.vd = p->vibrancy_darkness;
 			pc.gauss.br = p->brightness;
 			pc.gauss.cont = p->contrast;
-			vk_draw_full(vk->pipe_box_h, current, fbo0->fb, src_w, src_h, fbo0->img.image, &pc, 128, NULL,
-				0);
-			vk_draw_full(vk->pipe_box_v, tex0, fbo1->fb, src_w, src_h, fbo1->img.image, &pc, 128, NULL, 0);
-			current = tex1;
+			vk_draw_full(vk->pipe_box_h, current, fbo0->fb, src_w, src_h, fbo0->img.image, &pc, 128, scp,
+				n_sc);
+			if (last) {
+				vk_draw_full(vk->pipe_box_v, tex0, dst->fb, src_w, src_h, dst_img, &pc, 128, scp, n_sc);
+				current = dst_img;
+			} else {
+				vk_draw_full(vk->pipe_box_v, tex0, fbo1->fb, src_w, src_h, fbo1->img.image, &pc, 128, scp,
+					n_sc);
+				current = tex1;
+			}
 		} else if (p->algorithm == BLUR_ALGORITHM_REFRACTION ||
 				p->algorithm == BLUR_ALGORITHM_LENS_REFRACTION) {
 			int mode = (p->algorithm == BLUR_ALGORITHM_LENS_REFRACTION) ? 1 : 0;
 			struct vk_fbo *dfbo = (i & 1) ? fbo1 : fbo0;
 			VkImage dimg = (i & 1) ? tex1 : tex0;
+			if (last) {
+				dfbo = dst;
+				dimg = dst_img;
+			}
 			union vk_push_data pc = {
 				{
 					{0}
@@ -1740,11 +1949,15 @@ static bool vk_blur(be_output_state_t *state, uint64_t src_handle, int src_w, in
 			pc.refraction.rm = p->refraction_texture_repeat_mode;
 			pc.refraction.mode = mode;
 			vk_draw_full(vk->pipe_refraction, current, dfbo->fb, src_w, src_h, dfbo->img.image, &pc, 128,
-				NULL, 0);
+				scp, n_sc);
 			current = dimg;
 		} else {
 			struct vk_fbo *dfbo = (i & 1) ? fbo1 : fbo0;
 			VkImage dimg = (i & 1) ? tex1 : tex0;
+			if (last) {
+				dfbo = dst;
+				dimg = dst_img;
+			}
 			union vk_push_data pc = {
 				{
 					{0}
@@ -1758,12 +1971,19 @@ static bool vk_blur(be_output_state_t *state, uint64_t src_handle, int src_w, in
 			pc.kawase.vd = p->vibrancy_darkness;
 			pc.kawase.br = p->brightness;
 			pc.kawase.cont = p->contrast;
-			vk_draw_full(vk->pipe_kawase, current, dfbo->fb, src_w, src_h, dfbo->img.image, &pc, 128, NULL,
-				0);
+			vk_draw_full(vk->pipe_kawase, current, dfbo->fb, src_w, src_h, dfbo->img.image, &pc, 128, scp,
+				n_sc);
 			current = dimg;
 		}
 	}
-	*out_handle = (uint64_t)current;
+
+	if (dst_fbo) {
+		vk_transition_to_shader_read_after_draw(dst_img);
+		if (out_handle)
+			*out_handle = 0;
+	} else {
+		*out_handle = (uint64_t)current;
+	}
 	return true;
 }
 
@@ -2033,7 +2253,7 @@ static bool vk_apply_corner_mask(be_output_state_t *state, uint64_t dst_fbo, int
 		0,
 		1
 	};
-	VkRect2D sc = {
+	VkRect2D full_sc = {
 		{0, 0},
 		{
 			(uint32_t)dst_w,
@@ -2042,13 +2262,13 @@ static bool vk_apply_corner_mask(be_output_state_t *state, uint64_t dst_fbo, int
 	};
 	vkCmdBeginRenderPass(vk->frame_cb, &rp, VK_SUBPASS_CONTENTS_INLINE);
 	vkCmdSetViewport(vk->frame_cb, 0, 1, &vp);
-	vkCmdSetScissor(vk->frame_cb, 0, 1, &sc);
 	vkCmdBindDescriptorSets(vk->frame_cb, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipe_layout, 0, 1, &ds,
 		0, NULL);
 	vkCmdPushConstants(vk->frame_cb, vk->pipe_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc),
 		&pc);
 	vkCmdBindPipeline(vk->frame_cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
 		p->pre_blit ? vk->pipe_corner_mask : vk->pipe_corner_mask_clear);
+	vkCmdSetScissor(vk->frame_cb, 0, 1, &full_sc);
 	vkCmdDraw(vk->frame_cb, 4, 1, 0, 0);
 	vkCmdEndRenderPass(vk->frame_cb);
 

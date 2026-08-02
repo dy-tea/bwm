@@ -27,6 +27,8 @@ const struct wlr_drm_format_set *wlr_renderer_get_render_formats(struct wlr_rend
 #include "gl_blur_gauss_h_frag_src.h"
 #include "gl_blur_gauss_v_frag_src.h"
 #include "gl_blur_kawase_frag_src.h"
+#include "gl_blur_down_frag_src.h"
+#include "gl_blur_up_frag_src.h"
 #include "gl_blur_mica_frag_src.h"
 #include "gl_blur_refraction_frag_src.h"
 #include "gl_border_corner_mask_frag_src.h"
@@ -44,6 +46,8 @@ struct gles2_data {
 	EGLContext egl_context;
 
 	GLuint prog_kawase;
+	GLuint prog_blur_down;
+	GLuint prog_blur_up;
 	GLuint prog_gauss_h, prog_gauss_v;
 	GLuint prog_box_h, prog_box_v;
 	GLuint prog_blit;
@@ -58,6 +62,13 @@ struct gles2_data {
 	struct {
 		GLint tex, halfpixel, offset, noise_strength, vibrancy, vibrancy_darkness, brightness, contrast;
 	} u_kawase;
+	struct {
+		GLint tex, halfpixel, offset;
+	} u_blur_down;
+	struct {
+		GLint tex, halfpixel, offset, adjust, saturation, noise_strength, vibrancy, vibrancy_darkness,
+			brightness, contrast;
+	} u_blur_up;
 	struct {
 		GLint tex, texel_size, radius, vibrancy, vibrancy_darkness, brightness, contrast;
 	} u_gauss;
@@ -211,6 +222,28 @@ static void destroy_fbo(GLuint *fbo, GLuint *tex) {
 	}
 }
 
+static GLuint gles2_ensure_blur_level(be_output_state_t *state, int i, int w, int h) {
+	if (w <= 0 || h <= 0)
+		return 0;
+	be_buffer_t *lv = &state->blur_levels[i];
+	if (lv->native_handle[0] && lv->width == w && lv->height == h)
+		return (GLuint)lv->native_handle[0];
+	if (lv->native_handle[0])
+		destroy_fbo((GLuint *)&lv->native_handle[0], (GLuint *)&lv->native_handle[1]);
+	if (!create_fbo(w, h, (GLuint *)&lv->native_handle[0], (GLuint *)&lv->native_handle[1]))
+		return 0;
+	lv->width = w;
+	lv->height = h;
+	return (GLuint)lv->native_handle[0];
+}
+
+static void gles2_destroy_blur_levels(be_output_state_t *state) {
+	for (int i = 0; i < BLUR_MAX_LEVELS; i++)
+		destroy_fbo((GLuint *)&state->blur_levels[i].native_handle[0],
+			(GLuint *)&state->blur_levels[i].native_handle[1]);
+	memset(state->blur_levels, 0, sizeof(state->blur_levels));
+}
+
 static void draw_quad(void) {
 	glBindBuffer(GL_ARRAY_BUFFER, g->vbo);
 	glEnableVertexAttribArray(g->attr_pos);
@@ -220,8 +253,23 @@ static void draw_quad(void) {
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
+// draw the full-screen quad once, or once per scissor box (y-flipped to GL coords).
+static void draw_quad_scissored(const pixman_box32_t *scissor, int n_scissor, int h) {
+	if (n_scissor > 0 && scissor) {
+		glEnable(GL_SCISSOR_TEST);
+		for (int i = 0; i < n_scissor; i++) {
+			glScissor(scissor[i].x1, h - scissor[i].y2, scissor[i].x2 - scissor[i].x1,
+				scissor[i].y2 - scissor[i].y1);
+			draw_quad();
+		}
+		glDisable(GL_SCISSOR_TEST);
+	} else {
+		draw_quad();
+	}
+}
+
 static void blur_pass(GLuint src_tex, GLuint dst_fbo, int w, int h, int pass_index,
-		struct be_blur_params *p) {
+		struct be_blur_params *p, const pixman_box32_t *scissor, int n_scissor) {
 	glBindFramebuffer(GL_FRAMEBUFFER, dst_fbo);
 	glViewport(0, 0, w, h);
 	glActiveTexture(GL_TEXTURE0);
@@ -242,12 +290,12 @@ static void blur_pass(GLuint src_tex, GLuint dst_fbo, int w, int h, int pass_ind
 	if (g->u_kawase.contrast >= 0)
 		glUniform1f(g->u_kawase.contrast, p->contrast);
 
-	draw_quad();
+	draw_quad_scissored(scissor, n_scissor, h);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 static void refraction_pass(GLuint src_tex, GLuint dst_fbo, int w, int h, struct be_blur_params *p,
-		int refraction_mode) {
+		int refraction_mode, const pixman_box32_t *scissor, int n_scissor) {
 	glBindFramebuffer(GL_FRAMEBUFFER, dst_fbo);
 	glViewport(0, 0, w, h);
 	glActiveTexture(GL_TEXTURE0);
@@ -306,90 +354,64 @@ static void refraction_pass(GLuint src_tex, GLuint dst_fbo, int w, int h, struct
 	if (g->u_refraction.refraction_mode >= 0)
 		glUniform1i(g->u_refraction.refraction_mode, refraction_mode);
 
-	draw_quad();
+	draw_quad_scissored(scissor, n_scissor, h);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+static void box_pass_dir(GLuint prog, GLuint src_tex, GLuint dst_fbo, int w, int h,
+		struct be_blur_params *p, const pixman_box32_t *scissor, int n_scissor) {
+	glBindFramebuffer(GL_FRAMEBUFFER, dst_fbo);
+	glViewport(0, 0, w, h);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, src_tex);
+	glUseProgram(prog);
+	glUniform1i(g->u_box.tex, 0);
+	glUniform2f(g->u_box.texel_size, 1.0f / w, 1.0f / h);
+	glUniform1f(g->u_box.radius, p->radius);
+	if (g->u_box.vibrancy >= 0)
+		glUniform1f(g->u_box.vibrancy, p->vibrancy);
+	if (g->u_box.vibrancy_darkness >= 0)
+		glUniform1f(g->u_box.vibrancy_darkness, p->vibrancy_darkness);
+	if (g->u_box.brightness >= 0)
+		glUniform1f(g->u_box.brightness, p->brightness);
+	if (g->u_box.contrast >= 0)
+		glUniform1f(g->u_box.contrast, p->contrast);
+	draw_quad_scissored(scissor, n_scissor, h);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 static void box_pass(GLuint src_tex, GLuint ping_fbo, GLuint ping_tex, GLuint pong_fbo, int w, int h,
-		struct be_blur_params *p) {
-	glBindFramebuffer(GL_FRAMEBUFFER, ping_fbo);
+		struct be_blur_params *p, const pixman_box32_t *scissor, int n_scissor) {
+	box_pass_dir(g->prog_box_h, src_tex, ping_fbo, w, h, p, scissor, n_scissor);
+	box_pass_dir(g->prog_box_v, ping_tex, pong_fbo, w, h, p, scissor, n_scissor);
+}
+
+static void gaussian_pass_dir(GLuint prog, GLuint src_tex, GLuint dst_fbo, int w, int h,
+		struct be_blur_params *p, const pixman_box32_t *scissor, int n_scissor) {
+	glBindFramebuffer(GL_FRAMEBUFFER, dst_fbo);
 	glViewport(0, 0, w, h);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, src_tex);
-	glUseProgram(g->prog_box_h);
-	glUniform1i(g->u_box.tex, 0);
-	glUniform2f(g->u_box.texel_size, 1.0f / w, 1.0f / h);
-	glUniform1f(g->u_box.radius, p->radius);
-	if (g->u_box.vibrancy >= 0)
-		glUniform1f(g->u_box.vibrancy, p->vibrancy);
-	if (g->u_box.vibrancy_darkness >= 0)
-		glUniform1f(g->u_box.vibrancy_darkness, p->vibrancy_darkness);
-	if (g->u_box.brightness >= 0)
-		glUniform1f(g->u_box.brightness, p->brightness);
-	if (g->u_box.contrast >= 0)
-		glUniform1f(g->u_box.contrast, p->contrast);
-	draw_quad();
-
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-	glBindFramebuffer(GL_FRAMEBUFFER, pong_fbo);
-	glBindTexture(GL_TEXTURE_2D, ping_tex);
-	glUseProgram(g->prog_box_v);
-	glUniform1i(g->u_box.tex, 0);
-	glUniform2f(g->u_box.texel_size, 1.0f / w, 1.0f / h);
-	glUniform1f(g->u_box.radius, p->radius);
-	if (g->u_box.vibrancy >= 0)
-		glUniform1f(g->u_box.vibrancy, p->vibrancy);
-	if (g->u_box.vibrancy_darkness >= 0)
-		glUniform1f(g->u_box.vibrancy_darkness, p->vibrancy_darkness);
-	if (g->u_box.brightness >= 0)
-		glUniform1f(g->u_box.brightness, p->brightness);
-	if (g->u_box.contrast >= 0)
-		glUniform1f(g->u_box.contrast, p->contrast);
-	draw_quad();
-
+	glUseProgram(prog);
+	glUniform1i(g->u_gauss.tex, 0);
+	glUniform2f(g->u_gauss.texel_size, 1.0f / w, 1.0f / h);
+	glUniform1f(g->u_gauss.radius, p->radius);
+	if (g->u_gauss.vibrancy >= 0)
+		glUniform1f(g->u_gauss.vibrancy, p->vibrancy);
+	if (g->u_gauss.vibrancy_darkness >= 0)
+		glUniform1f(g->u_gauss.vibrancy_darkness, p->vibrancy_darkness);
+	if (g->u_gauss.brightness >= 0)
+		glUniform1f(g->u_gauss.brightness, p->brightness);
+	if (g->u_gauss.contrast >= 0)
+		glUniform1f(g->u_gauss.contrast, p->contrast);
+	draw_quad_scissored(scissor, n_scissor, h);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 static void gaussian_pass(GLuint src_tex, GLuint ping_fbo, GLuint ping_tex, GLuint pong_fbo, int w,
-		int h, struct be_blur_params *p) {
-	glBindFramebuffer(GL_FRAMEBUFFER, ping_fbo);
-	glViewport(0, 0, w, h);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, src_tex);
-	glUseProgram(g->prog_gauss_h);
-	glUniform1i(g->u_gauss.tex, 0);
-	glUniform2f(g->u_gauss.texel_size, 1.0f / w, 1.0f / h);
-	glUniform1f(g->u_gauss.radius, p->radius);
-	if (g->u_gauss.vibrancy >= 0)
-		glUniform1f(g->u_gauss.vibrancy, p->vibrancy);
-	if (g->u_gauss.vibrancy_darkness >= 0)
-		glUniform1f(g->u_gauss.vibrancy_darkness, p->vibrancy_darkness);
-	if (g->u_gauss.brightness >= 0)
-		glUniform1f(g->u_gauss.brightness, p->brightness);
-	if (g->u_gauss.contrast >= 0)
-		glUniform1f(g->u_gauss.contrast, p->contrast);
-	draw_quad();
-
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-	glBindFramebuffer(GL_FRAMEBUFFER, pong_fbo);
-	glBindTexture(GL_TEXTURE_2D, ping_tex);
-	glUseProgram(g->prog_gauss_v);
-	glUniform1i(g->u_gauss.tex, 0);
-	glUniform2f(g->u_gauss.texel_size, 1.0f / w, 1.0f / h);
-	glUniform1f(g->u_gauss.radius, p->radius);
-	if (g->u_gauss.vibrancy >= 0)
-		glUniform1f(g->u_gauss.vibrancy, p->vibrancy);
-	if (g->u_gauss.vibrancy_darkness >= 0)
-		glUniform1f(g->u_gauss.vibrancy_darkness, p->vibrancy_darkness);
-	if (g->u_gauss.brightness >= 0)
-		glUniform1f(g->u_gauss.brightness, p->brightness);
-	if (g->u_gauss.contrast >= 0)
-		glUniform1f(g->u_gauss.contrast, p->contrast);
-	draw_quad();
-
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		int h, struct be_blur_params *p, const pixman_box32_t *scissor, int n_scissor) {
+	gaussian_pass_dir(g->prog_gauss_h, src_tex, ping_fbo, w, h, p, scissor, n_scissor);
+	gaussian_pass_dir(g->prog_gauss_v, ping_tex, pong_fbo, w, h, p, scissor, n_scissor);
 }
 
 static bool gles2_init(struct wlr_renderer *r, struct wlr_allocator *a) {
@@ -431,6 +453,8 @@ static bool gles2_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 	}
 
 	g->prog_kawase = link_program(gl_blur_kawase_frag_src);
+	g->prog_blur_down = link_program(gl_blur_down_frag_src);
+	g->prog_blur_up = link_program(gl_blur_up_frag_src);
 	g->prog_gauss_h = link_program(gl_blur_gauss_h_frag_src);
 	g->prog_gauss_v = link_program(gl_blur_gauss_v_frag_src);
 	g->prog_box_h = link_program(gl_blur_box_h_frag_src);
@@ -444,8 +468,9 @@ static bool gles2_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 	g->prog_corner_mask = link_program(gl_border_corner_mask_frag_src);
 	g->prog_shadow = link_program(gl_shadow_frag_src);
 
-	if (!g->prog_kawase || !g->prog_gauss_h || !g->prog_gauss_v || !g->prog_box_h || !g->prog_box_v ||
-			!g->prog_blit || !g->prog_mica_tint || !g->prog_acrylic_tint || !g->prog_refraction) {
+	if (!g->prog_kawase || !g->prog_blur_down || !g->prog_blur_up || !g->prog_gauss_h || !g->prog_gauss_v ||
+			!g->prog_box_h || !g->prog_box_v || !g->prog_blit || !g->prog_mica_tint || !g->prog_acrylic_tint ||
+			!g->prog_refraction) {
 		wlr_log(WLR_ERROR, "gles2: one or more required shaders failed to compile");
 		egl_unset_current();
 		free(g);
@@ -461,6 +486,21 @@ static bool gles2_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 	g->u_kawase.vibrancy_darkness = glGetUniformLocation(g->prog_kawase, "vibrancy_darkness");
 	g->u_kawase.brightness = glGetUniformLocation(g->prog_kawase, "brightness");
 	g->u_kawase.contrast = glGetUniformLocation(g->prog_kawase, "contrast");
+
+	g->u_blur_down.tex = glGetUniformLocation(g->prog_blur_down, "tex");
+	g->u_blur_down.halfpixel = glGetUniformLocation(g->prog_blur_down, "halfpixel");
+	g->u_blur_down.offset = glGetUniformLocation(g->prog_blur_down, "offset");
+
+	g->u_blur_up.tex = glGetUniformLocation(g->prog_blur_up, "tex");
+	g->u_blur_up.halfpixel = glGetUniformLocation(g->prog_blur_up, "halfpixel");
+	g->u_blur_up.offset = glGetUniformLocation(g->prog_blur_up, "offset");
+	g->u_blur_up.adjust = glGetUniformLocation(g->prog_blur_up, "adjust");
+	g->u_blur_up.saturation = glGetUniformLocation(g->prog_blur_up, "saturation");
+	g->u_blur_up.noise_strength = glGetUniformLocation(g->prog_blur_up, "noise_strength");
+	g->u_blur_up.vibrancy = glGetUniformLocation(g->prog_blur_up, "vibrancy");
+	g->u_blur_up.vibrancy_darkness = glGetUniformLocation(g->prog_blur_up, "vibrancy_darkness");
+	g->u_blur_up.brightness = glGetUniformLocation(g->prog_blur_up, "brightness");
+	g->u_blur_up.contrast = glGetUniformLocation(g->prog_blur_up, "contrast");
 
 	g->u_gauss.tex = glGetUniformLocation(g->prog_gauss_h, "tex");
 	g->u_gauss.texel_size = glGetUniformLocation(g->prog_gauss_h, "texel_size");
@@ -636,6 +676,7 @@ static void gles2_output_fini(be_output_state_t *state) {
 		(GLuint *)&state->screen_shader.native_handle[1]);
 	destroy_fbo((GLuint *)&state->staging.native_handle[0],
 		(GLuint *)&state->staging.native_handle[1]);
+	gles2_destroy_blur_levels(state);
 	egl_unset_current();
 }
 
@@ -648,6 +689,7 @@ static void gles2_output_resize(be_output_state_t *state, int width, int height,
 		(GLuint *)&state->screen_shader.native_handle[1]);
 	destroy_fbo((GLuint *)&state->staging.native_handle[0],
 		(GLuint *)&state->staging.native_handle[1]);
+	gles2_destroy_blur_levels(state);
 	create_fbo(blur_w, blur_h, (GLuint *)&state->ping.native_handle[0],
 		(GLuint *)&state->ping.native_handle[1]);
 	create_fbo(blur_w, blur_h, (GLuint *)&state->pong.native_handle[0],
@@ -739,9 +781,88 @@ static bool gles2_blit(uint64_t src_tex, uint64_t dst_fbo, int w, int h,
 }
 
 static bool gles2_blur(be_output_state_t *state, uint64_t src_handle, int src_w, int src_h,
-		struct be_blur_params *p, uint64_t *out_handle) {
+		struct be_blur_params *p, uint64_t dst_fbo, const pixman_box32_t *scissor, int n_scissor,
+		uint64_t *out_handle) {
+	GLuint dst = (GLuint)dst_fbo;
+
 	if (p->passes <= 0 || p->algorithm == BLUR_ALGORITHM_NONE) {
-		*out_handle = src_handle;
+		if (dst) {
+			gles2_blit(src_handle, dst_fbo, src_w, src_h, NULL, 0);
+			if (out_handle)
+				*out_handle = 0;
+		} else {
+			*out_handle = src_handle;
+		}
+		return true;
+	}
+
+	// full-res dual-kawase pyramid
+	if (p->full_res && p->algorithm == BLUR_ALGORITHM_KAWASE) {
+		int passes = p->passes > BLUR_MAX_LEVELS ? BLUR_MAX_LEVELS : p->passes;
+		GLuint level_fbo[BLUR_MAX_LEVELS];
+		GLuint level_tex[BLUR_MAX_LEVELS];
+		int lw[BLUR_MAX_LEVELS], lh[BLUR_MAX_LEVELS];
+		GLuint cur_tex = (GLuint)src_handle;
+		int cur_w = src_w, cur_h = src_h;
+
+		for (int i = 0; i < passes; i++) {
+			int dw = cur_w > 1 ? cur_w / 2 : 1;
+			int dh = cur_h > 1 ? cur_h / 2 : 1;
+			GLuint fbo = gles2_ensure_blur_level(state, i, dw, dh);
+			if (!fbo)
+				return false;
+			level_fbo[i] = fbo;
+			level_tex[i] = (GLuint)state->blur_levels[i].native_handle[1];
+			lw[i] = dw;
+			lh[i] = dh;
+
+			glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+			glViewport(0, 0, dw, dh);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, cur_tex);
+			glUseProgram(g->prog_blur_down);
+			glUniform1i(g->u_blur_down.tex, 0);
+			glUniform2f(g->u_blur_down.halfpixel, 0.5f / dw, 0.5f / dh);
+			glUniform1f(g->u_blur_down.offset, p->offset);
+			draw_quad();
+
+			cur_tex = level_tex[i];
+			cur_w = dw;
+			cur_h = dh;
+		}
+
+		for (int i = passes - 1; i >= 0; i--) {
+			bool final = (i == 0);
+			int uw = final ? src_w : lw[i - 1];
+			int uh = final ? src_h : lh[i - 1];
+			GLuint target = final ? (dst ? dst : (GLuint)state->ping.native_handle[0])
+				: level_fbo[i - 1];
+
+			glBindFramebuffer(GL_FRAMEBUFFER, target);
+			glViewport(0, 0, uw, uh);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, cur_tex);
+			glUseProgram(g->prog_blur_up);
+			glUniform1i(g->u_blur_up.tex, 0);
+			glUniform2f(g->u_blur_up.halfpixel, 0.5f / lw[i], 0.5f / lh[i]);
+			glUniform1f(g->u_blur_up.offset, p->offset);
+			glUniform1f(g->u_blur_up.adjust, final ? 1.0f : 0.0f);
+			glUniform1f(g->u_blur_up.saturation, p->saturation);
+			glUniform1f(g->u_blur_up.noise_strength, p->noise_strength);
+			glUniform1f(g->u_blur_up.vibrancy, p->vibrancy);
+			glUniform1f(g->u_blur_up.vibrancy_darkness, p->vibrancy_darkness);
+			glUniform1f(g->u_blur_up.brightness, p->brightness);
+			glUniform1f(g->u_blur_up.contrast, p->contrast);
+			draw_quad();
+
+			if (final)
+				cur_tex = dst ? 0 : (GLuint)state->ping.native_handle[1];
+			else
+				cur_tex = level_tex[i - 1];
+		}
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		if (out_handle)
+			*out_handle = dst ? 0 : (uint64_t)state->ping.native_handle[1];
 		return true;
 	}
 
@@ -754,42 +875,42 @@ static bool gles2_blur(be_output_state_t *state, uint64_t src_handle, int src_w,
 	GLuint tex1 = (GLuint)state->pong.native_handle[1];
 
 	for (int i = 0; i < p->passes; i++) {
+		bool last = dst && (i == p->passes - 1);
 		int pong = ping ^ 1;
 		if (p->algorithm == BLUR_ALGORITHM_GAUSSIAN) {
-			gaussian_pass(current, fbo0, tex0, fbo1, src_w, src_h, p);
-			current = tex1;
+			if (last) {
+				gaussian_pass_dir(g->prog_gauss_h, current, fbo0, src_w, src_h, p, scissor, n_scissor);
+				gaussian_pass_dir(g->prog_gauss_v, tex0, dst, src_w, src_h, p, scissor, n_scissor);
+				current = dst;
+			} else {
+				gaussian_pass(current, fbo0, tex0, fbo1, src_w, src_h, p, scissor, n_scissor);
+				current = tex1;
+			}
 		} else if (p->algorithm == BLUR_ALGORITHM_BOX) {
-			box_pass(current, fbo0, tex0, fbo1, src_w, src_h, p);
-			current = tex1;
+			if (last) {
+				box_pass_dir(g->prog_box_h, current, fbo0, src_w, src_h, p, scissor, n_scissor);
+				box_pass_dir(g->prog_box_v, tex0, dst, src_w, src_h, p, scissor, n_scissor);
+				current = dst;
+			} else {
+				box_pass(current, fbo0, tex0, fbo1, src_w, src_h, p, scissor, n_scissor);
+				current = tex1;
+			}
 		} else if (p->algorithm == BLUR_ALGORITHM_REFRACTION ||
 				p->algorithm == BLUR_ALGORITHM_LENS_REFRACTION) {
 			int mode = (p->algorithm == BLUR_ALGORITHM_LENS_REFRACTION) ? 1 : 0;
-			refraction_pass(current, pong ? fbo1 : fbo0, src_w, src_h, p, mode);
-			current = pong ? tex1 : tex0;
+			refraction_pass(current, last ? dst : (pong ? fbo1 : fbo0), src_w, src_h, p, mode, scissor,
+				n_scissor);
+			current = last ? dst : (pong ? tex1 : tex0);
 			ping = pong;
 		} else {
-			blur_pass(current, ping ? fbo1 : fbo0, src_w, src_h, i, p);
-			current = ping ? tex1 : tex0;
+			blur_pass(current, last ? dst : (ping ? fbo1 : fbo0), src_w, src_h, i, p, scissor, n_scissor);
+			current = last ? dst : (ping ? tex1 : tex0);
 			ping ^= 1;
 		}
 	}
 
-	// if the result ended up in the same texture as src,
-	// blit to the other buffer to preserve the source
-	if (current == (GLuint)src_handle) {
-		GLuint other_fbo = (tex0 == (GLuint)src_handle) ? fbo1 : fbo0;
-		GLuint other_tex = (tex0 == (GLuint)src_handle) ? tex1 : tex0;
-		glBindFramebuffer(GL_FRAMEBUFFER, other_fbo);
-		glViewport(0, 0, src_w, src_h);
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, current);
-		glUseProgram(g->prog_blit);
-		glUniform1i(g->u_blit.tex, 0);
-		draw_quad();
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		current = other_tex;
-	}
-	*out_handle = (uint64_t)current;
+	if (out_handle)
+		*out_handle = dst ? 0 : (uint64_t)current;
 	return true;
 }
 
@@ -822,7 +943,7 @@ static bool gles2_apply_acrylic(be_output_state_t *state, uint64_t bg_handle,
 		for (int i = 0; i < p->blur_passes; i++) {
 			blur_pass(current, fbo0, blur_w, blur_h, i, &(struct be_blur_params){
 				.radius = p->blur_radius
-			});
+			}, NULL, 0);
 			current = tex0;
 			ping ^= 1;
 			fbo0 = ping ? (GLuint)state->pong.native_handle[0] : (GLuint)state->ping.native_handle[0];

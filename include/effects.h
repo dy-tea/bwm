@@ -19,6 +19,9 @@ extern enum blur_algorithm blur_algorithm;
 extern int blur_passes;
 extern float blur_radius;
 extern int blur_downsample;
+extern bool blur_full_res;
+extern float blur_offset;
+extern float blur_saturation;
 
 extern float blur_vibrancy;
 extern float blur_vibrancy_darkness;
@@ -79,9 +82,11 @@ typedef struct effects_output_t {
 	uint64_t cached_bg_tex;
 	bool bg_cache_valid;
 
-	// true when pong holds the shared backdrop (i.e. the last capture was a
-	// full/shared capture); allows region-based re-capture instead of whole
 	bool shared_bg_valid;
+	bool combined_bg_valid;
+	uint32_t backdrop_gen;
+	uint32_t blur_gen;
+	uint32_t layer_blur_gen;
 } effects_output_t;
 
 typedef struct effects_state_t {
@@ -103,6 +108,7 @@ void effects_output_resize(effects_output_t *ctx, int width, int height, output_
 void effects_invalidate_mica(effects_output_t *ctx);
 
 void effects_output_frame(output_t *output, struct wlr_scene_output *scene_output);
+void effects_dirty_corner_masks(output_t *output);
 void effects_evict_buffers(void);
 
 enum blur_algorithm blur_algorithm_from_str(const char *str);

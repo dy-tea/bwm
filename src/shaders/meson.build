@@ -13,6 +13,8 @@ gles_shaders = [
 
 	# Window blur
 	'blur_kawase.frag',
+	'blur_down.frag',
+	'blur_up.frag',
 	'blur_box_h.frag',
 	'blur_box_v.frag',
 	'blur_gauss_h.frag',
@@ -56,6 +58,8 @@ vk_shaders = [
 
 	# Window blur
 	'blur_kawase.frag',
+	'blur_down.frag',
+	'blur_up.frag',
 	'blur_box_h.frag',
 	'blur_box_v.frag',
 	'blur_gauss_h.frag',

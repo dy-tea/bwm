@@ -334,8 +334,12 @@ void toplevel_center_and_clip_surface(toplevel_t *toplevel) {
 				int new_fw = border_w + 2 * (int)bw;
 				int new_fh = border_h + 2 * (int)bw;
 				if (new_fw > 0 && new_fh > 0) {
-					if (toplevel->rounded->border_shader_buf_w != new_fw ||
-							toplevel->rounded->border_shader_buf_h != new_fh) {
+					float scale = toplevel->node && toplevel->node->output ?
+						toplevel->node->output->wlr_output->scale : 1.0f;
+					int pfw = (int)((double)new_fw * scale + 0.5);
+					int pfh = (int)((double)new_fh * scale + 0.5);
+					if (toplevel->rounded->border_shader_buf_w != pfw ||
+							toplevel->rounded->border_shader_buf_h != pfh) {
 						toplevel->rounded->border_dirty = true;
 						toplevel->rounded->corner_mask_dirty = true;
 					}
@@ -356,8 +360,12 @@ void toplevel_center_and_clip_surface(toplevel_t *toplevel) {
 				int new_fw = container_rect->width + 2 * (int)bw;
 				int new_fh = container_rect->height + 2 * (int)bw;
 				if (new_fw > 0 && new_fh > 0) {
-					if (toplevel->rounded->border_shader_buf_w != new_fw ||
-							toplevel->rounded->border_shader_buf_h != new_fh) {
+					float scale = toplevel->node && toplevel->node->output ?
+						toplevel->node->output->wlr_output->scale : 1.0f;
+					int pfw = (int)((double)new_fw * scale + 0.5);
+					int pfh = (int)((double)new_fh * scale + 0.5);
+					if (toplevel->rounded->border_shader_buf_w != pfw ||
+							toplevel->rounded->border_shader_buf_h != pfh) {
 						toplevel->rounded->border_dirty = true;
 						toplevel->rounded->corner_mask_dirty = true;
 					}
@@ -411,6 +419,7 @@ static void toplevel_set_floating(toplevel_t *toplevel, node_t *n, output_t *out
 	};
 	wlr_scene_node_set_position(&toplevel->scene_tree->node, n->client->floating_rectangle.x,
 		n->client->floating_rectangle.y);
+	effects_dirty_corner_masks(output);
 	n->client->last_state = STATE_TILED;
 	n->client->state = STATE_FLOATING;
 	n->hidden = true;

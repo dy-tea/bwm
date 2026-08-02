@@ -10,6 +10,8 @@ struct wlr_scene;
 struct wlr_scene_output;
 struct wlr_output_state;
 
+#define BLUR_MAX_LEVELS 10
+
 typedef struct {
 	struct wlr_buffer *buf;
 	uint64_t native_handle[2];
@@ -20,6 +22,7 @@ typedef struct {
 	be_buffer_t ping, pong;
 	be_buffer_t staging;
 	be_buffer_t screen_shader;
+	be_buffer_t blur_levels[BLUR_MAX_LEVELS];
 } be_output_state_t;
 
 enum blur_algorithm {
@@ -40,6 +43,9 @@ struct be_blur_params {
 	float noise_strength;
 	float brightness;
 	float contrast;
+	bool full_res;
+	float offset;
+	float saturation;
 	float refraction_strength;
 	float refraction_edge_size_px;
 	float refraction_corner_radius_px;
@@ -135,7 +141,8 @@ typedef struct effects_backend_t {
 		int n_scissor);
 
 	bool (*blur)(be_output_state_t *state, uint64_t src_handle, int src_w, int src_h,
-		struct be_blur_params *p, uint64_t *out_handle);
+		struct be_blur_params *p, uint64_t dst_fbo, const pixman_box32_t *scissor, int n_scissor,
+		uint64_t *out_handle);
 
 	bool (*apply_mica_tint)(be_output_state_t *state, uint64_t bg_handle, float tint[4],
 		float tint_strength, uint64_t dst_fbo, int w, int h);

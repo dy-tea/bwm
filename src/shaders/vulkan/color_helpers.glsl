@@ -111,3 +111,9 @@ vec3 applyBrightnessContrast(vec3 rgb, float brightness, float contrast) {
   rgb = applyContrast(rgb, contrast);
   return rgb;
 }
+
+vec3 applySaturation(vec3 rgb, float saturation) {
+  if (saturation == 1.0) return rgb;
+  float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+  return mix(vec3(luma), rgb, saturation);
+}

@@ -148,3 +148,12 @@ mediump vec3 applyBrightnessContrast(mediump vec3 rgb, mediump float brightness,
   rgb = applyContrast(rgb, contrast);
   return rgb;
 }
+
+mediump vec3 applySaturation(mediump vec3 rgb, mediump float saturation) {
+  if (saturation == 1.0) {
+    return rgb;
+  }
+
+  mediump float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+  return mix(vec3(luma), rgb, saturation);
+}

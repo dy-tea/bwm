@@ -1,5 +1,6 @@
 #include "animation.h"
 #include "cursor.h"
+#include "effects.h"
 #include "idle.h"
 #include "once.h"
 #include "output.h"
@@ -236,6 +237,13 @@ static void arrange_node_geometry(node_t *node, transaction_inst_t *instruction)
 		return;
 	}
 
+	if (node->output && scene_tree &&
+			(scene_tree->node.x != rect->x || scene_tree->node.y != rect->y ||
+			(instruction->previous_tiled_rectangle.width > 0 &&
+			(instruction->previous_tiled_rectangle.width != rect->width ||
+			instruction->previous_tiled_rectangle.height != rect->height))))
+		effects_dirty_corner_masks(node->output);
+
 	// attempt resize animation for size changes
 	bool snapshot_resize = false;
 	if (node->client->toplevel && instruction->previous_tiled_rectangle.width > 0 &&
@@ -310,7 +318,12 @@ static void arrange_node_geometry(node_t *node, transaction_inst_t *instruction)
 						int new_fw = geo.width + 2 * (int)bw;
 						int new_fh = geo.height + 2 * (int)bw;
 						if (new_fw > 0 && new_fh > 0) {
-							if (rounded->border_shader_buf_w != new_fw || rounded->border_shader_buf_h != new_fh) {
+							float scale = node->client->toplevel && node->client->toplevel->node &&
+									node->client->toplevel->node->output ?
+								node->client->toplevel->node->output->wlr_output->scale : 1.0f;
+							int pfw = (int)((double)new_fw * scale + 0.5);
+							int pfh = (int)((double)new_fh * scale + 0.5);
+							if (rounded->border_shader_buf_w != pfw || rounded->border_shader_buf_h != pfh) {
 								rounded->border_dirty = true;
 								rounded->corner_mask_dirty = true;
 							}

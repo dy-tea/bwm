@@ -553,6 +553,14 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 			snprintf(buf, sizeof(buf), "%.2f\n", blur_radius);
 			send_success(client_fd, buf);
 		}
+	} else if (streq("blur_full_res", *args)) {
+		ipc_handle_bool(args, num, client_fd, &blur_full_res, IPC_FLAG_NONE);
+	} else if (streq("blur_offset", *args)) {
+		ipc_handle_float(args, num, client_fd, &blur_offset, IPC_FLAG_NONE, 0.0f, 8.0f, "%.3f\n",
+			"value must be 0.0-8.0");
+	} else if (streq("blur_saturation", *args)) {
+		ipc_handle_float(args, num, client_fd, &blur_saturation, IPC_FLAG_NONE, 0.0f, 3.0f, "%.3f\n",
+			"value must be 0.0-3.0");
 	} else if (streq("refraction_strength", *args)) {
 		ipc_handle_float(args, num, client_fd, &refraction_strength, IPC_FLAG_NONE, 0.0f, 30.0f, "%.3f\n",
 			"value must be 0.0-30.0");
