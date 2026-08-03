@@ -7,6 +7,7 @@
 # Effects
 - Effects per window state (e.g. unfocused, focused, ...)
 - Inner glow effects on borders
+- Floating toplevels with mica are missing rounded border clip on their surface
 
 # Layout
 - Better tab grouping (see sway or Hyprland for reference)
@@ -14,6 +15,7 @@
 # Misc
 - Rework the docs to be easier to use
 - Improve the README (include video, images, better info)
+- Looks like there is a 1px gap between toplevels and borders under certain conditions, likely a rounding error somewhere
 
 # Potential
 - Per desktop rules (e.g. floating, master_stack)
