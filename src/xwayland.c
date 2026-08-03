@@ -1233,10 +1233,7 @@ static void xwayland_view_destroy(xwayland_toplevel_t *xwayland_view) {
 	wl_list_remove(&xwayland_view->link);
 
 	if (xwayland_view->blur) {
-		if (xwayland_view->blur->blur_node) {
-			wlr_scene_node_destroy(&xwayland_view->blur->blur_node->node);
-			xwayland_view->blur->blur_node = NULL;
-		}
+		blur_destroy_nodes(xwayland_view->blur);
 		if (xwayland_view->blur->blur_buf) {
 			effects_destroy_buffer(&xwayland_view->blur->blur_buf, xwayland_view->blur->blur_native);
 		}

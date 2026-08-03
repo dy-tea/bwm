@@ -910,7 +910,7 @@ static void update_blur_for_slide_animation(output_t *output, animation_entry_t 
 	toplevel_t *tl = entry->node->client->toplevel;
 	if (!tl)
 		return;
-	if (!tl->blur || !tl->blur->blur_node)
+	if (!tl->blur || blur_count(tl->blur) == 0)
 		return;
 	if (!tl->blur->blur_buf)
 		return;
@@ -934,22 +934,41 @@ static void update_blur_for_slide_animation(output_t *output, animation_entry_t 
 
 	if (!pixman_region32_empty(&tl->blur->blur_region)) {
 		// blur region lives in the window's own coordinate space
-		int blur_r_x = tl->blur->blur_region.extents.x1;
-		int blur_r_y = tl->blur->blur_region.extents.y1;
-		int blur_r_w = tl->blur->blur_region.extents.x2 - blur_r_x;
-		int blur_r_h = tl->blur->blur_region.extents.y2 - blur_r_y;
-
-		struct wlr_fbox src = {
-			.x = blur_r_x,
-			.y = blur_r_y,
-			.width = blur_r_w,
-			.height = blur_r_h
-		};
-		wlr_scene_node_set_position(&tl->blur->blur_node->node, blur_r_x, blur_r_y);
-		wlr_scene_buffer_set_source_box(tl->blur->blur_node, &src);
-		wlr_scene_buffer_set_dest_size(tl->blur->blur_node, blur_r_w, blur_r_h);
+		int sox, soy;
+		if (!toplevel_get_surface_offset(tl, &sox, &soy))
+			return;
+		int n;
+		const pixman_box32_t *boxes = pixman_region32_rectangles(&tl->blur->blur_region, &n);
+		blur_set_node_count(tl->blur, tl->scene_tree, n);
+		blur_set_buffer(tl->blur, tl->blur->blur_buf);
+		for (int i = 0; i < n; i++) {
+			int br_x = boxes[i].x1;
+			int br_y = boxes[i].y1;
+			int br_w = boxes[i].x2 - br_x;
+			int br_h = boxes[i].y2 - br_y;
+			struct wlr_fbox src = {
+				.x = sox + br_x,
+				.y = soy + br_y,
+				.width = br_w,
+				.height = br_h
+			};
+			struct wlr_scene_buffer *node = blur_get(tl->blur, i);
+			if (!node)
+				break;
+			wlr_scene_node_set_position(&node->node, sox + br_x, soy + br_y);
+			wlr_scene_buffer_set_source_box(node, &src);
+			wlr_scene_buffer_set_dest_size(node, br_w, br_h);
+		}
 		return;
 	}
+
+	blur_set_node_count(tl->blur, tl->scene_tree, 1);
+	struct wlr_scene_buffer *node = blur_get(tl->blur, 0);
+	if (!node) {
+		blur_set_buffer_null(tl->blur);
+		return;
+	}
+	blur_set_buffer(tl->blur, tl->blur->blur_buf);
 
 	// clip the on-screen portion against the output
 	int rx = r.x > output->lx ? r.x : output->lx;
@@ -958,8 +977,7 @@ static void update_blur_for_slide_animation(output_t *output, animation_entry_t 
 	int rye = r.y + r.height < output->ly + output->height ? r.y + r.height : output->ly +
 		output->height;
 	if (rxe <= rx || rye <= ry) {
-		if (tl->blur->blur_node->buffer)
-			wlr_scene_buffer_set_buffer(tl->blur->blur_node, NULL);
+		blur_set_buffer_null(tl->blur);
 		return;
 	}
 	int off_x = rx - r.x;
@@ -970,9 +988,9 @@ static void update_blur_for_slide_animation(output_t *output, animation_entry_t 
 		.width = rxe - rx,
 		.height = rye - ry
 	};
-	wlr_scene_node_set_position(&tl->blur->blur_node->node, off_x, off_y);
-	wlr_scene_buffer_set_source_box(tl->blur->blur_node, &src);
-	wlr_scene_buffer_set_dest_size(tl->blur->blur_node, rxe - rx, rye - ry);
+	wlr_scene_node_set_position(&node->node, off_x, off_y);
+	wlr_scene_buffer_set_source_box(node, &src);
+	wlr_scene_buffer_set_dest_size(node, rxe - rx, rye - ry);
 }
 
 void animation_update_slide_blur(output_t *output) {

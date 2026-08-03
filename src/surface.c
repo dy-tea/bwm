@@ -17,6 +17,75 @@ static bool corner_mask_no_input(struct wlr_scene_buffer *buffer, double *sx, do
 	return false;
 }
 
+void blur_pool_destroy(blur_node_pool_t *p) {
+	if (!p)
+		return;
+	for (size_t i = 0; i < p->count; i++) {
+		if (p->nodes[i])
+			wlr_scene_node_destroy(&p->nodes[i]->node);
+	}
+	free(p->nodes);
+	p->nodes = NULL;
+	p->count = 0;
+	p->cap = 0;
+}
+
+void blur_pool_set_count(blur_node_pool_t *p, struct wlr_scene_tree *parent, size_t count) {
+	if (!p || !parent)
+		return;
+
+	if (count > p->cap) {
+		size_t cap = p->cap ? p->cap : 4;
+		while (cap < count)
+			cap *= 2;
+		struct wlr_scene_buffer **nodes = realloc(p->nodes, cap *sizeof(*nodes));
+		if (!nodes)
+			return;
+		for (size_t i = p->cap; i < cap; i++)
+			nodes[i] = NULL;
+		p->nodes = nodes;
+		p->cap = cap;
+	}
+
+	for (size_t i = p->count; i < count; i++) {
+		if (!p->nodes[i]) {
+			p->nodes[i] = wlr_scene_buffer_create(parent, NULL);
+			if (p->nodes[i])
+				wlr_scene_node_lower_to_bottom(&p->nodes[i]->node);
+			else
+				break;
+		}
+	}
+
+	for (size_t i = count; i < p->count; i++) {
+		if (p->nodes[i])
+			wlr_scene_node_set_enabled(&p->nodes[i]->node, false);
+	}
+	for (size_t i = 0; i < count; i++) {
+		if (p->nodes[i] && !p->nodes[i]->node.enabled)
+			wlr_scene_node_set_enabled(&p->nodes[i]->node, true);
+	}
+	p->count = count;
+}
+
+void blur_pool_set_buffer(blur_node_pool_t *p, struct wlr_buffer *buf) {
+	if (!p)
+		return;
+	for (size_t i = 0; i < p->count; i++) {
+		if (p->nodes[i] && p->nodes[i]->buffer != buf)
+			wlr_scene_buffer_set_buffer(p->nodes[i], buf);
+	}
+}
+
+void blur_pool_set_buffer_null(blur_node_pool_t *p) {
+	if (!p)
+		return;
+	for (size_t i = 0; i < p->count; i++) {
+		if (p->nodes[i] && p->nodes[i]->buffer)
+			wlr_scene_buffer_set_buffer(p->nodes[i], NULL);
+	}
+}
+
 typedef struct {
 	struct wlr_scene_buffer **node;
 	struct wlr_buffer **buf;
@@ -26,11 +95,6 @@ typedef struct {
 static effect_fields_t get_effect_fields(surface_blur_t *b, surface_effect_t effect) {
 	effect_fields_t f = {0};
 	switch (effect) {
-	case EFFECT_BLUR:
-		f.node = &b->blur_node;
-		f.buf = &b->blur_buf;
-		f.native = b->blur_native;
-		break;
 	case EFFECT_MICA:
 		f.node = &b->mica_node;
 		break;
@@ -38,6 +102,8 @@ static effect_fields_t get_effect_fields(surface_blur_t *b, surface_effect_t eff
 		f.node = &b->acrylic_node;
 		f.buf = &b->acrylic_buf;
 		f.native = b->acrylic_native;
+		break;
+	case EFFECT_BLUR:
 		break;
 	}
 	return f;
@@ -56,30 +122,49 @@ void surface_set_effect(struct wlr_scene_tree *scene_tree, node_t *node, surface
 			pixman_region32_init(&(*blur)->blur_region);
 		}
 
-		effect_fields_t f = get_effect_fields(*blur, effect);
-		if (!*f.node) {
-			*f.node = wlr_scene_buffer_create(scene_tree, NULL);
-			if (*f.node) {
-				wlr_scene_node_lower_to_bottom(&(*f.node)->node);
-				if (node && node->output) {
-					struct wlr_scene_output *so = wlr_scene_get_scene_output(server.scene,
-						node->output->wlr_output);
-					if (so) {
-						pixman_region32_union_rect(&so->damage_ring.current, &so->damage_ring.current, 0, 0,
-							(unsigned int)node->output->width, (unsigned int)node->output->height);
-						output_schedule_frame(node->output);
+		if (effect == EFFECT_BLUR) {
+			// keep one node around so that the blur effect is considered active
+			bool had_node = blur_get(*blur, 0) != NULL;
+			blur_set_node_count(*blur, scene_tree, 1);
+			if (!had_node && blur_get(*blur, 0) && node && node->output) {
+				struct wlr_scene_output *so = wlr_scene_get_scene_output(server.scene,
+					node->output->wlr_output);
+				if (so) {
+					pixman_region32_union_rect(&so->damage_ring.current, &so->damage_ring.current, 0, 0,
+						(unsigned int)node->output->width, (unsigned int)node->output->height);
+					output_schedule_frame(node->output);
+				}
+			}
+		} else {
+			effect_fields_t f = get_effect_fields(*blur, effect);
+			if (!*f.node) {
+				*f.node = wlr_scene_buffer_create(scene_tree, NULL);
+				if (*f.node) {
+					wlr_scene_node_lower_to_bottom(&(*f.node)->node);
+					if (node && node->output) {
+						struct wlr_scene_output *so = wlr_scene_get_scene_output(server.scene,
+							node->output->wlr_output);
+						if (so) {
+							pixman_region32_union_rect(&so->damage_ring.current, &so->damage_ring.current, 0, 0,
+								(unsigned int)node->output->width, (unsigned int)node->output->height);
+							output_schedule_frame(node->output);
+						}
 					}
 				}
 			}
 		}
 	} else if (*blur) {
-		effect_fields_t f = get_effect_fields(*blur, effect);
-		if (*f.node) {
-			wlr_scene_node_destroy(&(*f.node)->node);
-			*f.node = NULL;
+		if (effect == EFFECT_BLUR) {
+			blur_destroy_nodes(*blur);
+		} else {
+			effect_fields_t f = get_effect_fields(*blur, effect);
+			if (*f.node) {
+				wlr_scene_node_destroy(&(*f.node)->node);
+				*f.node = NULL;
+			}
+			if (f.buf && *f.buf)
+				effects_destroy_buffer(f.buf, f.native);
 		}
-		if (f.buf && *f.buf)
-			effects_destroy_buffer(f.buf, f.native);
 		// clear blur_region when blur effect is disabled
 		if (effect == EFFECT_BLUR)
 			pixman_region32_clear(&(*blur)->blur_region);

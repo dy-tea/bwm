@@ -33,11 +33,10 @@ void layer_surface_set_blur(layer_surface_t *ls, bool enabled) {
 	if (!ls || !ls->scene_tree)
 		return;
 
-	if (enabled && !ls->blur_node) {
-		ls->blur_node = wlr_scene_buffer_create(ls->scene_tree, NULL);
-		if (ls->blur_node) {
+	if (enabled && blur_pool_count(&ls->blur_pool) == 0) {
+		blur_pool_set_count(&ls->blur_pool, ls->scene_tree, 1);
+		if (blur_pool_get(&ls->blur_pool, 0)) {
 			ls->blur_region_dirty = true;
-			wlr_scene_node_lower_to_bottom(&ls->blur_node->node);
 			// ensure next frame recaptures the background for this new blur node
 			struct wlr_scene_output *so = wlr_scene_get_scene_output(server.scene, ls->output->wlr_output);
 			if (so) {
@@ -46,9 +45,8 @@ void layer_surface_set_blur(layer_surface_t *ls, bool enabled) {
 				output_schedule_frame(ls->output);
 			}
 		}
-	} else if (!enabled && ls->blur_node) {
-		wlr_scene_node_destroy(&ls->blur_node->node);
-		ls->blur_node = NULL;
+	} else if (!enabled && blur_pool_count(&ls->blur_pool) > 0) {
+		blur_pool_destroy(&ls->blur_pool);
 		pixman_region32_clear(&ls->blur_region);
 		ls->blur_region_dirty = true;
 	}
@@ -96,6 +94,8 @@ static void layer_surface_destroy(struct wl_listener *listener, void *data) {
 	wl_list_remove(&layer->link);
 
 	pixman_region32_fini(&layer->blur_region);
+	free(layer->blur_pool.nodes);
+	layer->blur_pool.nodes = NULL;
 
 	arrange_layers(layer->output);
 	free(layer);
@@ -168,12 +168,12 @@ static void layer_surface_commit(struct wl_listener *listener, void *data) {
 	const struct wlr_ext_background_effect_surface_v1_state *fx =
 		wlr_ext_background_effect_v1_get_surface_state(layer_surface->surface);
 	bool wants_blur = fx && !pixman_region32_empty(&fx->blur_region);
-	bool had_blur = layer->blur_node != NULL;
+	bool had_blur = blur_pool_count(&layer->blur_pool) > 0;
 	if (wants_blur != had_blur)
 		layer_surface_set_blur(layer, wants_blur);
 
 	// update blur region if blur is enabled
-	if (fx && layer->blur_node) {
+	if (fx && blur_pool_count(&layer->blur_pool) > 0) {
 		if (!pixman_region32_equal(&layer->blur_region, &fx->blur_region)) {
 			pixman_region32_copy(&layer->blur_region, &fx->blur_region);
 			layer->blur_region_dirty = true;

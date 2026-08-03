@@ -1,5 +1,7 @@
 #pragma once
 
+#include "surface.h"
+
 #include <pixman.h>
 #include <stdint.h>
 #include <wayland-server.h>
@@ -17,7 +19,7 @@ typedef struct layer_surface_t {
 	output_t *output;
 	bool mapped;
 
-	struct wlr_scene_buffer *blur_node;
+	blur_node_pool_t blur_pool;
 	bool blur_scene_hidden, blur_region_dirty;
 	pixman_region32_t blur_region;
 

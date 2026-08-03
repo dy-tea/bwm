@@ -90,6 +90,7 @@ void toplevel_send_frame_done(toplevel_t *toplevel);
 void toplevel_freeze_sibling_buffers(desktop_t *d, node_t *n);
 
 void toplevel_set_effect(toplevel_t *tl, surface_effect_t effect, bool enabled);
+bool toplevel_get_surface_offset(toplevel_t *tl, int *ox, int *oy);
 void toplevel_set_border_radius(toplevel_t *tl, float radius);
 void toplevel_set_shadow(toplevel_t *tl, bool enabled);
 void toplevel_apply_decoration_mode(toplevel_t *tl);

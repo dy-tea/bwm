@@ -9,8 +9,29 @@
 
 struct wlr_scene_tree;
 
+// a blur region is rendered as one scene buffer per region rectangle. The pool
+// is grown as needed and nodes beyond the current count are disabled.
+typedef struct blur_node_pool_t {
+	struct wlr_scene_buffer **nodes;
+	size_t count;
+	size_t cap;
+} blur_node_pool_t;
+
+static inline size_t blur_pool_count(const blur_node_pool_t *p) {
+	return p ? p->count : 0;
+}
+
+static inline struct wlr_scene_buffer *blur_pool_get(const blur_node_pool_t *p, size_t i) {
+	return (p && i < p->count) ? p->nodes[i] : NULL;
+}
+
+void blur_pool_set_count(blur_node_pool_t *p, struct wlr_scene_tree *parent, size_t count);
+void blur_pool_set_buffer(blur_node_pool_t *p, struct wlr_buffer *buf);
+void blur_pool_set_buffer_null(blur_node_pool_t *p);
+void blur_pool_destroy(blur_node_pool_t *p);
+
 typedef struct surface_blur_t {
-	struct wlr_scene_buffer *blur_node;
+	blur_node_pool_t blur_pool;
 	struct wlr_scene_buffer *mica_node;
 	struct wlr_scene_buffer *acrylic_node;
 	bool blur_scene_hidden;
@@ -22,6 +43,35 @@ typedef struct surface_blur_t {
 	bool blur_region_dirty, blur_mask_valid;
 	struct be_corner_mask_params blur_mask_params;
 } surface_blur_t;
+
+static inline size_t blur_count(const surface_blur_t *b) {
+	return b ? blur_pool_count(&b->blur_pool) : 0;
+}
+
+static inline struct wlr_scene_buffer *blur_get(const surface_blur_t *b, size_t i) {
+	return (b && i < b->blur_pool.count) ? b->blur_pool.nodes[i] : NULL;
+}
+
+static inline void blur_set_node_count(surface_blur_t *b, struct wlr_scene_tree *parent,
+		size_t count) {
+	if (b)
+		blur_pool_set_count(&b->blur_pool, parent, count);
+}
+
+static inline void blur_set_buffer(surface_blur_t *b, struct wlr_buffer *buf) {
+	if (b)
+		blur_pool_set_buffer(&b->blur_pool, buf);
+}
+
+static inline void blur_set_buffer_null(surface_blur_t *b) {
+	if (b)
+		blur_pool_set_buffer_null(&b->blur_pool);
+}
+
+static inline void blur_destroy_nodes(surface_blur_t *b) {
+	if (b)
+		blur_pool_destroy(&b->blur_pool);
+}
 
 typedef struct surface_rounded_t {
 	struct wlr_scene_buffer *border_shader_node;

@@ -407,6 +407,19 @@ void toplevel_center_and_clip_surface(toplevel_t *toplevel) {
 		toplevel->shadow->shadow_geometry_dirty = true;
 }
 
+bool toplevel_get_surface_offset(toplevel_t *tl, int *ox, int *oy) {
+	if (!tl || !tl->scene_tree || !tl->content_tree)
+		return false;
+
+	int x = tl->content_tree->node.x - tl->geometry.x;
+	int y = tl->content_tree->node.y - tl->geometry.y;
+	if (ox)
+		*ox = x;
+	if (oy)
+		*oy = y;
+	return true;
+}
+
 static void toplevel_set_floating(toplevel_t *toplevel, node_t *n, output_t *output) {
 	wlr_scene_node_reparent(&toplevel->scene_tree->node, server.float_tree);
 	struct wlr_box mon_rect = output->rectangle;
@@ -918,7 +931,7 @@ void toplevel_commit(struct wl_listener *listener, void *data) {
 	const struct wlr_ext_background_effect_surface_v1_state *fx =
 		wlr_ext_background_effect_v1_get_surface_state(xdg_surface->surface);
 	bool wants_blur = fx && !pixman_region32_empty(&fx->blur_region);
-	bool has_blur = toplevel->blur && toplevel->blur->blur_node != NULL;
+	bool has_blur = blur_count(toplevel->blur) > 0;
 
 	// only update blur from protocol if it wasn't set by a rule
 	if (toplevel->node && toplevel->node->client && !toplevel->node->client->flags.blur_from_rule) {
@@ -989,10 +1002,7 @@ void toplevel_destroy(struct wl_listener *listener, void *data) {
 	}
 
 	if (toplevel->blur) {
-		if (toplevel->blur->blur_node) {
-			wlr_scene_node_destroy(&toplevel->blur->blur_node->node);
-			toplevel->blur->blur_node = NULL;
-		}
+		blur_destroy_nodes(toplevel->blur);
 
 		if (toplevel->blur->blur_buf)
 			effects_destroy_buffer(&toplevel->blur->blur_buf, toplevel->blur->blur_native);
