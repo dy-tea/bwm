@@ -609,6 +609,12 @@ bool animation_start_resize(toplevel_t *toplevel, struct wlr_box from, struct wl
 		entry = create_animation_entry();
 		if (!entry)
 			return false;
+		from.x = (int)toplevel->scene_tree->node.x;
+		from.y = (int)toplevel->scene_tree->node.y;
+		if (from.width < (int)toplevel->geometry.width)
+			from.width = (int)toplevel->geometry.width;
+		if (from.height < (int)toplevel->geometry.height)
+			from.height = (int)toplevel->geometry.height;
 	}
 
 	entry->kind = ANIM_KIND_RESIZE;
@@ -686,10 +692,35 @@ static void update_resize_entry(animation_entry_t *entry) {
 	if (entry->node && entry->node->client) {
 		client_t *c = entry->node->client;
 		if (IS_TILED(c) || c->state == STATE_FLOATING || c->state == STATE_FULLSCREEN) {
-			int center_x = (width - (int)entry->toplevel->geometry.width) / 2;
-			int center_y = (height - (int)entry->toplevel->geometry.height) / 2;
-			int cx = center_x > 0 ? center_x : 0;
-			int cy = center_y > 0 ? center_y : 0;
+			int geo_w = (int)entry->toplevel->geometry.width;
+			int geo_h = (int)entry->toplevel->geometry.height;
+			bool undersized = geo_w < entry->to.width || geo_h < entry->to.height;
+
+			int cx, cy;
+			if (undersized) {
+				cx = (width - geo_w) / 2;
+				cy = (height - geo_h) / 2;
+			} else {
+				if (entry->from.x == entry->to.x)
+					cx = 0;
+				else if (from_right == to_right)
+					cx = width - geo_w;
+				else
+					cx = (width - geo_w) / 2;
+
+				if (entry->from.y == entry->to.y)
+					cy = 0;
+				else if (from_bottom == to_bottom)
+					cy = height - geo_h;
+				else
+					cy = (height - geo_h) / 2;
+			}
+
+			if (cx < 0)
+				cx = 0;
+			if (cy < 0)
+				cy = 0;
+
 			wlr_scene_node_set_position(&entry->toplevel->content_tree->node, cx, cy);
 		}
 	}
