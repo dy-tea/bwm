@@ -2,15 +2,17 @@
 - Per-window animation overrides
 - Ensure animations and blur work together without visual artifacts
 - Custom animation shaders for windows (e.g. open/close animations)
-- Tiled and interactive resize does not have stable position (edge(s) that should not move do(es) not have stable position)
+- Tiled and interactive resize does not have stable position (edge(s) that should not move do(es) not have stable position), specifically for undersized surfaces (surfaces that are smaller than their allocated size)
 
 # Effects
 - Effects per window state (e.g. unfocused, focused, ...)
 - Inner glow effects on borders
 - Floating toplevels with mica are missing rounded border clip on their surface
+- Some layer surfaces with blur and a static position do not update the blur surface correctly (layer surface bar doesn't appear to track a toplevel behind it consistently; moving to an empty workspace from a non-empty workspace leaves behind some stale information in the blur surface)
 
 # Layout
 - Better tab grouping (see sway or Hyprland for reference)
+- Master stack appears to be broken since layout refactor into vtable
 
 # Misc
 - Rework the docs to be easier to use
