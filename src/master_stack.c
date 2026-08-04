@@ -532,11 +532,21 @@ static struct wlr_box node_layout_box(const node_t *node) {
 	return node->rectangle;
 }
 
+static bool aligned_with(const struct wlr_box *source, const struct wlr_box *candidate,
+		master_stack_direction_t direction) {
+	if (direction == DIRECTION_NORTH || direction == DIRECTION_SOUTH)
+		return source->x < candidate->x + candidate->width && candidate->x < source->x + source->width;
+	return source->y < candidate->y + candidate->height && candidate->y < source->y + source->height;
+}
+
 static int directional_target(node_t **nodes, int count, int source_index,
 		master_stack_direction_t direction, bool wrap) {
 	struct wlr_box source = node_layout_box(nodes[source_index]);
 	int64_t source_x = (int64_t)source.x * 2 + source.width;
 	int64_t source_y = (int64_t)source.y * 2 + source.height;
+	int aligned_target = -1;
+	int64_t aligned_primary = INT64_MAX;
+	int64_t aligned_secondary = INT64_MAX;
 	int target = -1;
 	int64_t best_primary = INT64_MAX;
 	int64_t best_secondary = INT64_MAX;
@@ -576,13 +586,26 @@ static int directional_target(node_t **nodes, int count, int source_index,
 			break;
 		}
 
-		if (eligible && (primary < best_primary || (primary == best_primary &&
-				secondary < best_secondary))) {
+		if (!eligible)
+			continue;
+
+		if (primary < best_primary || (primary == best_primary && secondary < best_secondary)) {
 			target = i;
 			best_primary = primary;
 			best_secondary = secondary;
 		}
+
+		if (!aligned_with(&source, &candidate, direction))
+			continue;
+		if (primary < aligned_primary || (primary == aligned_primary && secondary < aligned_secondary)) {
+			aligned_target = i;
+			aligned_primary = primary;
+			aligned_secondary = secondary;
+		}
 	}
+
+	if (aligned_target >= 0)
+		target = aligned_target;
 
 	if (target >= 0 || !wrap)
 		return target;
@@ -624,8 +647,11 @@ static bool focus_in_direction(desktop_t *d, master_stack_direction_t direction)
 		return false;
 
 	int target = directional_target(nodes, count, index, direction, focus_wrapping);
-	if (target >= 0)
+	if (target >= 0) {
 		d->focus = nodes[target];
+		if (d->output)
+			focus_node(d->output, d, d->focus);
+	}
 	free(nodes);
 	return target >= 0;
 }
