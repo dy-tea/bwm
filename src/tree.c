@@ -326,11 +326,10 @@ void arrange(output_t *m, desktop_t *d, bool use_transaction) {
 		return;
 	}
 
-	struct wlr_box rect;
-	if (m)
-		rect = m->usable_area;
-	else
-		rect = m->rectangle;
+	if (m == NULL)
+		return;
+
+	struct wlr_box rect = m->usable_area;
 
 	rect.x += m->padding.left + d->padding.left;
 	rect.y += m->padding.top + d->padding.top;

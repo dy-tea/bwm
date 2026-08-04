@@ -156,6 +156,7 @@ static void set_node_geom(node_t *n, struct wlr_box geom, output_t *m, desktop_t
 	}
 
 	n->client->tiled_rectangle = r;
+	n->client->arranged_rectangle = r;
 	node_set_pending_rectangle(n, geom);
 	n->output = m;
 	node_set_dirty(n);

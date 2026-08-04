@@ -155,12 +155,11 @@ static bool master_stack_swap(output_t *m, desktop_t *d, direction_t dir) {
 }
 
 static bool tiled_swap(output_t *m, desktop_t *d, direction_t dir) {
-	(void)m;
 	node_t *n = find_fence(d->focus, dir);
 	if (n != NULL) {
 		n = first_extrema(n);
 		if (n != NULL) {
-			swap_nodes(mon, d, d->focus, mon, d, n);
+			swap_nodes(m, d, d->focus, m, d, n);
 			return true;
 		}
 	}

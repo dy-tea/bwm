@@ -12,7 +12,6 @@
 
 # Layout
 - Better tab grouping (see sway or Hyprland for reference)
-- Master stack appears to be broken since layout refactor into vtable
 
 # Misc
 - Rework the docs to be easier to use
