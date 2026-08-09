@@ -26,7 +26,7 @@ static void send_frame_done_to_client(client_t *client) {
 
 	struct wlr_scene_node *node;
 	wl_list_for_each(node, &tree->children, link)
-		wlr_scene_node_for_each_buffer(node, toplevel_send_frame_done_interator, &when);
+		wlr_scene_node_for_each_buffer(node, toplevel_send_frame_done_iterator, &when);
 }
 
 static int handle_render_unfocused_timer(void *data) {

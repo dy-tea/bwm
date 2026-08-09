@@ -332,11 +332,10 @@ void toplevel_center_and_clip_surface(toplevel_t *toplevel) {
 			if (toplevel->rounded && toplevel->rounded->border_shader_node && (c->border_radius > 0.0f ||
 					toplevel->rounded->gradient_count >= 2)) {
 				rounded_mark_border_size(toplevel->rounded, border_w, border_h, (int)bw,
-					toplevel->node && toplevel->node->output ?
-						toplevel->node->output->wlr_output->scale : 1.0f);
+					toplevel->node && toplevel->node->output ? toplevel->node->output->wlr_output->scale : 1.0f);
 				if (border_w + 2 * (int)bw > 0)
-					wlr_scene_buffer_set_dest_size(toplevel->rounded->border_shader_node,
-						border_w + 2 * (int)bw, border_h + 2 * (int)bw);
+					wlr_scene_buffer_set_dest_size(toplevel->rounded->border_shader_node, border_w + 2 * (int)bw,
+						border_h + 2 * (int)bw);
 			}
 		} else if (container_rect) {
 			struct wlr_box full_geo = {
@@ -351,8 +350,7 @@ void toplevel_center_and_clip_surface(toplevel_t *toplevel) {
 					toplevel->rounded->gradient_count >= 2)) {
 				rounded_mark_border_size(toplevel->rounded, container_rect->width, container_rect->height,
 					(int)bw,
-					toplevel->node && toplevel->node->output ?
-						toplevel->node->output->wlr_output->scale : 1.0f);
+					toplevel->node && toplevel->node->output ? toplevel->node->output->wlr_output->scale : 1.0f);
 				if (container_rect->width + 2 * (int)bw > 0)
 					wlr_scene_buffer_set_dest_size(toplevel->rounded->border_shader_node,
 						container_rect->width + 2 * (int)bw, container_rect->height + 2 * (int)bw);
@@ -1376,7 +1374,7 @@ void toplevel_remove_saved_buffer(struct toplevel_t *toplevel) {
 		wlr_scene_node_set_enabled(&toplevel->content_tree->node, true);
 }
 
-void toplevel_send_frame_done_interator(struct wlr_scene_buffer *scene_buffer, int x, int y,
+void toplevel_send_frame_done_iterator(struct wlr_scene_buffer *scene_buffer, int x, int y,
 		void *data) {
 	(void)x;
 	(void)y;
@@ -1397,7 +1395,7 @@ void toplevel_send_frame_done(struct toplevel_t *toplevel) {
 
 	struct wlr_scene_node *node;
 	wl_list_for_each(node, &toplevel->content_tree->children, link)
-		wlr_scene_node_for_each_buffer(node, toplevel_send_frame_done_interator, &when);
+		wlr_scene_node_for_each_buffer(node, toplevel_send_frame_done_iterator, &when);
 }
 
 bool toplevel_can_tear(struct toplevel_t *toplevel) {

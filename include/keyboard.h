@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <wlr/types/wlr_input_device.h>
@@ -100,3 +101,4 @@ void cancel_presel(void);
 
 // keybind processing
 bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym);
+keybind_t *handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed);

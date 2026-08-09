@@ -109,9 +109,6 @@ xkb_keysym_t parse_keysym(const char *name) {
 	if (!name || name[0] == '\0')
 		return XKB_KEY_NoSymbol;
 
-	if (strlen(name) == 1)
-		return xkb_keysym_from_name(name, XKB_KEYSYM_CASE_INSENSITIVE);
-
 	return xkb_keysym_from_name(name, XKB_KEYSYM_CASE_INSENSITIVE);
 }
 
@@ -129,7 +126,7 @@ uint32_t parse_keycode(const char *name) {
 
 	for (size_t i = 0; i < sizeof(mouse_buttons) / sizeof(mouse_buttons[0]); i++)
 		if (strcmp(name, mouse_buttons[i]) == 0)
-			return 0x20000000 + i + 272;
+			return mouse_button_to_keycode(i);
 
 	if (name[0] >= '1' && name[0] <= '9' && name[1] == '\0')
 		return name[0] - '0' + 1;
@@ -1054,6 +1051,32 @@ bool keybind_matches(const keybind_t *kb, uint32_t modifiers, xkb_keysym_t keysy
 		}
 		return false;
 	}
+}
+
+keybind_t *find_keybind(uint32_t modifiers, xkb_keysym_t keysym, uint32_t keycode,
+		bool prefer_keycode, bool fallback_to_global) {
+	if (active_submap) {
+		for (size_t i = 0; i < active_submap->num_keybinds; i++) {
+			keybind_t *kb = &active_submap->keybinds[i];
+			if (kb->use_keycode == prefer_keycode && keybind_matches(kb, modifiers, keysym, keycode))
+				return kb;
+		}
+		if (!fallback_to_global)
+			return NULL;
+	}
+
+	for (size_t i = 0; i < num_keybinds; i++) {
+		keybind_t *kb = &keybinds[i];
+		if (kb->use_keycode == prefer_keycode && keybind_matches(kb, modifiers, keysym, keycode))
+			return kb;
+	}
+
+	return NULL;
+}
+
+bool is_interactive_bind(const keybind_t *kb) {
+	return kb && (kb->action == BIND_INTERACTIVE_MOVE || kb->action == BIND_INTERACTIVE_RESIZE ||
+		kb->action == BIND_TILING_DRAG);
 }
 
 void execute_bind(bind_t b) {

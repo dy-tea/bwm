@@ -96,7 +96,7 @@ void toplevel_apply_decoration_mode(toplevel_t *tl);
 
 bool toplevel_can_tear(toplevel_t *toplevel);
 
-void toplevel_send_frame_done_interator(struct wlr_scene_buffer *scene_buffer, int x, int y,
+void toplevel_send_frame_done_iterator(struct wlr_scene_buffer *scene_buffer, int x, int y,
 	void *data);
 
 toplevel_t *toplevel_create(struct wlr_xdg_toplevel *xdg_toplevel);

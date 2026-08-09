@@ -46,8 +46,6 @@ static void destroy_empty_wlr_keyboard_group(void *data) {
 	free(group);
 }
 
-bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed);
-
 static void parse_portal_shortcut_cmd(const char *cmd, char *app_id, size_t app_id_size,
 		char *shortcut_id, size_t shortcut_id_size) {
 	app_id[0] = '\0';
@@ -273,44 +271,20 @@ void keyboard_destroy(struct wl_listener *listener, void *data) {
 	free(keyboard);
 }
 
-extern void begin_interactive(toplevel_t *toplevel, enum cursor_mode mode, uint32_t edges);
-
 // keybind handling using raw keycode (for number keys 1-0)
-bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed) {
+keybind_t *handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed) {
 	if (!pressed)
-		return false;
+		return NULL;
 
-	keybind_t *matched_kb = NULL;
-
-	if (active_submap) {
-		for (size_t i = 0; i < active_submap->num_keybinds; i++) {
-			keybind_t *kb = &active_submap->keybinds[i];
-			if (kb->use_keycode && keybind_matches(kb, modifiers, 0, keycode)) {
-				matched_kb = kb;
-				break;
-			}
-		}
-	}
-
-	if (!matched_kb) {
-		for (size_t i = 0; i < num_keybinds; i++) {
-			keybind_t *kb = &keybinds[i];
-			if (kb->use_keycode && keybind_matches(kb, modifiers, 0, keycode)) {
-				matched_kb = kb;
-				break;
-			}
-		}
-	}
-
+	keybind_t *matched_kb = find_keybind(modifiers, 0, keycode, true, true);
 	if (!matched_kb)
-		return false;
+		return NULL;
 
-	if (matched_kb->action == BIND_INTERACTIVE_MOVE || matched_kb->action == BIND_INTERACTIVE_RESIZE ||
-		matched_kb->action == BIND_TILING_DRAG)
-		return false;
+	if (is_interactive_bind(matched_kb))
+		return matched_kb;
 
 	execute_keybind(matched_kb);
-	return true;
+	return NULL;
 }
 
 // keybind handling
@@ -332,28 +306,22 @@ bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym) {
 	if (active_submap) {
 		wlr_log(WLR_DEBUG, "In submap '%s' with %zu keybinds, looking for keysym=%u mod=%u",
 			active_submap->name, active_submap->num_keybinds, sym, modifiers);
-		for (size_t i = 0; i < active_submap->num_keybinds; i++) {
-			keybind_t *kb = &active_submap->keybinds[i];
-			wlr_log(WLR_DEBUG, "  checking submap keybind %zu: keysym=%u mod=%u action=%d", i, kb->keysym,
-				kb->modifiers, kb->action);
-			if (!kb->use_keycode && keybind_matches(kb, modifiers, sym, 0)) {
-				execute_keybind(kb);
-				return true;
-			}
+		keybind_t *kb = find_keybind(modifiers, sym, 0, false, false);
+		if (kb) {
+			wlr_log(WLR_DEBUG, "  matched submap keybind: action=%d", kb->action);
+			execute_keybind(kb);
+			return true;
 		}
 		return false;
 	}
 
 	// check global user-defined keybinds
-	for (size_t i = 0; i < num_keybinds; i++) {
-		keybind_t *kb = &keybinds[i];
-		if (!kb->use_keycode && keybind_matches(kb, modifiers, sym, 0)) {
-			execute_keybind(kb);
-			return true;
-		}
-	}
+	keybind_t *kb = find_keybind(modifiers, sym, 0, false, true);
+	if (!kb)
+		return false;
 
-	return false;
+	execute_keybind(kb);
+	return true;
 }
 
 // navigation actions

@@ -103,6 +103,13 @@ typedef struct {
 	const char *submap_name, *external_cmd;
 } bind_t;
 
+#define MOUSE_BUTTON_SYNTH_KEYCODE_BASE 0x20000000
+#define MOUSE_BUTTON_KEYCODE_OFFSET 272
+#define mouse_button_to_keycode(button_index) \
+	(MOUSE_BUTTON_SYNTH_KEYCODE_BASE + ((button_index) + MOUSE_BUTTON_KEYCODE_OFFSET))
+#define keycode_to_mouse_button_index(keycode) \
+	((int)(keycode) - MOUSE_BUTTON_SYNTH_KEYCODE_BASE - MOUSE_BUTTON_KEYCODE_OFFSET)
+
 typedef struct {
 	uint32_t modifiers;
 	xkb_keysym_t keysym;
@@ -159,6 +166,9 @@ void load_hotkeys(const char *config_path);
 void reload_hotkeys(void);
 bool keybind_matches(const keybind_t *kb, uint32_t modifiers, xkb_keysym_t keysym,
 	uint32_t keycode);
+keybind_t *find_keybind(uint32_t modifiers, xkb_keysym_t keysym, uint32_t keycode,
+	bool prefer_keycode, bool fallback_to_global);
+bool is_interactive_bind(const keybind_t *kb);
 void execute_keybind(const keybind_t *kb);
 void execute_bell_bind(void);
 void setup_hotkey_event_listener(struct wl_event_loop *event_loop);

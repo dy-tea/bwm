@@ -3,6 +3,7 @@
 #include "effects.h"
 #include "idle_power.h"
 #include "input_method.h"
+#include "keyboard.h"
 #include "layer.h"
 #include "once.h"
 #include "output.h"
@@ -29,7 +30,6 @@
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_pointer.h>
-#include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_pointer_constraints_v1.h>
 #include <wlr/types/wlr_relative_pointer_v1.h>
 #include <wlr/types/wlr_scene.h>
@@ -39,19 +39,6 @@
 #include <wlr/util/box.h>
 #include <wlr/util/region.h>
 #include <wlr/xwayland.h>
-
-extern keybind_t keybinds[];
-extern size_t num_keybinds;
-extern submap_t *active_submap;
-extern bool keybind_matches(const keybind_t *kb, uint32_t modifiers, xkb_keysym_t keysym,
-	uint32_t keycode);
-extern void execute_keybind(const keybind_t *kb);
-extern bool handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed);
-extern hotcornerbind_t hotcorner_bindings[];
-extern size_t num_hotcornerbinds;
-extern bool hotcornerbind_matches(const hotcornerbind_t *hc, int corner_x, int corner_y);
-extern hotcornerbind_t *hotcorner_bind_match(int corner_x, int corner_y);
-extern void execute_hotcornerbind(const hotcornerbind_t *hc);
 extern bool gapless_monocle;
 
 #define RESIZE_RATIO_MIN 0.1
@@ -204,8 +191,8 @@ static void apply_leaf_positions(desktop_t *d) {
 				if (rounded) {
 					rounded_mark_border_size(rounded, r.width, r.height, (int)bw,
 						n->client->toplevel && n->client->toplevel->node &&
-							n->client->toplevel->node->output ?
-							n->client->toplevel->node->output->wlr_output->scale : 1.0f);
+						n->client->toplevel->node->output ? n->client->toplevel->node->output->wlr_output->scale :
+						1.0f);
 				}
 			}
 		}
@@ -710,6 +697,55 @@ void cursor_motion_absolute(struct wl_listener *listener, void *data) {
 	process_cursor_motion(event->time_msec, dx, dy, dx, dy);
 }
 
+static uint32_t edges_from_cursor(const struct wlr_box *rect, uint32_t allowed_edges) {
+	double cx = server.cursor->x;
+	double cy = server.cursor->y;
+	double wx = rect->x;
+	double wy = rect->y;
+	double ww = rect->width;
+	double wh = rect->height;
+
+	double third_w = ww / 3.0;
+	double third_h = wh / 3.0;
+
+	uint32_t edges = 0;
+	if (cx < wx + third_w)
+		edges |= WLR_EDGE_LEFT;
+	if (cx > wx + ww - third_w)
+		edges |= WLR_EDGE_RIGHT;
+	if (cy < wy + third_h)
+		edges |= WLR_EDGE_TOP;
+	if (cy > wy + wh - third_h)
+		edges |= WLR_EDGE_BOTTOM;
+
+	if (edges != 0) {
+		edges &= allowed_edges;
+		if (edges != 0)
+			return edges;
+		return 0;
+	}
+
+	double min_dist = INFINITY;
+	uint32_t nearest = 0;
+	const struct {
+		uint32_t edge;
+		double dist;
+	} candidates[] = {
+		{WLR_EDGE_LEFT, cx - wx},
+		{WLR_EDGE_RIGHT, (wx + ww) - cx},
+		{WLR_EDGE_TOP, cy - wy},
+		{WLR_EDGE_BOTTOM, (wy + wh) - cy},
+	};
+
+	for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++)
+		if ((candidates[i].edge & allowed_edges) && candidates[i].dist < min_dist) {
+			min_dist = candidates[i].dist;
+		nearest = candidates[i].edge;
+	}
+
+	return nearest;
+}
+
 void cursor_button(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_pointer_button_event *event = data;
@@ -720,11 +756,11 @@ void cursor_button(struct wl_listener *listener, void *data) {
 	if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
 		if (server.cursor_mode == CURSOR_TILING_DRAG) {
 			tiling_drag_finish();
-			server.cursor_buttons &= ~(1 << (event->button - 272));
+			server.cursor_buttons &= ~(1 << (event->button - MOUSE_BUTTON_KEYCODE_OFFSET));
 			return;
 		}
 		reset_cursor_mode();
-		server.cursor_buttons &= ~(1 << (event->button - 272));
+		server.cursor_buttons &= ~(1 << (event->button - MOUSE_BUTTON_KEYCODE_OFFSET));
 	} else {
 		// tab bar click
 		if (event->button == BTN_LEFT) {
@@ -738,7 +774,7 @@ void cursor_button(struct wl_listener *listener, void *data) {
 					server.focus_from_click = true;
 					focus_node(m, d, tab_leaf);
 					arrange(m, d, true);
-					server.cursor_buttons |= 1 << (event->button - 272);
+					server.cursor_buttons |= 1 << (event->button - MOUSE_BUTTON_KEYCODE_OFFSET);
 					return;
 				}
 			}
@@ -754,7 +790,7 @@ void cursor_button(struct wl_listener *listener, void *data) {
 				node_t *tab_leaf = tabs_hit_test_desktop(d, server.cursor->x, server.cursor->y);
 				if (tab_leaf != NULL) {
 					kill_node(d, tab_leaf);
-					server.cursor_buttons |= 1 << (event->button - 272);
+					server.cursor_buttons |= 1 << (event->button - MOUSE_BUTTON_KEYCODE_OFFSET);
 					return;
 				}
 			}
@@ -800,38 +836,17 @@ void cursor_button(struct wl_listener *listener, void *data) {
 		}
 
 		// add to cursor buttons
-		server.cursor_buttons |= 1 << (event->button - 272);
+		server.cursor_buttons |= 1 << (event->button - MOUSE_BUTTON_KEYCODE_OFFSET);
 
 		// perform binds
 		struct wlr_keyboard *wlr_keyboard = wlr_seat_get_keyboard(server.seat);
 		uint32_t modifiers = wlr_keyboard_get_modifiers(wlr_keyboard);
 		for (uint32_t i = 0; i != 5; ++i) {
 			if (server.cursor_buttons & (1 << i)) {
-				uint32_t keycode = 0x20000000 + i + 272;
-				handle_keybind_raw(modifiers, keycode, true);
+				uint32_t keycode = mouse_button_to_keycode(i);
+				keybind_t *matched_kb = handle_keybind_raw(modifiers, keycode, true);
 
-				keybind_t *matched_kb = NULL;
-				if (active_submap) {
-					for (size_t j = 0; j < active_submap->num_keybinds; j++) {
-						keybind_t *kb = &active_submap->keybinds[j];
-						if (kb->use_keycode && keybind_matches(kb, modifiers, 0, keycode)) {
-							matched_kb = kb;
-							break;
-						}
-					}
-				}
-				if (!matched_kb) {
-					for (size_t j = 0; j < num_keybinds; j++) {
-						keybind_t *kb = &keybinds[j];
-						if (kb->use_keycode && keybind_matches(kb, modifiers, 0, keycode)) {
-							matched_kb = kb;
-							break;
-						}
-					}
-				}
-
-				if (matched_kb && (matched_kb->action == BIND_INTERACTIVE_MOVE ||
-						matched_kb->action == BIND_INTERACTIVE_RESIZE || matched_kb->action == BIND_TILING_DRAG)) {
+				if (matched_kb) {
 					toplevel_t *toplevel = NULL;
 					if (type && ((toplevel_t *)type)->node)
 						toplevel = type;
@@ -852,125 +867,17 @@ void cursor_button(struct wl_listener *listener, void *data) {
 
 							if (c->state == STATE_FLOATING) {
 								// floating resize
-								double wx = c->floating_rectangle.x;
-								double wy = c->floating_rectangle.y;
-								double ww = c->floating_rectangle.width;
-								double wh = c->floating_rectangle.height;
-								double cx = server.cursor->x;
-								double cy = server.cursor->y;
-
-								double third_w = ww / 3.0;
-								double third_h = wh / 3.0;
-
-								bool in_left = cx < wx + third_w;
-								bool in_right = cx > wx + ww - third_w;
-								bool in_top = cy < wy + third_h;
-								bool in_bottom = cy > wy + wh - third_h;
-
-								if (in_left || in_right)
-									edges |= in_left ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT;
-
-								if (in_top || in_bottom)
-									edges |= in_top ? WLR_EDGE_TOP : WLR_EDGE_BOTTOM;
-
-								if (edges == 0) {
-									double dist_left = cx - wx;
-									double dist_right = (wx + ww) - cx;
-									double dist_top = cy - wy;
-									double dist_bottom = (wy + wh) - cy;
-
-									double min_dist = dist_top;
-									edges = WLR_EDGE_TOP;
-
-									if (dist_bottom < min_dist) {
-										min_dist = dist_bottom;
-										edges = WLR_EDGE_BOTTOM;
-									}
-									if (dist_left < min_dist) {
-										min_dist = dist_left;
-										edges = WLR_EDGE_LEFT;
-									}
-									if (dist_right < min_dist)
-										edges = WLR_EDGE_RIGHT;
-								}
+								struct wlr_box rect = c->floating_rectangle;
+								edges = edges_from_cursor(&rect,
+									WLR_EDGE_LEFT | WLR_EDGE_RIGHT | WLR_EDGE_TOP | WLR_EDGE_BOTTOM);
 							} else if (IS_TILED(c)) {
 								// for scroller layouts, only allow horizontal edges (column width resize)
 								if (d && d->layout == LAYOUT_SCROLLER) {
-									double wx = c->tiled_rectangle.x;
-									double ww = c->tiled_rectangle.width;
-									double cx = server.cursor->x;
-
-									double third_w = ww / 3.0;
-
-									bool in_left = cx < wx + third_w;
-									bool in_right = cx > wx + ww - third_w;
-
-									if (in_left)
-										edges = WLR_EDGE_LEFT;
-									else if (in_right)
-										edges = WLR_EDGE_RIGHT;
-									else {
-										double dist_left = cx - wx;
-										double dist_right = (wx + ww) - cx;
-										edges = dist_left < dist_right ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT;
-									}
+									struct wlr_box rect = c->tiled_rectangle;
+									edges = edges_from_cursor(&rect, WLR_EDGE_LEFT | WLR_EDGE_RIGHT);
 								} else {
-									edges = get_tiled_resizable_edges(toplevel->node);
-
-									if (edges != 0) {
-										// determine edge
-										double wx = c->tiled_rectangle.x;
-										double wy = c->tiled_rectangle.y;
-										double ww = c->tiled_rectangle.width;
-										double wh = c->tiled_rectangle.height;
-										double cx = server.cursor->x;
-										double cy = server.cursor->y;
-
-										double third_w = ww / 3.0;
-										double third_h = wh / 3.0;
-
-										bool in_left = cx < wx + third_w;
-										bool in_right = cx > wx + ww - third_w;
-										bool in_top = cy < wy + third_h;
-										bool in_bottom = cy > wy + wh - third_h;
-
-										uint32_t clicked_edges = 0;
-
-										if (in_left || in_right)
-											clicked_edges |= in_left ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT;
-
-										if (in_top || in_bottom)
-											clicked_edges |= in_top ? WLR_EDGE_TOP : WLR_EDGE_BOTTOM;
-
-										if (clicked_edges == 0) {
-											double dist_left = cx - wx;
-											double dist_right = (wx + ww) - cx;
-											double dist_top = cy - wy;
-											double dist_bottom = (wy + wh) - cy;
-
-											double min_dist = INFINITY;
-
-											if ((edges & WLR_EDGE_LEFT) && dist_left < min_dist) {
-												min_dist = dist_left;
-												clicked_edges = WLR_EDGE_LEFT;
-											}
-											if ((edges & WLR_EDGE_RIGHT) && dist_right < min_dist) {
-												min_dist = dist_right;
-												clicked_edges = WLR_EDGE_RIGHT;
-											}
-											if ((edges & WLR_EDGE_TOP) && dist_top < min_dist) {
-												min_dist = dist_top;
-												clicked_edges = WLR_EDGE_TOP;
-											}
-											if ((edges & WLR_EDGE_BOTTOM) && dist_bottom < min_dist) {
-												min_dist = dist_bottom;
-												clicked_edges = WLR_EDGE_BOTTOM;
-											}
-										}
-
-										// intersect clicked edges with resizable edges
-										edges = clicked_edges & edges;
-									}
+									struct wlr_box rect = c->tiled_rectangle;
+									edges = edges_from_cursor(&rect, get_tiled_resizable_edges(toplevel->node));
 								}
 							}
 
