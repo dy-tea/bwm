@@ -1,6 +1,7 @@
 #include "once.h"
 #include "pointer_constraint.h"
 #include "server.h"
+#include "toplevel.h"
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_pointer_constraints_v1.h>
 

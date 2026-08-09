@@ -3,6 +3,7 @@
 #include "once.h"
 #include "output.h"
 #include "server.h"
+#include "toplevel.h"
 #include "transaction.h"
 #include "tree.h"
 #include "types.h"

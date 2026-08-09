@@ -1,8 +1,8 @@
 #pragma once
 
-#include "types.h"
-
 #include <stdbool.h>
+
+typedef struct node_t node_t;
 
 #define TILING_DRAG_THRESHOLD 5
 

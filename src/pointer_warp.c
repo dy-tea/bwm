@@ -1,6 +1,7 @@
 #include "cursor.h"
 #include "once.h"
 #include "server.h"
+#include "toplevel.h"
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_pointer_warp_v1.h>
 #include <wlr/util/log.h>

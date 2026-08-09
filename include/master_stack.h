@@ -1,10 +1,10 @@
 #pragma once
 
-#include "types.h"
-
 #include <stdbool.h>
 #include <wlr/util/box.h>
 
+typedef struct node_t node_t;
+typedef struct desktop_t desktop_t;
 typedef struct output_t output_t;
 
 typedef enum {

@@ -1,10 +1,6 @@
 #pragma once
 
 #include "gesture.h"
-#include "input_method.h"
-#include "launcher.h"
-#include "lock.h"
-#include "toplevel.h"
 #include "types.h"
 #include "xwayland.h"
 
@@ -34,6 +30,8 @@ enum cursor_mode {
 };
 
 typedef struct output_t output_t;
+struct ime_relay_t;
+typedef struct toplevel_t toplevel_t;
 
 typedef struct server_t {
 	struct wl_display *wl_display;

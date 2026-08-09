@@ -1,11 +1,11 @@
 #pragma once
 
-#include "output.h"
 #include "types.h"
 
 #include <wlr/types/wlr_scene.h>
 
 typedef struct surface_rounded_t surface_rounded_t;
+typedef struct output_t output_t;
 
 #define MIN_WIDTH 1
 #define MIN_HEIGHT 1

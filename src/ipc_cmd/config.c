@@ -14,6 +14,7 @@
 #include "spring.h"
 #include "tabs.h"
 #include "text.h"
+#include "toplevel.h"
 #include "transaction.h"
 #include "tree.h"
 #include <fcntl.h>

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "surface.h"
-#include "types.h"
 
 #include <wayland-server-core.h>
 #include <wlr/util/box.h>

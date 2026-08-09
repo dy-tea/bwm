@@ -1,5 +1,6 @@
 #include "once.h"
 #include "server.h"
+#include "toplevel.h"
 #include <wlr/types/wlr_ext_image_capture_source_v1.h>
 #include <wlr/types/wlr_scene.h>
 

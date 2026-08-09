@@ -1,7 +1,5 @@
 #pragma once
 
-#include "types.h"
-
 #include <stdbool.h>
 #include <sys/socket.h>
 #include <sys/un.h>

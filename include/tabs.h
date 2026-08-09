@@ -1,10 +1,11 @@
 #pragma once
 
-#include "types.h"
-
 #include <stdbool.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/box.h>
+
+typedef struct node_t node_t;
+typedef struct desktop_t desktop_t;
 
 #define TAB_BAR_HEIGHT 22
 #define TAB_BAR_BORDER 1

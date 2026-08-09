@@ -1,9 +1,9 @@
 #pragma once
 
-#include "input_method.h"
-
 #include <wayland-server.h>
 #include <wlr/types/wlr_seat.h>
+
+typedef struct ime_relay_t ime_relay_t;
 
 typedef struct seat_t {
 	struct wlr_seat *wlr_seat;

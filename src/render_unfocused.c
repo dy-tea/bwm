@@ -1,6 +1,7 @@
 #include "once.h"
 #include "render_unfocused.h"
 #include "server.h"
+#include "toplevel.h"
 #include "tree.h"
 #include <stdlib.h>
 #include <time.h>
