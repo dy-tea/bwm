@@ -341,3 +341,21 @@ void surface_set_opacity(struct wlr_scene_node *node, float opacity) {
 	if (node)
 		wlr_scene_node_for_each_buffer(node, surface_set_opacity_for_each_buffer, &opacity);
 }
+
+void rounded_mark_border_size(surface_rounded_t *rounded, int content_w, int content_h, int border_w,
+		float scale) {
+	if (!rounded)
+		return;
+
+	int new_fw = content_w + 2 * border_w;
+	int new_fh = content_h + 2 * border_w;
+	if (new_fw <= 0 || new_fh <= 0)
+		return;
+
+	int pfw = (int)((double)new_fw * scale + 0.5);
+	int pfh = (int)((double)new_fh * scale + 0.5);
+	if (rounded->border_shader_buf_w != pfw || rounded->border_shader_buf_h != pfh) {
+		rounded->border_dirty = true;
+		rounded->corner_mask_dirty = true;
+	}
+}

@@ -37,7 +37,7 @@ static void monocle_on_focus(output_t *m, desktop_t *d, node_t *n) {
 	if (!d->root)
 		return;
 
-	for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root)) {
+	FOR_EACH_LEAF(node, d->root) {
 		if (!node->client)
 			continue;
 
@@ -61,7 +61,7 @@ static void scroller_on_focus(output_t *m, desktop_t *d, node_t *n) {
 		return;
 
 	if (s->column_count == 0 && d->root) {
-		for (node_t *leaf = first_extrema(d->root); leaf; leaf = next_leaf(leaf, d->root))
+		FOR_EACH_LEAF(leaf, d->root)
 			if (leaf->client)
 				leaf->client->flags.shown = true;
 	} else {
@@ -83,29 +83,7 @@ static void scroller_on_focus(output_t *m, desktop_t *d, node_t *n) {
 }
 
 static int tiled_collect(desktop_t *d, node_t ***out_nodes) {
-	if (!d || !d->root || !out_nodes)
-		return 0;
-
-	*out_nodes = NULL;
-	int count = 0;
-	for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root))
-		if (n->client && IS_TILED(n->client))
-			count++;
-
-	if (count == 0)
-		return 0;
-
-	node_t **nodes = calloc((size_t)count, sizeof(*nodes));
-	if (!nodes)
-		return 0;
-
-	int index = 0;
-	for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root))
-		if (n->client && IS_TILED(n->client))
-			nodes[index++] = n;
-
-	*out_nodes = nodes;
-	return count;
+	return collect_tiled_leaves(d, out_nodes);
 }
 
 static int scroller_collect_fn(desktop_t *d, node_t ***out_nodes) {

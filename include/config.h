@@ -161,7 +161,6 @@ bool keybind_matches(const keybind_t *kb, uint32_t modifiers, xkb_keysym_t keysy
 	uint32_t keycode);
 void execute_keybind(const keybind_t *kb);
 void execute_bell_bind(void);
-int get_hotkey_watch_fd(void);
 void setup_hotkey_event_listener(struct wl_event_loop *event_loop);
 void enter_submap(const char *name);
 void exit_submap(void);
@@ -171,12 +170,10 @@ void set_keyboard_grouping(keyboard_grouping_t grouping);
 
 bool gesturebind_matches(const gesturebind_t *gb, enum gesture_type type, uint8_t fingers);
 void execute_gesturebind(const gesturebind_t *gb);
-void reload_gesturebinds(void);
 
 bool hotcornerbind_matches(const hotcornerbind_t *hc, int corner_x, int corner_y);
 hotcornerbind_t *hotcorner_bind_match(int corner_x, int corner_y);
 void execute_hotcornerbind(const hotcornerbind_t *hc);
-void reload_hotcornerbinds(void);
 
 void execute_bind(bind_t b);
 void execute_bind_action(bind_action_t action);

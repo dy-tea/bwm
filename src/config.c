@@ -1295,10 +1295,6 @@ void execute_bell_bind(void) {
 		execute_keybind(&bell_bind);
 }
 
-int get_hotkey_watch_fd(void) {
-	return hotkey_watch_fd;
-}
-
 void setup_hotkey_event_listener(struct wl_event_loop *event_loop) {
 	hotkey_event_loop = event_loop;
 	add_hotkey_listener_to_event_loop();
@@ -1377,10 +1373,6 @@ void execute_gesturebind(const gesturebind_t *gb) {
 	execute_bind(bind);
 }
 
-void reload_gesturebinds(void) {
-	num_gesturebinds = 0;
-}
-
 bool hotcornerbind_matches(const hotcornerbind_t *hc, int corner_x, int corner_y) {
 	if (!hc)
 		return false;
@@ -1407,10 +1399,6 @@ void execute_hotcornerbind(const hotcornerbind_t *hc) {
 		.submap_name = NULL
 	};
 	execute_bind(bind);
-}
-
-void reload_hotcornerbinds(void) {
-	num_hotcornerbinds = 0;
 }
 
 const char *bind_action_name(bind_action_t action) {

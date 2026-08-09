@@ -134,3 +134,5 @@ void surface_client_set_border_radius(struct client_t *client, float radius);
 void surface_client_set_shadow(struct client_t *client, bool enabled);
 
 void surface_set_opacity(struct wlr_scene_node *node, float opacity);
+void rounded_mark_border_size(struct surface_rounded_t *rounded, int content_w, int content_h,
+	int border_w, float scale);

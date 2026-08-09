@@ -77,7 +77,6 @@ typedef struct toplevel_t {
 
 // helper functions
 void focus_toplevel(toplevel_t *toplevel);
-void toplevel_apply_geometry(toplevel_t *toplevel);
 bool toplevel_is_ready(toplevel_t *toplevel);
 void update_foreign_toplevel_state(toplevel_t *toplevel);
 void toplevel_center_and_clip_surface(toplevel_t *toplevel);

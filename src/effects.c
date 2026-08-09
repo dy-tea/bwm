@@ -92,8 +92,6 @@ float refraction_normal_pow = 6.0f;
 float refraction_rgb_fringing = 22.0f / 30.0f;
 int refraction_texture_repeat_mode = 1;
 float refraction_offset = 1.0f;
-float refraction_noise_strength = 0.03f;
-float refraction_noise_scale = 1.0f;
 
 float shadow_size = 8.0f;
 float shadow_offset_x = 0.0f;
@@ -771,8 +769,6 @@ static bool rebuild_live_blur(output_t *output, uint64_t shared_blurred, pixman_
 		.refraction_rgb_fringing = refraction_rgb_fringing,
 		.refraction_texture_repeat_mode = refraction_texture_repeat_mode,
 		.refraction_offset = refraction_offset,
-		.refraction_noise_strength = refraction_noise_strength,
-		.refraction_noise_scale = refraction_noise_scale,
 	};
 
 	bool keep_blur = ctx->blur_buf && ctx->blur_native[0] && ctx->blur_gen == ctx->backdrop_gen;

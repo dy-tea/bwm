@@ -53,8 +53,6 @@ struct be_blur_params {
 	float refraction_rgb_fringing;
 	int refraction_texture_repeat_mode;
 	float refraction_offset;
-	float refraction_noise_strength;
-	float refraction_noise_scale;
 };
 
 struct be_shadow_params {

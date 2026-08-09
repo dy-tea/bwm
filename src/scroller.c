@@ -274,14 +274,14 @@ static void populate_from_tree(scroller_state_t *s, desktop_t *d) {
 		return;
 
 	int num_tiled = 0;
-	for (node_t *n = first_extrema(d->root); n; n = next_leaf(n, d->root))
+	FOR_EACH_LEAF(n, d->root)
 		if (n->client && scroller_is_tiled(n->client))
 			num_tiled++;
 
 	if (num_tiled == 0)
 		return;
 
-	for (node_t *n = first_extrema(d->root); n; n = next_leaf(n, d->root)) {
+	FOR_EACH_LEAF(n, d->root) {
 		if (!n->client || !scroller_is_tiled(n->client))
 			continue;
 		scroller_add_tile(s, n->client, false);

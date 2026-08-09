@@ -27,7 +27,6 @@ extern stack_layout_t master_stack_layout;
 void master_stack_arrange(struct output_t *m, desktop_t *d, struct wlr_box available);
 
 int master_stack_collect(desktop_t *d, node_t ***out_nodes);
-int master_stack_find_index(desktop_t *d, const node_t *n);
 
 bool master_stack_focus_south(desktop_t *d);
 bool master_stack_focus_north(desktop_t *d);

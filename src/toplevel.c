@@ -331,20 +331,12 @@ void toplevel_center_and_clip_surface(toplevel_t *toplevel) {
 			update_border_colors(c);
 			if (toplevel->rounded && toplevel->rounded->border_shader_node && (c->border_radius > 0.0f ||
 					toplevel->rounded->gradient_count >= 2)) {
-				int new_fw = border_w + 2 * (int)bw;
-				int new_fh = border_h + 2 * (int)bw;
-				if (new_fw > 0 && new_fh > 0) {
-					float scale = toplevel->node &&
-						toplevel->node->output ? toplevel->node->output->wlr_output->scale : 1.0f;
-					int pfw = (int)((double)new_fw * scale + 0.5);
-					int pfh = (int)((double)new_fh * scale + 0.5);
-					if (toplevel->rounded->border_shader_buf_w != pfw ||
-							toplevel->rounded->border_shader_buf_h != pfh) {
-						toplevel->rounded->border_dirty = true;
-						toplevel->rounded->corner_mask_dirty = true;
-					}
-					wlr_scene_buffer_set_dest_size(toplevel->rounded->border_shader_node, new_fw, new_fh);
-				}
+				rounded_mark_border_size(toplevel->rounded, border_w, border_h, (int)bw,
+					toplevel->node && toplevel->node->output ?
+						toplevel->node->output->wlr_output->scale : 1.0f);
+				if (border_w + 2 * (int)bw > 0)
+					wlr_scene_buffer_set_dest_size(toplevel->rounded->border_shader_node,
+						border_w + 2 * (int)bw, border_h + 2 * (int)bw);
 			}
 		} else if (container_rect) {
 			struct wlr_box full_geo = {
@@ -357,20 +349,13 @@ void toplevel_center_and_clip_surface(toplevel_t *toplevel) {
 			update_border_colors(c);
 			if (toplevel->rounded && toplevel->rounded->border_shader_node && (c->border_radius > 0.0f ||
 					toplevel->rounded->gradient_count >= 2)) {
-				int new_fw = container_rect->width + 2 * (int)bw;
-				int new_fh = container_rect->height + 2 * (int)bw;
-				if (new_fw > 0 && new_fh > 0) {
-					float scale = toplevel->node &&
-						toplevel->node->output ? toplevel->node->output->wlr_output->scale : 1.0f;
-					int pfw = (int)((double)new_fw * scale + 0.5);
-					int pfh = (int)((double)new_fh * scale + 0.5);
-					if (toplevel->rounded->border_shader_buf_w != pfw ||
-							toplevel->rounded->border_shader_buf_h != pfh) {
-						toplevel->rounded->border_dirty = true;
-						toplevel->rounded->corner_mask_dirty = true;
-					}
-					wlr_scene_buffer_set_dest_size(toplevel->rounded->border_shader_node, new_fw, new_fh);
-				}
+				rounded_mark_border_size(toplevel->rounded, container_rect->width, container_rect->height,
+					(int)bw,
+					toplevel->node && toplevel->node->output ?
+						toplevel->node->output->wlr_output->scale : 1.0f);
+				if (container_rect->width + 2 * (int)bw > 0)
+					wlr_scene_buffer_set_dest_size(toplevel->rounded->border_shader_node,
+						container_rect->width + 2 * (int)bw, container_rect->height + 2 * (int)bw);
 			}
 		}
 	}
@@ -1289,7 +1274,7 @@ void focus_toplevel(struct toplevel_t *toplevel) {
 		output_t *m = toplevel->node->output;
 		desktop_t *d = m ? m->desk : NULL;
 		if (d && d->root != NULL) {
-			for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root)) {
+			FOR_EACH_LEAF(node, d->root) {
 				if (node->client == NULL)
 					continue;
 
@@ -1297,34 +1282,6 @@ void focus_toplevel(struct toplevel_t *toplevel) {
 			}
 		}
 	}
-}
-
-void toplevel_apply_geometry(toplevel_t *toplevel) {
-	if (toplevel == NULL || toplevel->node == NULL || toplevel->node->client == NULL)
-		return;
-
-	client_t *c = toplevel->node->client;
-	struct wlr_box *rect;
-
-	if (c->state == STATE_FULLSCREEN) {
-		output_t *m = toplevel->node->output;
-
-		if (m)
-			rect = &m->rectangle;
-		else
-			return;
-	} else if (c->state == STATE_FLOATING)
-		rect = &c->floating_rectangle;
-	else
-		rect = &c->tiled_rectangle;
-
-	wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, rect->width, rect->height);
-	animation_apply_geometry(toplevel->node, toplevel->scene_tree, *rect, true);
-
-	toplevel_center_and_clip_surface(toplevel);
-
-	wlr_log(WLR_DEBUG, "Applied geometry: %dx%d at %d,%d", rect->width, rect->height, rect->x,
-		rect->y);
 }
 
 bool toplevel_is_ready(struct toplevel_t *toplevel) {

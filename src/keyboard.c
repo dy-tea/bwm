@@ -960,7 +960,7 @@ void toggle_monocle(void) {
 		layout_set(d, d->user_layout);
 
 		if (d->root) {
-			for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root)) {
+			FOR_EACH_LEAF(n, d->root) {
 				if (n->client && n->client->toplevel && n->client->state != STATE_FULLSCREEN) {
 					n->client->toplevel->client_maximized = false;
 					wlr_xdg_toplevel_set_maximized(n->client->toplevel->xdg_toplevel, false);
@@ -971,7 +971,7 @@ void toggle_monocle(void) {
 		layout_toggle(d, LAYOUT_MONOCLE);
 
 		if (d->root) {
-			for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root)) {
+			FOR_EACH_LEAF(n, d->root) {
 				if (n->client && n->client->toplevel && n->client->state != STATE_FULLSCREEN) {
 					n->client->toplevel->client_maximized = true;
 					wlr_xdg_toplevel_set_maximized(n->client->toplevel->xdg_toplevel, true);
@@ -997,7 +997,7 @@ void set_tiled_layout(void) {
 	d->user_layout = LAYOUT_TILED;
 
 	if (d->root) {
-		for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root)) {
+		FOR_EACH_LEAF(n, d->root) {
 			if (n->client && n->client->toplevel && n->client->state != STATE_FULLSCREEN) {
 				n->client->toplevel->client_maximized = false;
 				wlr_xdg_toplevel_set_maximized(n->client->toplevel->xdg_toplevel, false);
@@ -1026,7 +1026,7 @@ void toggle_master_stack(void) {
 	}
 
 	if (d->root) {
-		for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root)) {
+		FOR_EACH_LEAF(n, d->root) {
 			if (n->client && n->client->toplevel && n->client->state != STATE_FULLSCREEN) {
 				n->client->toplevel->client_maximized = false;
 				wlr_xdg_toplevel_set_maximized(n->client->toplevel->xdg_toplevel, false);

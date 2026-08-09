@@ -630,7 +630,7 @@ void apply_layout(output_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
 
 		// show only active tab leaf, hide the rest
 		node_t *active = tab_focus_leaf(n, d->focus);
-		for (node_t *leaf = first_extrema(n); leaf != NULL && leaf != n; leaf = next_leaf(leaf, n)) {
+		FOR_EACH_LEAF_EXCLUDE_ROOT(leaf, n) {
 			if (leaf->client == NULL)
 				continue;
 			if (leaf->client->state == STATE_FLOATING)
@@ -676,7 +676,7 @@ node_t *find_public(desktop_t *d) {
 	unsigned int b_area = 0;
 	node_t *b = NULL;
 
-	for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root)) {
+	FOR_EACH_LEAF(n, d->root) {
 		if (n->vacant)
 			continue;
 
@@ -688,6 +688,33 @@ node_t *find_public(desktop_t *d) {
 	}
 
 	return b;
+}
+
+int collect_tiled_leaves(desktop_t *d, node_t ***out_nodes) {
+	if (out_nodes)
+		*out_nodes = NULL;
+	if (!d || !d->root || !out_nodes)
+		return 0;
+
+	int count = 0;
+	FOR_EACH_LEAF(n, d->root)
+		if (n->client && IS_TILED(n->client))
+			count++;
+
+	if (count == 0)
+		return 0;
+
+	node_t **nodes = calloc((size_t)count, sizeof(*nodes));
+	if (!nodes)
+		return 0;
+
+	int index = 0;
+	FOR_EACH_LEAF(n, d->root)
+		if (n->client && IS_TILED(n->client))
+			nodes[index++] = n;
+
+	*out_nodes = nodes;
+	return count;
 }
 
 node_t *insert_node(desktop_t *d, node_t *n, node_t *f) {
@@ -1116,7 +1143,7 @@ static bool focus_node_impl(output_t *m, desktop_t *d, node_t *n, bool give_keyb
 	if (impl && impl->on_focus) {
 		impl->on_focus(m, d, n);
 	} else if (d->root != NULL) {
-		for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root))
+		FOR_EACH_LEAF(node, d->root)
 			if (node->client != NULL)
 				node->client->flags.shown = true;
 	}
@@ -1124,7 +1151,7 @@ static bool focus_node_impl(output_t *m, desktop_t *d, node_t *n, bool give_keyb
 	node_t *t = tabbed_ancestor(n);
 	if (t != NULL) {
 		tabs_update_focus(t, n);
-		for (node_t *leaf = first_extrema(t); leaf != NULL && leaf != t; leaf = next_leaf(leaf, t)) {
+		FOR_EACH_LEAF_EXCLUDE_ROOT(leaf, t) {
 			if (leaf->client == NULL)
 				continue;
 			if (leaf->client->state == STATE_FLOATING)
@@ -1148,7 +1175,7 @@ static bool focus_node_impl(output_t *m, desktop_t *d, node_t *n, bool give_keyb
 
 	// update border colors for all visible clients on this desktop
 	if (d->root != NULL) {
-		for (node_t *node = first_extrema(d->root); node != NULL; node = next_leaf(node, d->root)) {
+		FOR_EACH_LEAF(node, d->root) {
 			if (node->client == NULL)
 				continue;
 
@@ -1479,13 +1506,6 @@ void balance_tree(node_t *n) {
 	balance_rec(n);
 }
 
-struct wlr_box get_rectangle(output_t *m, node_t *n) {
-	if (n != NULL)
-		return n->rectangle;
-
-	return m->rectangle;
-}
-
 // Transaction helper functions
 
 void node_set_dirty(node_t *n) {
@@ -1579,33 +1599,6 @@ struct wlr_scene_rect **client_border_rects(client_t *client) {
 	return CLIENT_DISPATCH(client, border_rects);
 }
 
-void print_tree(node_t *n, int depth) {
-	if (n == NULL)
-		return;
-
-	for (int i = 0; i < depth; i++)
-		printf("  ");
-
-	if (is_leaf(n)) {
-		printf("node %u: rect=(%d,%d %dx%d)", n->id, n->rectangle.x, n->rectangle.y, n->rectangle.width,
-			n->rectangle.height);
-
-		if (n->client) {
-			printf(" client=%s", n->client->app_id[0] ? n->client->app_id : "(none)");
-		} else {
-			printf(" client=NULL");
-		}
-
-		printf("\n");
-	} else {
-		const char *st = n->split_type == TYPE_VERTICAL ? "V" : "H";
-		printf("node %u: rect=(%d,%d %dx%d) split=%s ratio=%.2f\n", n->id, n->rectangle.x, n->rectangle.y,
-			n->rectangle.width, n->rectangle.height, st, n->split_ratio);
-		print_tree(n->first_child, depth + 1);
-		print_tree(n->second_child, depth + 1);
-	}
-}
-
 static bool validate_subtree(node_t *n, node_t *expected_parent, int depth) {
 	if (n == NULL)
 		return true;
@@ -1665,7 +1658,7 @@ void validate_tree(const char *context, desktop_t *d) {
 	// verify d->focus is either in the tree or explicitly floating/NULL
 	if (d->focus != NULL && d->focus->client != NULL && IS_TILED(d->focus->client)) {
 		bool found = false;
-		for (node_t *f = first_extrema(d->root); f != NULL; f = next_leaf(f, d->root)) {
+		FOR_EACH_LEAF(f, d->root) {
 			if (f == d->focus) {
 				found = true;
 				break;
@@ -1897,7 +1890,7 @@ void refresh_border_colors(void) {
 			if (d->root == NULL)
 				continue;
 
-			for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root)) {
+			FOR_EACH_LEAF(n, d->root) {
 				if (n->client == NULL)
 					continue;
 

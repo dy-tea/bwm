@@ -117,7 +117,6 @@ struct gles2_data {
 	GLint screen_shader_u_tex;
 	GLint screen_shader_u_resolution;
 	GLint screen_shader_u_time;
-	struct timespec screen_shader_start_time;
 
 	GLuint vbo;
 	GLint attr_pos;
@@ -1185,7 +1184,6 @@ static bool gles2_compile_screen_shader(const char *frag_src) {
 	g->screen_shader_u_tex = glGetUniformLocation(prog, "tex");
 	g->screen_shader_u_resolution = glGetUniformLocation(prog, "resolution");
 	g->screen_shader_u_time = glGetUniformLocation(prog, "time");
-	clock_gettime(CLOCK_MONOTONIC, &g->screen_shader_start_time);
 	return true;
 }
 

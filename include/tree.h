@@ -41,6 +41,13 @@ node_t *second_extrema(node_t *n);
 node_t *next_leaf(node_t *n, node_t *r);
 node_t *prev_leaf(node_t *n, node_t *r);
 
+// Iterate over every leaf of the tree rooted at r. `it` is declared by the
+// macro and must be a fresh identifier (some callers break out of the loop).
+#define FOR_EACH_LEAF(it, r)                                                            \
+	for (node_t *it = first_extrema(r); it != NULL; it = next_leaf(it, r))
+#define FOR_EACH_LEAF_EXCLUDE_ROOT(it, r)                                               \
+	for (node_t *it = first_extrema(r); it != NULL && it != (r); it = next_leaf(it, r))
+
 // focus management
 bool focus_node(struct output_t *m, desktop_t *d, node_t *n);
 bool activate_node(struct output_t *m, desktop_t *d, node_t *n);
@@ -50,6 +57,7 @@ bool is_adjacent(node_t *a, node_t *b, direction_t dir);
 // node manipulation
 void swap_nodes(struct output_t *m1, desktop_t *d1, node_t *n1, struct output_t *m2, desktop_t *d2,
 	node_t *n2);
+int collect_tiled_leaves(desktop_t *d, node_t ***out_nodes);
 bool set_state(struct output_t *m, desktop_t *d, node_t *n, client_state_t s);
 void set_floating(struct output_t *m, desktop_t *d, node_t *n, bool value);
 void enter_fullscreen(struct output_t *m, desktop_t *d, node_t *n);
@@ -67,7 +75,6 @@ void equalize_tree(node_t *n);
 void balance_tree(node_t *n);
 
 // geometry
-struct wlr_box get_rectangle(struct output_t *m, node_t *n);
 unsigned int node_area(node_t *n);
 
 // Transaction helpers
@@ -81,7 +88,6 @@ void node_set_pending_hidden(node_t *n, bool hidden);
 void parse_color(const char *hex, float *color);
 
 // Debug helpers
-void print_tree(node_t *n, int depth);
 void validate_tree(const char *context, desktop_t *d);
 
 struct wlr_scene_tree *client_get_scene_tree(client_t *client);

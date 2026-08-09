@@ -82,35 +82,15 @@ static void reconcile_master_membership(desktop_t *d, node_t **nodes, int count)
 }
 
 static int collect_tiled_nodes(desktop_t *d, node_t ***out_nodes) {
-	if (out_nodes)
-		*out_nodes = NULL;
-	if (!d || !d->root || !out_nodes)
-		return 0;
-
-	int count = 0;
-	for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root))
-		if (n->client && IS_TILED(n->client))
-			count++;
-
+	int count = collect_tiled_leaves(d, out_nodes);
 	if (count == 0)
 		return 0;
 
-	node_t **nodes = calloc((size_t)count, sizeof(*nodes));
-	if (!nodes) {
-		wlr_log(WLR_ERROR, "some bullshit");
-		return 0;
-	}
-
-	int index = 0;
-	for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root))
-		if (n->client && IS_TILED(n->client))
-			nodes[index++] = n;
-
+	node_t **nodes = *out_nodes;
 	qsort(nodes, (size_t)count, sizeof(*nodes), compare_node_order);
 	reconcile_master_membership(d, nodes, count);
 	qsort(nodes, (size_t)count, sizeof(*nodes), compare_master_then_order);
 
-	*out_nodes = nodes;
 	return count;
 }
 
@@ -499,17 +479,6 @@ void master_stack_cycle_stack_layout(void) {
 
 int master_stack_collect(desktop_t *d, node_t ***out_nodes) {
 	return collect_tiled_nodes(d, out_nodes);
-}
-
-int master_stack_find_index(desktop_t *d, const node_t *n) {
-	if (!d || !n)
-		return -1;
-
-	node_t **nodes = NULL;
-	int count = collect_tiled_nodes(d, &nodes);
-	int index = find_node_index(nodes, count, n);
-	free(nodes);
-	return index;
 }
 
 static node_t **gather_focused(desktop_t *d, int *out_total, int *out_index) {
