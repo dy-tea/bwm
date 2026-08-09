@@ -48,10 +48,6 @@ static bool desktop_has_urgent(desktop_t *d) {
 	return false;
 }
 
-const char *ipc_get_socket_path(void) {
-	return socket_path;
-}
-
 int ipc_get_socket_fd(void) {
 	return ipc_socket_fd;
 }

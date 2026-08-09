@@ -13,7 +13,6 @@ struct wlr_output_state;
 #define BLUR_MAX_LEVELS 10
 
 typedef struct {
-	struct wlr_buffer *buf;
 	uint64_t native_handle[2];
 	int width, height;
 } be_buffer_t;
@@ -38,7 +37,6 @@ struct be_blur_params {
 	enum blur_algorithm algorithm;
 	int passes;
 	float radius;
-	int downsample;
 	float vibrancy, vibrancy_darkness;
 	float noise_strength;
 	float brightness;

@@ -52,7 +52,6 @@ node_t *prev_leaf(node_t *n, node_t *r);
 bool focus_node(struct output_t *m, desktop_t *d, node_t *n);
 bool activate_node(struct output_t *m, desktop_t *d, node_t *n);
 node_t *find_fence(node_t *n, direction_t dir);
-bool is_adjacent(node_t *a, node_t *b, direction_t dir);
 
 // node manipulation
 void swap_nodes(struct output_t *m1, desktop_t *d1, node_t *n1, struct output_t *m2, desktop_t *d2,
@@ -79,10 +78,7 @@ unsigned int node_area(node_t *n);
 
 // Transaction helpers
 void node_set_dirty(node_t *n);
-void node_set_pending_size(node_t *n, int width, int height);
-void node_set_pending_position(node_t *n, int x, int y);
 void node_set_pending_rectangle(node_t *n, struct wlr_box rect);
-void node_set_pending_hidden(node_t *n, bool hidden);
 
 // Color helpers
 void parse_color(const char *hex, float *color);

@@ -73,8 +73,6 @@ static void hide_leaves(desktop_t *desk) {
 }
 
 static void unlink_and_refocus(node_t *n, desktop_t *src, output_t *mon) {
-	n->destroying = false;
-	n->ntxnrefs = 0;
 	hide_node_client(n);
 	remove_node(src, n);
 	if (src->root) {

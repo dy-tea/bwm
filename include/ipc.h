@@ -51,7 +51,6 @@ void ipc_init(void);
 int ipc_get_socket_fd(void);
 void ipc_handle_incoming(int client_fd);
 void ipc_fini(void);
-const char *ipc_get_socket_path(void);
 
 void ipc_put_status(subscriber_mask_t mask, const char *fmt, ...);
 bool ipc_print_report(int fd);

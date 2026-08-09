@@ -606,9 +606,9 @@ void toggle_floating(void) {
 }
 
 void tile_focused(void) {
-	node_t *n = mon->desk->focus;
-	if (n == NULL)
+	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
+	node_t *n = mon->desk->focus;
 
 	if (n->client == NULL)
 		return;
@@ -957,9 +957,9 @@ void toggle_monocle(void) {
 }
 
 void set_tiled_layout(void) {
-	desktop_t *d = mon->desk;
-	if (mon == NULL || d == NULL)
+	if (mon == NULL || mon->desk == NULL)
 		return;
+	desktop_t *d = mon->desk;
 
 	layout_set(d, LAYOUT_TILED);
 	d->user_layout = LAYOUT_TILED;

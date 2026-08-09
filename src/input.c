@@ -562,29 +562,6 @@ void input_apply_config_all_pointers(void) {
 		input_apply_config(&pointer->wlr_pointer->base);
 }
 
-const char *input_config_type_str(enum input_config_type type) {
-	switch (type) {
-	case INPUT_CONFIG_TYPE_ANY:
-		return "any";
-	case INPUT_CONFIG_TYPE_KEYBOARD:
-		return "keyboard";
-	case INPUT_CONFIG_TYPE_POINTER:
-		return "pointer";
-	case INPUT_CONFIG_TYPE_TOUCHPAD:
-		return "touchpad";
-	case INPUT_CONFIG_TYPE_TOUCH:
-		return "touch";
-	case INPUT_CONFIG_TYPE_TABLET:
-		return "tablet";
-	case INPUT_CONFIG_TYPE_TABLET_PAD:
-		return "tablet_pad";
-	case INPUT_CONFIG_TYPE_SWITCH:
-		return "switch";
-	default:
-		return "unknown";
-	}
-}
-
 void input_init(void) {
 	ONCE();
 	for (size_t i = 0; i < num_input_configs; i++) {

@@ -1227,27 +1227,6 @@ bool activate_node(output_t *m, desktop_t *d, node_t *n) {
 	return focus_node_impl(m, d, n, on_current_desktop);
 }
 
-bool is_adjacent(node_t *a, node_t *b, direction_t dir) {
-	if (a == NULL || b == NULL)
-		return false;
-
-	struct wlr_box ra = a->rectangle;
-	struct wlr_box rb = b->rectangle;
-
-	switch (dir) {
-	case DIR_WEST:
-		return ra.x == rb.x + rb.width;
-	case DIR_EAST:
-		return ra.x + ra.width == rb.x;
-	case DIR_NORTH:
-		return ra.y + ra.height == rb.y;
-	case DIR_SOUTH:
-		return ra.y == rb.y + rb.height;
-	}
-
-	return false;
-}
-
 node_t *find_fence(node_t *n, direction_t dir) {
 	if (n == NULL)
 		return NULL;
@@ -1515,37 +1494,11 @@ void node_set_dirty(node_t *n) {
 	transaction_add_dirty_node(n);
 }
 
-void node_set_pending_size(node_t *n, int width, int height) {
-	if (!n)
-		return;
-
-	n->pending.rectangle.width = width;
-	n->pending.rectangle.height = height;
-	node_set_dirty(n);
-}
-
-void node_set_pending_position(node_t *n, int x, int y) {
-	if (!n)
-		return;
-
-	n->pending.rectangle.x = x;
-	n->pending.rectangle.y = y;
-	node_set_dirty(n);
-}
-
 void node_set_pending_rectangle(node_t *n, struct wlr_box rect) {
 	if (!n)
 		return;
 
 	n->pending.rectangle = rect;
-	node_set_dirty(n);
-}
-
-void node_set_pending_hidden(node_t *n, bool hidden) {
-	if (!n)
-		return;
-
-	n->pending.hidden = hidden;
 	node_set_dirty(n);
 }
 

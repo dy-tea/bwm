@@ -687,9 +687,6 @@ static uint64_t capture_bg_to_tex1_ex(output_t *output, effects_output_t *ctx, b
 	return result;
 }
 
-static struct wlr_box get_client_rect(toplevel_t *tl);
-static struct wlr_box get_animated_client_rect(toplevel_t *tl);
-
 // captures scene with blur layer surfaces hidden but blur toplevels visible (for layer blur)
 static uint64_t capture_bg_combined(output_t *output, effects_output_t *ctx) {
 	return capture_bg_to_tex1_ex(output, ctx, false, NULL, NULL, false, false, NULL);
@@ -1218,6 +1215,7 @@ static bool rebuild_live_acrylic(output_t *output, pixman_region32_t *damage,
 			pixman_region32_clear(overlap_rgn);
 			pixman_region32_union_rect(overlap_rgn, overlap_rgn, r.x - output->lx, r.y - output->ly, r.width,
 				r.height);
+			pixman_region32_intersect(overlap_rgn, overlap_rgn, damage);
 			if (pixman_region32_empty(overlap_rgn))
 				continue;
 		}
