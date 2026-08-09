@@ -694,27 +694,22 @@ static void update_resize_entry(animation_entry_t *entry) {
 		if (IS_TILED(c) || c->state == STATE_FLOATING || c->state == STATE_FULLSCREEN) {
 			int geo_w = (int)entry->toplevel->geometry.width;
 			int geo_h = (int)entry->toplevel->geometry.height;
-			bool undersized = geo_w < entry->to.width || geo_h < entry->to.height;
 
+			// always honour anchored edges, even for undersized surfaces
 			int cx, cy;
-			if (undersized) {
+			if (entry->from.x == entry->to.x)
+				cx = 0;
+			else if (from_right == to_right)
+				cx = width - geo_w;
+			else
 				cx = (width - geo_w) / 2;
-				cy = (height - geo_h) / 2;
-			} else {
-				if (entry->from.x == entry->to.x)
-					cx = 0;
-				else if (from_right == to_right)
-					cx = width - geo_w;
-				else
-					cx = (width - geo_w) / 2;
 
-				if (entry->from.y == entry->to.y)
-					cy = 0;
-				else if (from_bottom == to_bottom)
-					cy = height - geo_h;
-				else
-					cy = (height - geo_h) / 2;
-			}
+			if (entry->from.y == entry->to.y)
+				cy = 0;
+			else if (from_bottom == to_bottom)
+				cy = height - geo_h;
+			else
+				cy = (height - geo_h) / 2;
 
 			if (cx < 0)
 				cx = 0;

@@ -2,7 +2,6 @@
 - Per-window animation overrides
 - Ensure animations and blur work together without visual artifacts
 - Custom animation shaders for windows (e.g. open/close animations)
-- Tiled and interactive resize does not have stable position (edge(s) that should not move do(es) not have stable position), specifically for undersized surfaces (surfaces that are smaller than their allocated size)
 - Floating toplevels do not animate their position on workspace switch
 
 # Effects
