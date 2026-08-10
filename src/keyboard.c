@@ -284,7 +284,7 @@ keybind_t *handle_keybind_raw(uint32_t modifiers, uint32_t keycode, bool pressed
 		return matched_kb;
 
 	execute_keybind(matched_kb);
-	return NULL;
+	return matched_kb;
 }
 
 // keybind handling
