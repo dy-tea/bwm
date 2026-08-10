@@ -2,7 +2,6 @@
 - Per-window animation overrides
 - Ensure animations and blur work together without visual artifacts
 - Custom animation shaders for windows (e.g. open/close animations)
-- Floating toplevels do not animate their position on workspace switch
 
 # Effects
 - Effects per window state (e.g. unfocused, focused, ...)

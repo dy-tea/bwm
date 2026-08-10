@@ -3,8 +3,8 @@
 #include "layer.h"
 #include "once.h"
 #include "server.h"
-#include "touch.h"
 #include "toplevel.h"
+#include "touch.h"
 #include "tree.h"
 #include <wayland-util.h>
 #include <wlr/types/wlr_cursor.h>
