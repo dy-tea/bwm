@@ -19,6 +19,7 @@ typedef struct {
 
 typedef struct {
 	be_buffer_t ping, pong;
+	be_buffer_t blur_scratch;
 	be_buffer_t staging;
 	be_buffer_t screen_shader;
 	be_buffer_t blur_levels[BLUR_MAX_LEVELS];

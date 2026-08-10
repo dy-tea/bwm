@@ -709,21 +709,6 @@ static bool region_intersects_damage(effects_output_t *ctx, pixman_region32_t *d
 	return !pixman_region32_empty(&ctx->scratch_region_b);
 }
 
-static const pixman_box32_t *blur_damage_boxes(effects_output_t *ctx, pixman_region32_t *damage,
-		int w, int h, int *n_out) {
-	*n_out = 0;
-	if (!damage || pixman_region32_empty(damage))
-		return NULL;
-	pixman_region32_t *r = &ctx->scratch_region_b;
-	pixman_region32_copy(r, damage);
-	wlr_region_scale_xy(r, r, (float)ctx->blur_w / (float)w, (float)ctx->blur_h / (float)h);
-	pixman_region32_intersect_rect(r, r, 0, 0, ctx->blur_w, ctx->blur_h);
-	if (pixman_region32_empty(r))
-		return NULL;
-	const pixman_box32_t *boxes = pixman_region32_rectangles(r, n_out);
-	return boxes;
-}
-
 static void build_blur_mask_params(toplevel_t *tl, output_t *output, int w, int h,
 		struct be_corner_mask_params *params) {
 	client_t *c = tl->node->client;
@@ -813,10 +798,14 @@ static bool rebuild_live_blur(output_t *output, uint64_t shared_blurred, pixman_
 			return false;
 		}
 
-		int n_scissor = 0;
-		const pixman_box32_t *scissor = blur_damage_boxes(ctx, damage, w, h, &n_scissor);
-		effects_backend->blur(&ctx->be_state, shared_blurred, ctx->blur_w, ctx->blur_h, &bp,
-			ctx->blur_native[0], scissor, n_scissor, NULL);
+		// Blur in RGBA scratch buffers, then copy the finished frame into the retained buffer.
+		uint64_t blurred = 0;
+		if (!effects_backend->blur(&ctx->be_state, shared_blurred, ctx->blur_w, ctx->blur_h, &bp, 0,
+				NULL, 0, &blurred) || !blurred ||
+				!effects_backend->blit(blurred, ctx->blur_native[0], ctx->blur_w, ctx->blur_h, NULL, 0)) {
+			ctx->blur_gen = 0;
+			return false;
+		}
 		ctx->blur_gen = ctx->backdrop_gen;
 	}
 	any = true;
@@ -1059,8 +1048,8 @@ static void push_blur_to_toplevels(output_t *output) {
 }
 
 static bool rebuild_live_blur_layers(output_t *output, uint64_t bg_tex, pixman_region32_t *damage) {
+	(void)damage;
 	effects_output_t *ctx = output->effects;
-	int w = output->width, h = output->height;
 
 	struct be_blur_params bp = {
 		.algorithm = blur_algorithm,
@@ -1089,10 +1078,13 @@ static bool rebuild_live_blur_layers(output_t *output, uint64_t bg_tex, pixman_r
 		&ctx->layer_blur_buf_h, ctx->blur_w, ctx->blur_h))
 		return false;
 
-	int n_scissor = 0;
-	const pixman_box32_t *scissor = blur_damage_boxes(ctx, damage, w, h, &n_scissor);
-	effects_backend->blur(&ctx->be_state, bg_tex, ctx->blur_w, ctx->blur_h, &bp,
-		ctx->layer_blur_native[0], scissor, n_scissor, NULL);
+	uint64_t blurred = 0;
+	if (!effects_backend->blur(&ctx->be_state, bg_tex, ctx->blur_w, ctx->blur_h, &bp, 0, NULL, 0,
+			&blurred) || !blurred ||
+			!effects_backend->blit(blurred, ctx->layer_blur_native[0], ctx->blur_w, ctx->blur_h, NULL, 0)) {
+		ctx->layer_blur_gen = 0;
+		return false;
+	}
 	ctx->layer_blur_gen = ctx->backdrop_gen;
 	return true;
 }

@@ -112,6 +112,8 @@ struct gles2_data {
 	struct {
 		GLint resolution, shadow_size, shadow_color, border_radius, inner_size, hole_pos, hole_size;
 	} u_shadow;
+	uint8_t *readback_pixels;
+	size_t readback_pixels_size;
 
 	GLuint screen_shader_prog;
 	GLint screen_shader_u_tex;
@@ -632,6 +634,7 @@ static void gles2_fini(void) {
 	if (g->screen_shader_prog)
 		glDeleteProgram(g->screen_shader_prog);
 	glDeleteBuffers(1, &g->vbo);
+	free(g->readback_pixels);
 	egl_unset_current();
 	g->screen_shader_prog = 0;
 	free(g);
@@ -643,11 +646,15 @@ static bool gles2_output_init(be_output_state_t *state, int width, int height, i
 	egl_make_current();
 	bool ok = create_fbo(blur_w, blur_h, (GLuint *)&state->ping.native_handle[0],
 		(GLuint *)&state->ping.native_handle[1]) && create_fbo(blur_w, blur_h,
-		(GLuint *)&state->pong.native_handle[0], (GLuint *)&state->pong.native_handle[1]);
+		(GLuint *)&state->pong.native_handle[0], (GLuint *)&state->pong.native_handle[1]) &&
+		create_fbo(blur_w, blur_h, (GLuint *)&state->blur_scratch.native_handle[0],
+			(GLuint *)&state->blur_scratch.native_handle[1]);
 	state->ping.width = blur_w;
 	state->ping.height = blur_h;
 	state->pong.width = blur_w;
 	state->pong.height = blur_h;
+	state->blur_scratch.width = blur_w;
+	state->blur_scratch.height = blur_h;
 
 	// Staging texture (no FBO needed)
 	create_fbo(width, height, (GLuint *)&state->staging.native_handle[0],
@@ -671,6 +678,8 @@ static void gles2_output_fini(be_output_state_t *state) {
 	egl_make_current();
 	destroy_fbo((GLuint *)&state->ping.native_handle[0], (GLuint *)&state->ping.native_handle[1]);
 	destroy_fbo((GLuint *)&state->pong.native_handle[0], (GLuint *)&state->pong.native_handle[1]);
+	destroy_fbo((GLuint *)&state->blur_scratch.native_handle[0],
+		(GLuint *)&state->blur_scratch.native_handle[1]);
 	destroy_fbo((GLuint *)&state->screen_shader.native_handle[0],
 		(GLuint *)&state->screen_shader.native_handle[1]);
 	destroy_fbo((GLuint *)&state->staging.native_handle[0],
@@ -684,6 +693,8 @@ static void gles2_output_resize(be_output_state_t *state, int width, int height,
 	egl_make_current();
 	destroy_fbo((GLuint *)&state->ping.native_handle[0], (GLuint *)&state->ping.native_handle[1]);
 	destroy_fbo((GLuint *)&state->pong.native_handle[0], (GLuint *)&state->pong.native_handle[1]);
+	destroy_fbo((GLuint *)&state->blur_scratch.native_handle[0],
+		(GLuint *)&state->blur_scratch.native_handle[1]);
 	destroy_fbo((GLuint *)&state->screen_shader.native_handle[0],
 		(GLuint *)&state->screen_shader.native_handle[1]);
 	destroy_fbo((GLuint *)&state->staging.native_handle[0],
@@ -693,10 +704,14 @@ static void gles2_output_resize(be_output_state_t *state, int width, int height,
 		(GLuint *)&state->ping.native_handle[1]);
 	create_fbo(blur_w, blur_h, (GLuint *)&state->pong.native_handle[0],
 		(GLuint *)&state->pong.native_handle[1]);
+	create_fbo(blur_w, blur_h, (GLuint *)&state->blur_scratch.native_handle[0],
+		(GLuint *)&state->blur_scratch.native_handle[1]);
 	state->ping.width = blur_w;
 	state->ping.height = blur_h;
 	state->pong.width = blur_w;
 	state->pong.height = blur_h;
+	state->blur_scratch.width = blur_w;
+	state->blur_scratch.height = blur_h;
 
 	create_fbo(width, height, (GLuint *)&state->staging.native_handle[0],
 		(GLuint *)&state->staging.native_handle[1]);
@@ -834,7 +849,8 @@ static bool gles2_blur(be_output_state_t *state, uint64_t src_handle, int src_w,
 			bool final = (i == 0);
 			int uw = final ? src_w : lw[i - 1];
 			int uh = final ? src_h : lh[i - 1];
-			GLuint target = final ? (dst ? dst : (GLuint)state->ping.native_handle[0]) : level_fbo[i - 1];
+			GLuint target = final ?
+				(dst ? dst : (GLuint)state->blur_scratch.native_handle[0]) : level_fbo[i - 1];
 
 			glBindFramebuffer(GL_FRAMEBUFFER, target);
 			glViewport(0, 0, uw, uh);
@@ -854,23 +870,31 @@ static bool gles2_blur(be_output_state_t *state, uint64_t src_handle, int src_w,
 			draw_quad();
 
 			if (final)
-				cur_tex = dst ? 0 : (GLuint)state->ping.native_handle[1];
+				cur_tex = dst ? 0 : (GLuint)state->blur_scratch.native_handle[1];
 			else
 				cur_tex = level_tex[i - 1];
 		}
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		if (out_handle)
-			*out_handle = dst ? 0 : (uint64_t)state->ping.native_handle[1];
+			*out_handle = dst ? 0 : (uint64_t)state->blur_scratch.native_handle[1];
 		return true;
 	}
 
 	int ping = 0;
 	GLuint current = (GLuint)src_handle;
 
+	// Keep the captured backdrop in pong so partial damage never mixes with a previous blur.
 	GLuint fbo0 = (GLuint)state->ping.native_handle[0];
 	GLuint tex0 = (GLuint)state->ping.native_handle[1];
-	GLuint fbo1 = (GLuint)state->pong.native_handle[0];
-	GLuint tex1 = (GLuint)state->pong.native_handle[1];
+	GLuint fbo1 = (GLuint)state->blur_scratch.native_handle[0];
+	GLuint tex1 = (GLuint)state->blur_scratch.native_handle[1];
+	if (current == tex0) {
+		fbo0 = (GLuint)state->pong.native_handle[0];
+		tex0 = (GLuint)state->pong.native_handle[1];
+	} else if (current == tex1) {
+		fbo1 = (GLuint)state->pong.native_handle[0];
+		tex1 = (GLuint)state->pong.native_handle[1];
+	}
 
 	for (int i = 0; i < p->passes; i++) {
 		bool last = dst && (i == p->passes - 1);
@@ -907,6 +931,12 @@ static bool gles2_blur(be_output_state_t *state, uint64_t src_handle, int src_w,
 		}
 	}
 
+	// Copy the source when no pass produced a separate blur texture.
+	if (!dst && current == (GLuint)src_handle) {
+		gles2_blit(current, fbo0, src_w, src_h, NULL, 0);
+		current = tex0;
+	}
+
 	if (out_handle)
 		*out_handle = dst ? 0 : (uint64_t)current;
 	return true;
@@ -934,18 +964,21 @@ static bool gles2_apply_acrylic(be_output_state_t *state, uint64_t bg_handle,
 	int blur_w = state->ping.width > 0 ? state->ping.width : w;
 	int blur_h = state->ping.height > 0 ? state->ping.height : h;
 	if (p->blur_passes > 0) {
-		GLuint fbo0 = (GLuint)state->ping.native_handle[0];
-		GLuint tex0 = (GLuint)state->ping.native_handle[1];
-		int ping = 0;
+		GLuint fbos[2] = {
+			(GLuint)state->ping.native_handle[0],
+			(GLuint)state->blur_scratch.native_handle[0],
+		};
+		GLuint texs[2] = {
+			(GLuint)state->ping.native_handle[1],
+			(GLuint)state->blur_scratch.native_handle[1],
+		};
 		GLuint current = (GLuint)bg_handle;
 		for (int i = 0; i < p->blur_passes; i++) {
-			blur_pass(current, fbo0, blur_w, blur_h, i, &(struct be_blur_params){
+			int target = i & 1;
+			blur_pass(current, fbos[target], blur_w, blur_h, i, &(struct be_blur_params){
 				.radius = p->blur_radius
 			}, NULL, 0);
-			current = tex0;
-			ping ^= 1;
-			fbo0 = ping ? (GLuint)state->pong.native_handle[0] : (GLuint)state->ping.native_handle[0];
-			tex0 = ping ? (GLuint)state->pong.native_handle[1] : (GLuint)state->ping.native_handle[1];
+			current = texs[target];
 		}
 		blurred = current;
 	}
@@ -1131,9 +1164,6 @@ static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_
 		if (dst_fbo == state->screen_shader.native_handle[0])
 			result_tex = (GLuint)state->screen_shader.native_handle[1];
 	} else if (attach_type == GL_RENDERBUFFER) {
-		// ensure renderbuffer rendering is complete before copy
-		glFinish();
-
 		// resize staging texture to match so blit below is a 1:1 copy
 		if (state->staging.width != src_w || state->staging.height != src_h) {
 			destroy_fbo((GLuint *)&state->staging.native_handle[0],
@@ -1146,10 +1176,23 @@ static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_
 		}
 
 		GLuint staging_tex = (GLuint)state->staging.native_handle[1];
+		if (src_w <= 0 || src_h <= 0 || (size_t)src_w > SIZE_MAX / 4 / (size_t)src_h)
+			return false;
+		size_t buf_size = (size_t)src_w * (size_t)src_h * 4;
+		if (buf_size > g->readback_pixels_size) {
+			uint8_t *pixels = realloc(g->readback_pixels, buf_size);
+			if (!pixels)
+				return false;
+			g->readback_pixels = pixels;
+			g->readback_pixels_size = buf_size;
+		}
 
+		// Read through RGBA because NVIDIA rejects copying this renderbuffer into an RGBA texture.
 		glBindFramebuffer(GL_FRAMEBUFFER, capture_fbo);
+		glReadPixels(src_x, src_y, src_w, src_h, GL_RGBA, GL_UNSIGNED_BYTE, g->readback_pixels);
 		glBindTexture(GL_TEXTURE_2D, staging_tex);
-		glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_x, src_y, src_w, src_h);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_w, src_h, GL_RGBA, GL_UNSIGNED_BYTE,
+			g->readback_pixels);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 		glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst_fbo);
