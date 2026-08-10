@@ -732,7 +732,9 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 			send_failure(client_fd, "config screen_shader_file: missing path argument\n");
 		}
 	} else if (streq("screen_shader_enabled", *args)) {
-		ipc_handle_bool(args, num, client_fd, &screen_shader_enabled, IPC_FLAG_NONE);
+		bool set = ipc_handle_bool(args, num, client_fd, &screen_shader_enabled, IPC_FLAG_NONE);
+		if (set && !screen_shader_enabled)
+			screen_shader_hide_nodes();
 	} else if (streq("animation_bezier", *args)) {
 		if (num >= 2) {
 			if (bezier_exists(args[1])) {

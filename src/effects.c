@@ -43,6 +43,10 @@ extern const effects_backend_t vk_backend;
 enum blur_algorithm blur_algorithm = BLUR_ALGORITHM_KAWASE;
 
 static const struct wlr_drm_format *s_render_fmt = NULL;
+
+// input callbacks for effect overlay buffers
+static bool scene_buffer_no_input(struct wlr_scene_buffer *buffer, double *sx, double *sy);
+
 bool blur_enabled = true;
 int blur_passes = 1;
 float blur_radius = 5.0f;
@@ -311,8 +315,11 @@ effects_output_t *effects_output_init(int width, int height) {
 
 	if (server.shader_tree) {
 		ctx->screen_shader_node = wlr_scene_buffer_create(server.shader_tree, NULL);
-		if (ctx->screen_shader_node)
+		if (ctx->screen_shader_node) {
+			// never let the full-screen overlay capture pointer input
+			ctx->screen_shader_node->point_accepts_input = scene_buffer_no_input;
 			wlr_scene_node_set_enabled(&ctx->screen_shader_node->node, false);
+		}
 	}
 
 	ctx->mica_dirty = true;
@@ -1931,7 +1938,8 @@ static uint64_t capture_full_scene_to_tex(output_t *output, effects_output_t *ct
 	wlr_scene_output_set_position(ctx->capture_scene_output, -0x7fff, -0x7fff);
 
 	if (!ok || !ctx->capture_state.buffer) {
-		wlr_buffer_unlock(ctx->capture_state.buffer);
+		if (ctx->capture_state.buffer)
+			wlr_buffer_unlock(ctx->capture_state.buffer);
 		ctx->capture_state.buffer = NULL;
 		return 0;
 	}
@@ -2462,8 +2470,14 @@ after_capture:
 		}
 	}
 
-	if (screen_shader_enabled)
-		handle_screen_shader_frame(output);
+	if (screen_shader_enabled && ctx->screen_shader_node)
+		if (!ctx->screen_shader_node->node.enabled ||
+			!pixman_region32_empty(&scene_output->damage_ring.current))
+			handle_screen_shader_frame(output);
+
+	if (!screen_shader_enabled && ctx->screen_shader_node && ctx->screen_shader_node->node.enabled) {
+		wlr_scene_node_set_enabled(&ctx->screen_shader_node->node, false);
+	}
 
 	effects_backend->frame_end();
 	return;
@@ -2619,7 +2633,20 @@ void screen_shader_clear(void) {
 		effects_backend->frame_end();
 	}
 	screen_shader_enabled = false;
+	screen_shader_hide_nodes();
 	snprintf(screen_shader_name_str, sizeof(screen_shader_name_str), "none");
+}
+
+void screen_shader_hide_nodes(void) {
+	for (output_t *m = mon_head; m != NULL; m = m->next) {
+		if (!m->effects || !m->effects->screen_shader_node)
+			continue;
+		struct wlr_scene_buffer *node = m->effects->screen_shader_node;
+		if (node->buffer)
+			wlr_scene_buffer_set_buffer(node, NULL);
+		wlr_scene_node_set_enabled(&node->node, false);
+		output_schedule_frame(m);
+	}
 }
 
 const char *screen_shader_get_name(void) {

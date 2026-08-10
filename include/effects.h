@@ -117,4 +117,5 @@ const char *effects_algorithm_to_str(enum blur_algorithm algo);
 bool screen_shader_set(const char *name);
 bool screen_shader_load_file(const char *path);
 void screen_shader_clear(void);
+void screen_shader_hide_nodes(void);
 const char *screen_shader_get_name(void);
