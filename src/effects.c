@@ -136,6 +136,39 @@ static size_t capture_output_num = 0;
 
 const struct wlr_drm_format_set *wlr_renderer_get_render_formats(struct wlr_renderer *renderer);
 
+static struct wlr_swapchain *create_swapchain_sized(int w, int h) {
+	const struct wlr_drm_format_set *fmts = wlr_renderer_get_render_formats(server.renderer);
+	const struct wlr_drm_format *fmt = fmts ? wlr_drm_format_set_get(fmts, DRM_FORMAT_ARGB8888) : NULL;
+	if (!fmt)
+		fmt = fmts ? wlr_drm_format_set_get(fmts, DRM_FORMAT_XRGB8888) : NULL;
+	if (!fmt) {
+		wlr_log(WLR_ERROR, "blur: no render format for capture swapchain");
+		return NULL;
+	}
+
+	struct wlr_swapchain *swapchain = wlr_swapchain_create(server.allocator, w, h, fmt);
+	if (!swapchain)
+		wlr_log(WLR_ERROR, "blur: failed to create %dx%d capture swapchain", w, h);
+	return swapchain;
+}
+
+static void destroy_capture_swapchains(effects_output_t *ctx) {
+	if (ctx->blur_swapchain) {
+		wlr_swapchain_destroy(ctx->blur_swapchain);
+		ctx->blur_swapchain = NULL;
+	}
+	if (ctx->full_swapchain) {
+		wlr_swapchain_destroy(ctx->full_swapchain);
+		ctx->full_swapchain = NULL;
+	}
+}
+
+static void recreate_capture_swapchains(effects_output_t *ctx, int w, int h) {
+	destroy_capture_swapchains(ctx);
+	ctx->full_swapchain = create_swapchain_sized(w, h);
+	ctx->blur_swapchain = create_swapchain_sized(ctx->blur_w, ctx->blur_h);
+}
+
 static bool create_capture_output(effects_output_t *ctx, int width, int height) {
 	ctx->capture_backend = calloc(1, sizeof(struct wlr_backend));
 	if (!ctx->capture_backend)
@@ -313,6 +346,8 @@ effects_output_t *effects_output_init(int width, int height) {
 		return NULL;
 	}
 
+	recreate_capture_swapchains(ctx, width, height);
+
 	if (server.shader_tree) {
 		ctx->screen_shader_node = wlr_scene_buffer_create(server.shader_tree, NULL);
 		if (ctx->screen_shader_node) {
@@ -343,6 +378,7 @@ void effects_output_fini(effects_output_t *ctx) {
 	pixman_region32_fini(&ctx->scratch_region_b);
 	pixman_region32_fini(&ctx->scratch_region_c);
 	destroy_capture_output(ctx);
+	destroy_capture_swapchains(ctx);
 	free(ctx);
 }
 
@@ -365,6 +401,7 @@ void effects_output_resize(effects_output_t *ctx, int width, int height, output_
 	ctx->shared_bg_valid = false;
 	ctx->combined_bg_valid = false;
 	wlr_output_state_set_custom_mode(&ctx->capture_state, width, height, 0);
+	recreate_capture_swapchains(ctx, width, height);
 
 	effects_destroy_buffer(&ctx->mica_buf, ctx->mica_native);
 	effects_destroy_buffer(&ctx->blur_buf, ctx->blur_native);
@@ -630,7 +667,8 @@ static uint64_t capture_bg_to_tex1_ex(output_t *output, effects_output_t *ctx, b
 	else
 		wlr_damage_ring_add_whole(&ctx->capture_scene_output->damage_ring);
 
-	bool ok = wlr_scene_output_build_state(ctx->capture_scene_output, &cap_state, NULL);
+	struct wlr_scene_output_state_options opts = { .swapchain = ctx->blur_swapchain };
+	bool ok = wlr_scene_output_build_state(ctx->capture_scene_output, &cap_state, &opts);
 
 	if (hide_node) {
 		if (*hide_flag)
@@ -867,7 +905,7 @@ static bool rebuild_live_blur(output_t *output, uint64_t shared_blurred, pixman_
 		}
 
 		effects_backend->apply_corner_mask(&ctx->be_state, tl->blur->blur_native[0], params.out_w,
-			params.out_h, ctx->blur_native[0], &params);
+			params.out_h, ctx->blur_native[1], &params);
 		tl->blur->blur_mask_params = params;
 		tl->blur->blur_mask_valid = true;
 		any = true;
@@ -1779,7 +1817,8 @@ static bool rebuild_corner_masks(output_t *output, uint64_t bg_tex) {
 			wlr_output_state_init(&cap_state);
 			wlr_output_state_set_enabled(&cap_state, true);
 			wlr_output_state_set_custom_mode(&cap_state, cw, ch, 0);
-			bool ok = wlr_scene_output_build_state(ctx->capture_scene_output, &cap_state, NULL);
+			struct wlr_scene_output_state_options opts = { .swapchain = ctx->full_swapchain };
+			bool ok = wlr_scene_output_build_state(ctx->capture_scene_output, &cap_state, &opts);
 
 			for (int i = 0; i < nr; i++)
 				wlr_scene_node_set_enabled(restore[i].node, true);
@@ -1922,7 +1961,8 @@ static uint64_t capture_full_scene_to_tex(output_t *output, effects_output_t *ct
 
 	wlr_damage_ring_add_whole(&ctx->capture_scene_output->damage_ring);
 
-	bool ok = wlr_scene_output_build_state(ctx->capture_scene_output, &ctx->capture_state, NULL);
+	struct wlr_scene_output_state_options opts = { .swapchain = ctx->full_swapchain };
+	bool ok = wlr_scene_output_build_state(ctx->capture_scene_output, &ctx->capture_state, &opts);
 
 	if (server.shader_tree && !server.shader_tree->node.enabled)
 		wlr_scene_node_set_enabled(&server.shader_tree->node, true);

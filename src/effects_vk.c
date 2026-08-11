@@ -226,8 +226,11 @@ struct vk_data {
 
 	VkImageView deferred_views[3][64];
 	int n_deferred_views[3];
-	struct wlr_texture *deferred_texs[3][16];
+	struct wlr_texture *deferred_texs[3][64];
 	int n_deferred_texs[3];
+
+	struct vk_fbo *pending_fbo_destroys[256];
+	int n_pending_fbo_destroys;
 
 #define VK_VIEW_CACHE_SIZE 64
 	VkImage cached_images[3][VK_VIEW_CACHE_SIZE];
@@ -541,13 +544,14 @@ static void vk_defer_view(VkImageView view) {
 
 static void vk_defer_tex(struct wlr_texture *tex) {
 	int s = vk->frame_slot;
-	if (vk->n_deferred_texs[s] < 16)
+	if (vk->n_deferred_texs[s] < 64)
 		vk->deferred_texs[s][vk->n_deferred_texs[s]++] = tex;
 	else
 		wlr_texture_destroy(tex);
 }
 
 static VkImageView vk_lookup_or_create_view(VkImage image);
+static void vk_flush_pending_fbo_destroys(void);
 
 static void vk_ensure_cb_begun(void) {
 	if (vk->cb_begun)
@@ -593,8 +597,11 @@ static void vk_draw_full(VkPipeline pipe, VkImage src_img, VkFramebuffer dst_fb,
 		.pSetLayouts = &vk->ds_layout,
 	};
 	VkDescriptorSet ds;
-	if (vkAllocateDescriptorSets(vk->device, &dsai, &ds) != VK_SUCCESS)
+	if (vkAllocateDescriptorSets(vk->device, &dsai, &ds) != VK_SUCCESS) {
+		wlr_log(WLR_DEBUG, "vk: descriptor pool exhausted, skipping draw call %d/%d",
+			vk->ds_idx[s], VK_MAX_DRAW_CALLS);
 		return;
+	}
 	vk->desc_sets[s][vk->ds_idx[s]++] = ds;
 
 	VkDescriptorImageInfo dii = {
@@ -1048,11 +1055,11 @@ static bool vk_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 
 	VkDescriptorPoolSize ps = {
 		VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		128
+		VK_MAX_DRAW_CALLS + 64
 	};
 	VkDescriptorPoolCreateInfo dpci = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.maxSets = 128,
+		.maxSets = VK_MAX_DRAW_CALLS + 64,
 		.poolSizeCount = 1,
 		.pPoolSizes = &ps
 	};
@@ -1260,7 +1267,10 @@ static bool vk_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 static void vk_fini(void) {
 	if (!vk)
 		return;
+	if (vk->cb_begun)
+		vkEndCommandBuffer(vk->frame_cb);
 	vkQueueWaitIdle(vk->queue);
+	vk_flush_pending_fbo_destroys();
 
 	if (vk->screen_shader_pipe) {
 		vkDestroyPipeline(vk->device, vk->screen_shader_pipe, NULL);
@@ -1543,21 +1553,48 @@ static bool vk_ensure_buffer(struct wlr_buffer **buf, uint64_t native[2], int w,
 	return true;
 }
 
+static void vk_free_fbo_resources(struct vk_fbo *fbo) {
+	if (fbo->img.view) {
+		vkDestroyImageView(vk->device, fbo->img.view, NULL);
+		fbo->img.view = VK_NULL_HANDLE;
+	}
+	if (fbo->fb) {
+		vkDestroyFramebuffer(vk->device, fbo->fb, NULL);
+		fbo->fb = VK_NULL_HANDLE;
+	}
+	if (fbo->tex) {
+		wlr_texture_destroy(fbo->tex);
+		fbo->tex = NULL;
+	}
+	free(fbo);
+}
+
 static void vk_destroy_buffer(struct wlr_buffer *buf, uint64_t native[2]) {
 	if (!buf)
 		return;
 	struct vk_fbo *fbo = vk_fbo_of(native[0]);
 	if (fbo) {
-		if (fbo->img.view)
-			vkDestroyImageView(vk->device, fbo->img.view, NULL);
-		if (fbo->fb)
-			vkDestroyFramebuffer(vk->device, fbo->fb, NULL);
-		if (fbo->tex)
-			wlr_texture_destroy(fbo->tex);
-		free(fbo);
+		if (vk->cb_begun) {
+			if (vk->n_pending_fbo_destroys < 256)
+				vk->pending_fbo_destroys[vk->n_pending_fbo_destroys++] = fbo;
+			else
+				vk_free_fbo_resources(fbo);
+		} else {
+			vkQueueWaitIdle(vk->queue);
+			vk_free_fbo_resources(fbo);
+		}
 	}
 	wlr_buffer_unlock(buf);
 	native[0] = native[1] = 0;
+}
+
+static void vk_flush_pending_fbo_destroys(void) {
+	if (vk->n_pending_fbo_destroys == 0)
+		return;
+	vkQueueWaitIdle(vk->queue);
+	for (int i = 0; i < vk->n_pending_fbo_destroys; i++)
+		vk_free_fbo_resources(vk->pending_fbo_destroys[i]);
+	vk->n_pending_fbo_destroys = 0;
 }
 
 static void vk_frame_begin(void) {
@@ -1567,11 +1604,11 @@ static void vk_frame_begin(void) {
 	vk->frame_slot = (vk->frame_slot + 1) % 3;
 	int s = vk->frame_slot;
 
+	vkWaitForFences(vk->device, 1, &vk->frame_fence[s], VK_TRUE, UINT64_MAX);
+
 	for (int i = 0; i < vk->n_cached_views[s]; i++)
 		vkDestroyImageView(vk->device, vk->cached_views[s][i], NULL);
 	vk->n_cached_views[s] = 0;
-
-	vkWaitForFences(vk->device, 1, &vk->frame_fence[s], VK_TRUE, UINT64_MAX);
 
 	for (int i = 0; i < vk->n_deferred_views[s]; i++)
 		vkDestroyImageView(vk->device, vk->deferred_views[s][i], NULL);
@@ -1602,6 +1639,7 @@ static void vk_frame_end(void) {
 
 	if (!vk->frame_dirty) {
 		vkResetCommandBuffer(vk->frame_cb, 0);
+		vk_flush_pending_fbo_destroys();
 		return;
 	}
 
@@ -1613,6 +1651,8 @@ static void vk_frame_end(void) {
 		.pCommandBuffers = &vk->frame_cb,
 	};
 	vkQueueSubmit(vk->queue, 1, &si, vk->frame_fence[s]);
+
+	vk_flush_pending_fbo_destroys();
 }
 
 static bool vk_blit(uint64_t src_tex, uint64_t dst_fbo, int w, int h, const pixman_box32_t *scissor,
@@ -2171,7 +2211,10 @@ static bool vk_apply_corner_mask(be_output_state_t *state, uint64_t dst_fbo, int
 		.pSetLayouts = &vk->ds_layout,
 	};
 	VkDescriptorSet ds;
-	vkAllocateDescriptorSets(vk->device, &dsai, &ds);
+	if (vkAllocateDescriptorSets(vk->device, &dsai, &ds) != VK_SUCCESS) {
+		wlr_log(WLR_DEBUG, "vk: corner mask descriptor pool exhausted, skipping");
+		return false;
+	}
 	VkDescriptorImageInfo dii = {
 		.sampler = vk->sampler,
 		.imageView = src_view,

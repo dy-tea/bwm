@@ -744,11 +744,18 @@ static bool gles2_ensure_buffer(struct wlr_buffer **buf, uint64_t native[2], int
 		return false;
 	}
 
+	struct wlr_texture *tex = wlr_texture_from_buffer(r, new_buf);
+	if (tex) {
+		struct wlr_gles2_texture_attribs attribs;
+		wlr_gles2_texture_get_attribs(tex, &attribs);
+		native[1] = (uint64_t)attribs.tex;
+		wlr_texture_destroy(tex);
+	}
+
 	wlr_buffer_lock(new_buf);
 	wlr_buffer_drop(new_buf);
 	*buf = new_buf;
 	native[0] = (uint64_t)fbo;
-	native[1] = 0;
 	return true;
 }
 
@@ -766,6 +773,7 @@ static void gles2_frame_begin(void) {
 }
 
 static void gles2_frame_end(void) {
+	glFinish();
 	egl_unset_current();
 }
 

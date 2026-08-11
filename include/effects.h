@@ -4,6 +4,7 @@
 
 #include <pixman.h>
 #include <stdbool.h>
+#include <wlr/render/swapchain.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/util/box.h>
 
@@ -78,6 +79,9 @@ typedef struct effects_output_t {
 	struct wlr_output *capture_output;
 	struct wlr_scene_output *capture_scene_output;
 	struct wlr_output_state capture_state;
+
+	struct wlr_swapchain *blur_swapchain;
+	struct wlr_swapchain *full_swapchain;
 
 	uint64_t cached_bg_tex;
 	bool bg_cache_valid;
