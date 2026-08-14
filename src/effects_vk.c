@@ -226,8 +226,6 @@ struct vk_data {
 
 	VkImageView deferred_views[3][64];
 	int n_deferred_views[3];
-	struct wlr_texture *deferred_texs[3][64];
-	int n_deferred_texs[3];
 
 	struct vk_fbo *pending_fbo_destroys[256];
 	int n_pending_fbo_destroys;
@@ -540,14 +538,6 @@ static void vk_defer_view(VkImageView view) {
 		vk->deferred_views[s][vk->n_deferred_views[s]++] = view;
 	else
 		vkDestroyImageView(vk->device, view, NULL);
-}
-
-static void vk_defer_tex(struct wlr_texture *tex) {
-	int s = vk->frame_slot;
-	if (vk->n_deferred_texs[s] < 64)
-		vk->deferred_texs[s][vk->n_deferred_texs[s]++] = tex;
-	else
-		wlr_texture_destroy(tex);
 }
 
 static VkImageView vk_lookup_or_create_view(VkImage image);
@@ -1256,7 +1246,6 @@ static bool vk_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 	vk->frame_slot = 0;
 	for (int i = 0; i < 3; i++) {
 		vk->n_deferred_views[i] = 0;
-		vk->n_deferred_texs[i] = 0;
 		vk->n_cached_views[i] = 0;
 	}
 
@@ -1366,8 +1355,6 @@ static void vk_fini(void) {
 		vkDestroyFence(vk->device, vk->frame_fence[i], NULL);
 		for (int j = 0; j < vk->n_deferred_views[i]; j++)
 			vkDestroyImageView(vk->device, vk->deferred_views[i][j], NULL);
-		for (int j = 0; j < vk->n_deferred_texs[i]; j++)
-			wlr_texture_destroy(vk->deferred_texs[i][j]);
 		for (int j = 0; j < vk->n_cached_views[i]; j++)
 			vkDestroyImageView(vk->device, vk->cached_views[i][j], NULL);
 	}
@@ -1613,10 +1600,6 @@ static void vk_frame_begin(void) {
 	for (int i = 0; i < vk->n_deferred_views[s]; i++)
 		vkDestroyImageView(vk->device, vk->deferred_views[s][i], NULL);
 	vk->n_deferred_views[s] = 0;
-
-	for (int i = 0; i < vk->n_deferred_texs[s]; i++)
-		wlr_texture_destroy(vk->deferred_texs[s][i]);
-	vk->n_deferred_texs[s] = 0;
 
 	vk->frame_cb = vk->frame_cb_bufs[s];
 	vk->desc_pool = vk->desc_pool_bufs[s];
@@ -2435,8 +2418,7 @@ static bool vk_capture_readback(struct wlr_buffer *capture_buffer, be_output_sta
 	};
 	vkCmdPipelineBarrier(vk->frame_cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 2, post_barriers);
-
-	vk_defer_tex(tex);
+	wlr_texture_destroy(tex);
 	*out_tex = (uint64_t)result_img;
 	return true;
 }

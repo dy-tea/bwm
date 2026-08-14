@@ -8,7 +8,7 @@
 - Inner glow effects on borders
 - Floating toplevels with mica are missing rounded border clip on their surface
 - Some layer surfaces with blur and a static position do not update the blur surface correctly (layer surface bar doesn't appear to track a toplevel behind it consistently; moving to an empty workspace from a non-empty workspace leaves behind some stale information in the blur surface)
-- Intel works perfectly but AMD has the following issues: gles2 non-protocol blur buffers render as black (doesn't happen with mica); vulkan incorrectly clips surfaces with rounded borders and non-protocol blur buffers are also black (mica seems to not work), shadow also does not render
+- Intel works perfectly but AMD has the following issues: gles2 non-protocol blur buffers render as black (doesn't happen with mica); vulkan incorrectly clips surfaces with rounded borders, mica and shadow do not render
 - When shadow is enabled on a toplevel with rounded borders, the shadow seems to be clipped where the toplevel was clipped by the rounded border (either a layering or rendering issue)
 
 # Layout
