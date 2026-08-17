@@ -1732,7 +1732,66 @@ void effects_dirty_corner_masks(output_t *output) {
 			tl->rounded->corner_mask_dirty = true;
 }
 
-static bool rebuild_corner_masks(output_t *output, uint64_t bg_tex) {
+static uint64_t capture_corner_mask_bg(output_t *output, effects_output_t *ctx, toplevel_t *tl) {
+	int w = output->width;
+	wlr_scene_output_set_position(ctx->capture_scene_output, output->lx, output->ly);
+
+	if (server.top_tree->node.enabled)
+		wlr_scene_node_set_enabled(&server.top_tree->node, false);
+	if (server.full_tree->node.enabled)
+		wlr_scene_node_set_enabled(&server.full_tree->node, false);
+	if (server.over_tree->node.enabled)
+		wlr_scene_node_set_enabled(&server.over_tree->node, false);
+	if (server.lock_tree->node.enabled)
+		wlr_scene_node_set_enabled(&server.lock_tree->node, false);
+
+	bool hidden = false;
+	if (tl->scene_tree && tl->scene_tree->node.enabled) {
+		wlr_scene_node_set_enabled(&tl->scene_tree->node, false);
+		hidden = true;
+	}
+
+	wlr_damage_ring_add_whole(&ctx->capture_scene_output->damage_ring);
+	struct wlr_output_state cap_state;
+	wlr_output_state_init(&cap_state);
+	wlr_output_state_set_enabled(&cap_state, true);
+	wlr_output_state_set_custom_mode(&cap_state, ctx->blur_w, ctx->blur_h, 0);
+	wlr_output_state_set_scale(&cap_state, (float)ctx->blur_w / (float)w);
+	struct wlr_scene_output_state_options opts = { .swapchain = ctx->blur_swapchain };
+	bool ok = wlr_scene_output_build_state(ctx->capture_scene_output, &cap_state, &opts);
+
+	if (hidden)
+		wlr_scene_node_set_enabled(&tl->scene_tree->node, true);
+	if (!server.top_tree->node.enabled)
+		wlr_scene_node_set_enabled(&server.top_tree->node, true);
+	if (!server.full_tree->node.enabled)
+		wlr_scene_node_set_enabled(&server.full_tree->node, true);
+	if (!server.over_tree->node.enabled)
+		wlr_scene_node_set_enabled(&server.over_tree->node, true);
+	if (!server.lock_tree->node.enabled)
+		wlr_scene_node_set_enabled(&server.lock_tree->node, true);
+
+	wlr_scene_output_set_position(ctx->capture_scene_output, -0x7fff, -0x7fff);
+
+	if (!ok || !cap_state.buffer) {
+		wlr_output_state_finish(&cap_state);
+		return 0;
+	}
+
+	uint64_t result = 0;
+	effects_backend->capture_readback(cap_state.buffer, &ctx->be_state,
+		ctx->be_state.pong.native_handle[0], 0, 0, ctx->blur_w, ctx->blur_h, 0, 0, ctx->blur_w,
+		ctx->blur_h, &result);
+	wlr_output_state_finish(&cap_state);
+
+	if (result) {
+		ctx->shared_bg_valid = false;
+		ctx->combined_bg_valid = false;
+	}
+	return result;
+}
+
+static bool rebuild_corner_masks(output_t *output) {
 	effects_output_t *ctx = output->effects;
 	int w = output->width, h = output->height;
 	bool any = false;
@@ -1766,88 +1825,9 @@ static bool rebuild_corner_masks(output_t *output, uint64_t bg_tex) {
 		if (content_r.width <= 0 || content_r.height <= 0)
 			continue;
 
-		uint64_t src;
-		if (bg_tex) {
-			src = bg_tex;
-		} else {
-			int cw = output->width, ch = output->height;
-
-			wlr_scene_output_set_position(ctx->capture_scene_output, output->lx, output->ly);
-			if (server.top_tree->node.enabled)
-				wlr_scene_node_set_enabled(&server.top_tree->node, false);
-			if (server.full_tree->node.enabled)
-				wlr_scene_node_set_enabled(&server.full_tree->node, false);
-			if (server.over_tree->node.enabled)
-				wlr_scene_node_set_enabled(&server.over_tree->node, false);
-			if (server.lock_tree->node.enabled)
-				wlr_scene_node_set_enabled(&server.lock_tree->node, false);
-
-			struct {
-				struct wlr_scene_node *node;
-				bool was;
-			} restore[8];
-			int nr = 0;
-
-#define HIDE_IF(n)                                                                                                     \
-	do {                                                                                                                 \
-		if ((n) && (n)->enabled) {                                                                                         \
-			restore[nr].node = (n);                                                                                          \
-			restore[nr].was = true;                                                                                          \
-			wlr_scene_node_set_enabled((n), false);                                                                          \
-			nr++;                                                                                                            \
-		}                                                                                                                  \
-	} while (0)
-
-			HIDE_IF(&tl->content_tree->node);
-			HIDE_IF(&tl->border_tree->node);
-			if (tl->blur) {
-				for (size_t bi = 0; bi < blur_count(tl->blur); bi++) {
-					struct wlr_scene_buffer *bnode = blur_get(tl->blur, bi);
-					if (bnode)
-						HIDE_IF(&bnode->node);
-				}
-				HIDE_IF(&tl->blur->mica_node->node);
-				HIDE_IF(&tl->blur->acrylic_node->node);
-			}
-			if (tl->rounded)
-				HIDE_IF(&tl->rounded->corner_mask_node->node);
-
-			wlr_damage_ring_add_whole(&ctx->capture_scene_output->damage_ring);
-			struct wlr_output_state cap_state;
-			wlr_output_state_init(&cap_state);
-			wlr_output_state_set_enabled(&cap_state, true);
-			wlr_output_state_set_custom_mode(&cap_state, cw, ch, 0);
-			struct wlr_scene_output_state_options opts = { .swapchain = ctx->full_swapchain };
-			bool ok = wlr_scene_output_build_state(ctx->capture_scene_output, &cap_state, &opts);
-
-			for (int i = 0; i < nr; i++)
-				wlr_scene_node_set_enabled(restore[i].node, true);
-
-#undef HIDE_IF
-
-			if (!server.top_tree->node.enabled)
-				wlr_scene_node_set_enabled(&server.top_tree->node, true);
-			if (!server.full_tree->node.enabled)
-				wlr_scene_node_set_enabled(&server.full_tree->node, true);
-			if (!server.over_tree->node.enabled)
-				wlr_scene_node_set_enabled(&server.over_tree->node, true);
-			if (!server.lock_tree->node.enabled)
-				wlr_scene_node_set_enabled(&server.lock_tree->node, true);
-			wlr_scene_output_set_position(ctx->capture_scene_output, -0x7fff, -0x7fff);
-
-			if (!ok || !cap_state.buffer) {
-				wlr_output_state_finish(&cap_state);
-				continue;
-			}
-
-			effects_backend->capture_readback(cap_state.buffer, &ctx->be_state,
-				ctx->be_state.pong.native_handle[0], 0, 0, ctx->blur_w, ctx->blur_h, 0, 0, cw, ch, &src);
-			wlr_output_state_finish(&cap_state);
-			if (!src)
-				continue;
-			ctx->shared_bg_valid = false;
-			ctx->combined_bg_valid = false;
-		}
+		uint64_t src = capture_corner_mask_bg(output, ctx, tl);
+		if (!src)
+			continue;
 
 		if (!ensure_output_buf(&tl->rounded->corner_mask_buf, tl->rounded->corner_mask_native, w, h))
 			continue;
@@ -2409,16 +2389,21 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 		}
 	}
 
+	// apply mica before corner masks so its bg capture (into the shared pong
+	// buffer) isn't invalidated by the per-window corner-mask captures
+	if (mica_dirty) {
+		uint64_t mica_bg = capture_bg_to_tex1(output, ctx, true, NULL, NULL);
+		if (mica_bg)
+			rebuild_mica(output, mica_bg);
+	}
+
 	// apply corner masks and blur if needed
-	uint64_t cm_bg_tex = 0;
 	if (has_layer_blur) {
 		if (unified) {
 			// single capture already blurred into blur_buf above; layers reuse it
 			push_blur_to_layers(output, ctx->blur_buf);
 			if (any_cm_dirty)
-				cm_bg_tex = capture_bg_to_tex1(output, ctx, true, NULL, NULL);
-			if (any_cm_dirty)
-				rebuild_corner_masks(output, cm_bg_tex);
+				rebuild_corner_masks(output);
 			push_corner_masks_to_toplevels(output, any_cm_dirty);
 			goto cm_done;
 		}
@@ -2435,31 +2420,22 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 				push_blur_to_layers(output, ctx->layer_blur_buf);
 			}
 			if (any_cm_dirty)
-				cm_bg_tex = capture_bg_to_tex1(output, ctx, true, NULL, NULL);
-			if (any_cm_dirty)
-				rebuild_corner_masks(output, cm_bg_tex);
+				rebuild_corner_masks(output);
 			push_corner_masks_to_toplevels(output, any_cm_dirty);
 		} else if (any_layer_needs_blur) {
 			rebuild_live_blur_layers(output, 0, &scene_output->damage_ring.current);
 			push_blur_to_layers(output, ctx->layer_blur_buf);
 		} else if (any_cm) {
 			if (any_cm_dirty)
-				cm_bg_tex = capture_bg_to_tex1(output, ctx, true, NULL, NULL);
-			if (any_cm_dirty)
-				rebuild_corner_masks(output, cm_bg_tex);
+				rebuild_corner_masks(output);
 			push_corner_masks_to_toplevels(output, any_cm_dirty);
 		}
 	} else if (any_cm) {
 		if (any_cm_dirty)
-			cm_bg_tex = capture_bg_to_tex1(output, ctx, true, NULL, NULL);
-		if (any_cm_dirty)
-			rebuild_corner_masks(output, cm_bg_tex);
+			rebuild_corner_masks(output);
 		push_corner_masks_to_toplevels(output, any_cm_dirty);
 	}
 cm_done:
-
-	if (mica_dirty)
-		rebuild_mica(output, cm_bg_tex);
 
 	if (mica_enabled && ctx->mica_buf)
 		push_mica_to_toplevels(output);
@@ -2526,7 +2502,6 @@ layer_only_frame:
 	effects_backend->frame_begin();
 
 	// apply corner masks and layer blur if needed
-	uint64_t cm_bg_tex_lo = 0;
 	if (has_layer_blur) {
 		bool any_layer_needs_blur = blur_enabled && layer_blur_needs_rebuild(output,
 			&scene_output->damage_ring.current);
@@ -2548,10 +2523,8 @@ layer_only_frame:
 			goto cm_bg_tex_lo_cap;
 	} else if (any_cm) {
 	cm_bg_tex_lo_cap:
-		if (any_cm_dirty) {
-			cm_bg_tex_lo = capture_bg_to_tex1(output, ctx, true, NULL, NULL);
-			rebuild_corner_masks(output, cm_bg_tex_lo);
-		}
+		if (any_cm_dirty)
+			rebuild_corner_masks(output);
 		push_corner_masks_to_toplevels(output, any_cm_dirty);
 	}
 
