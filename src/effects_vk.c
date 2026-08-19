@@ -588,8 +588,8 @@ static void vk_draw_full(VkPipeline pipe, VkImage src_img, VkFramebuffer dst_fb,
 	};
 	VkDescriptorSet ds;
 	if (vkAllocateDescriptorSets(vk->device, &dsai, &ds) != VK_SUCCESS) {
-		wlr_log(WLR_DEBUG, "vk: descriptor pool exhausted, skipping draw call %d/%d",
-			vk->ds_idx[s], VK_MAX_DRAW_CALLS);
+		wlr_log(WLR_DEBUG, "vk: descriptor pool exhausted, skipping draw call %d/%d", vk->ds_idx[s],
+			VK_MAX_DRAW_CALLS);
 		return;
 	}
 	vk->desc_sets[s][vk->ds_idx[s]++] = ds;

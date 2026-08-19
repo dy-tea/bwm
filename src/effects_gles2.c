@@ -646,9 +646,9 @@ static bool gles2_output_init(be_output_state_t *state, int width, int height, i
 	egl_make_current();
 	bool ok = create_fbo(blur_w, blur_h, (GLuint *)&state->ping.native_handle[0],
 		(GLuint *)&state->ping.native_handle[1]) && create_fbo(blur_w, blur_h,
-		(GLuint *)&state->pong.native_handle[0], (GLuint *)&state->pong.native_handle[1]) &&
-		create_fbo(blur_w, blur_h, (GLuint *)&state->blur_scratch.native_handle[0],
-			(GLuint *)&state->blur_scratch.native_handle[1]);
+		(GLuint *)&state->pong.native_handle[0],
+		(GLuint *)&state->pong.native_handle[1]) && create_fbo(blur_w, blur_h,
+		(GLuint *)&state->blur_scratch.native_handle[0], (GLuint *)&state->blur_scratch.native_handle[1]);
 	state->ping.width = blur_w;
 	state->ping.height = blur_h;
 	state->pong.width = blur_w;
@@ -857,8 +857,8 @@ static bool gles2_blur(be_output_state_t *state, uint64_t src_handle, int src_w,
 			bool final = (i == 0);
 			int uw = final ? src_w : lw[i - 1];
 			int uh = final ? src_h : lh[i - 1];
-			GLuint target = final ?
-				(dst ? dst : (GLuint)state->blur_scratch.native_handle[0]) : level_fbo[i - 1];
+			GLuint target = final ? (dst ? dst : (GLuint)state->blur_scratch.native_handle[0]) : level_fbo[i
+				- 1];
 
 			glBindFramebuffer(GL_FRAMEBUFFER, target);
 			glViewport(0, 0, uw, uh);

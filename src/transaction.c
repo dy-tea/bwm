@@ -272,9 +272,9 @@ static void arrange_node_geometry(node_t *node, transaction_inst_t *instruction)
 
 	// skip border/clip updates during resize animation (handled by animation tick)
 	if (!snapshot_resize) {
+		struct wlr_scene_tree *border_tree = client_border_tree(node->client);
 		if (effective_border_width(node->desktop) != 0) {
 			unsigned int bw = effective_border_width(node->desktop);
-			struct wlr_scene_tree *border_tree = client_border_tree(node->client);
 			struct wlr_scene_rect **border_rects = client_border_rects(node->client);
 
 			if (node->client->toplevel) {
@@ -340,6 +340,8 @@ static void arrange_node_geometry(node_t *node, transaction_inst_t *instruction)
 				update_borders(border_tree, border_rects, geo, bw);
 				update_border_colors(node->client);
 			}
+		} else if (border_tree && border_tree->node.enabled) {
+			wlr_scene_node_set_enabled(&border_tree->node, false);
 		}
 	}
 

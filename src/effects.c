@@ -498,9 +498,9 @@ static void collect_hidden_blur_rects(output_t *output, effects_output_t *ctx,
 	pixman_region32_t *out, bool include_toplevels);
 
 // returns true when the damaged area reaches any visible surface that is not
-// hidden during the shared backdrop capture
+// hidden during the backdrop capture
 static bool damage_reaches_visible_surface(output_t *output, effects_output_t *ctx,
-	pixman_region32_t *damage, bool include_blur_toplevels);
+	pixman_region32_t *damage, bool hide_blur_toplevels);
 
 // scene setters that no-op when the value is unchanged
 static void scene_set_pos_guarded(struct wlr_scene_node *n, int x, int y) {
@@ -667,7 +667,9 @@ static uint64_t capture_bg_to_tex1_ex(output_t *output, effects_output_t *ctx, b
 	else
 		wlr_damage_ring_add_whole(&ctx->capture_scene_output->damage_ring);
 
-	struct wlr_scene_output_state_options opts = { .swapchain = ctx->blur_swapchain };
+	struct wlr_scene_output_state_options opts = {
+		.swapchain = ctx->blur_swapchain
+	};
 	bool ok = wlr_scene_output_build_state(ctx->capture_scene_output, &cap_state, &opts);
 
 	if (hide_node) {
@@ -838,9 +840,9 @@ static bool rebuild_live_blur(output_t *output, uint64_t shared_blurred, pixman_
 
 		// Blur in RGBA scratch buffers, then copy the finished frame into the retained buffer.
 		uint64_t blurred = 0;
-		if (!effects_backend->blur(&ctx->be_state, shared_blurred, ctx->blur_w, ctx->blur_h, &bp, 0,
-				NULL, 0, &blurred) || !blurred ||
-				!effects_backend->blit(blurred, ctx->blur_native[0], ctx->blur_w, ctx->blur_h, NULL, 0)) {
+		if (!effects_backend->blur(&ctx->be_state, shared_blurred, ctx->blur_w, ctx->blur_h, &bp, 0, NULL,
+				0, &blurred) || !blurred || !effects_backend->blit(blurred, ctx->blur_native[0], ctx->blur_w,
+				ctx->blur_h, NULL, 0)) {
 			ctx->blur_gen = 0;
 			return false;
 		}
@@ -1118,8 +1120,8 @@ static bool rebuild_live_blur_layers(output_t *output, uint64_t bg_tex, pixman_r
 
 	uint64_t blurred = 0;
 	if (!effects_backend->blur(&ctx->be_state, bg_tex, ctx->blur_w, ctx->blur_h, &bp, 0, NULL, 0,
-			&blurred) || !blurred ||
-			!effects_backend->blit(blurred, ctx->layer_blur_native[0], ctx->blur_w, ctx->blur_h, NULL, 0)) {
+			&blurred) || !blurred || !effects_backend->blit(blurred, ctx->layer_blur_native[0], ctx->blur_w,
+			ctx->blur_h, NULL, 0)) {
 		ctx->layer_blur_gen = 0;
 		return false;
 	}
@@ -1496,7 +1498,7 @@ static void collect_hidden_blur_rects(output_t *output, effects_output_t *ctx,
 // returns true when the damaged area reaches any visible surface that is not
 // hidden during the backdrop capture
 static bool damage_reaches_visible_surface(output_t *output, effects_output_t *ctx,
-		pixman_region32_t *damage, bool include_blur_toplevels) {
+		pixman_region32_t *damage, bool hide_blur_toplevels) {
 	if (!damage || pixman_region32_empty(damage))
 		return false;
 
@@ -1511,7 +1513,7 @@ static bool damage_reaches_visible_surface(output_t *output, effects_output_t *c
 		if (!tl->scene_tree || !tl->scene_tree->node.enabled)
 			continue;
 		// surfaces hidden during the capture cannot change it
-		if (!include_blur_toplevels && tl->blur && (blur_count(tl->blur) > 0 || tl->blur->mica_node ||
+		if (hide_blur_toplevels && tl->blur && (blur_count(tl->blur) > 0 || tl->blur->mica_node ||
 			tl->blur->acrylic_node))
 			continue;
 		struct wlr_box r = get_animated_client_rect(tl);
@@ -1575,8 +1577,9 @@ static bool blur_render_shadow(toplevel_t *tl) {
 	int size = (int)shadow_size;
 	if (size <= 0)
 		return false;
-	int buf_w = client_r.width + 2 * size;
-	int buf_h = client_r.height + 2 * size;
+	int bw_i = effective_border_width(tl->node->desktop);
+	int buf_w = client_r.width + 2 * (bw_i + size);
+	int buf_h = client_r.height + 2 * (bw_i + size);
 	if (buf_w <= 0 || buf_h <= 0)
 		return false;
 
@@ -1602,12 +1605,12 @@ static bool blur_render_shadow(toplevel_t *tl) {
 		.shadow_offset_y = shadow_offset_y,
 		.shadow_color = {c->shadow_color[0], c->shadow_color[1], c->shadow_color[2], c->shadow_color[3]},
 		.border_radius = c->border_radius * scale,
-		.inner_width = client_r.width * scale,
-		.inner_height = client_r.height * scale,
+		.inner_width = (client_r.width + 2 * bw_i) * scale,
+		.inner_height = (client_r.height + 2 * bw_i) * scale,
 		.hole_x = (tl->content_tree->node.x - shadow_offset_x + size) * scale,
 		.hole_y = (tl->content_tree->node.y - shadow_offset_y + size) * scale,
-		.hole_width = client_r.width * scale,
-		.hole_height = client_r.height * scale,
+		.hole_width = (client_r.width + 2 * bw_i) * scale,
+		.hole_height = (client_r.height + 2 * bw_i) * scale,
 		.scale = scale,
 		.buf_w = (int)phys_buf_w,
 		.buf_h = (int)phys_buf_h,
@@ -1626,8 +1629,8 @@ static bool blur_render_shadow(toplevel_t *tl) {
 	wlr_scene_buffer_set_source_box(tl->shadow->shadow_node, &src_box);
 	wlr_scene_buffer_set_dest_size(tl->shadow->shadow_node, buf_w, buf_h);
 
-	wlr_scene_node_set_position(&tl->shadow->shadow_node->node, shadow_offset_x - size,
-		shadow_offset_y - size);
+	wlr_scene_node_set_position(&tl->shadow->shadow_node->node, shadow_offset_x - bw_i - size,
+		shadow_offset_y - bw_i - size);
 	wlr_scene_node_set_enabled(&tl->shadow->shadow_node->node, true);
 
 	return true;
@@ -1641,9 +1644,12 @@ static bool blur_render_border(toplevel_t *tl, int content_w, int content_h) {
 
 	float scale = tl->node->output ? tl->node->output->wlr_output->scale : 1.0f;
 	client_t *c = tl->node->client;
-	int bw_i = border_width;
-	if (bw_i <= 0)
+	int bw_i = effective_border_width(tl->node->desktop);
+	if (bw_i <= 0) {
+		if (tl->rounded->border_shader_node && tl->rounded->border_shader_node->node.enabled)
+			wlr_scene_node_set_enabled(&tl->rounded->border_shader_node->node, false);
 		return false;
+	}
 
 	double log_fw = (double)content_w + 2 * bw_i;
 	double log_fh = (double)content_h + 2 * bw_i;
@@ -1757,7 +1763,9 @@ static uint64_t capture_corner_mask_bg(output_t *output, effects_output_t *ctx, 
 	wlr_output_state_set_enabled(&cap_state, true);
 	wlr_output_state_set_custom_mode(&cap_state, ctx->blur_w, ctx->blur_h, 0);
 	wlr_output_state_set_scale(&cap_state, (float)ctx->blur_w / (float)w);
-	struct wlr_scene_output_state_options opts = { .swapchain = ctx->blur_swapchain };
+	struct wlr_scene_output_state_options opts = {
+		.swapchain = ctx->blur_swapchain
+	};
 	bool ok = wlr_scene_output_build_state(ctx->capture_scene_output, &cap_state, &opts);
 
 	if (hidden)
@@ -1833,7 +1841,7 @@ static bool rebuild_corner_masks(output_t *output) {
 			continue;
 
 		float ow = (float)w, oh = (float)h;
-		int bw_i = (c->state == STATE_FULLSCREEN) ? 0 : border_width;
+		int bw_i = (c->state == STATE_FULLSCREEN) ? 0 : effective_border_width(tl->node->desktop);
 		float inner_r = (c->border_radius > (float)bw_i) ? c->border_radius - (float)bw_i : 0.0f;
 
 		float win_u = (float)(content_r.x - output->lx) / ow;
@@ -1941,7 +1949,9 @@ static uint64_t capture_full_scene_to_tex(output_t *output, effects_output_t *ct
 
 	wlr_damage_ring_add_whole(&ctx->capture_scene_output->damage_ring);
 
-	struct wlr_scene_output_state_options opts = { .swapchain = ctx->full_swapchain };
+	struct wlr_scene_output_state_options opts = {
+		.swapchain = ctx->full_swapchain
+	};
 	bool ok = wlr_scene_output_build_state(ctx->capture_scene_output, &ctx->capture_state, &opts);
 
 	if (server.shader_tree && !server.shader_tree->node.enabled)
@@ -2320,16 +2330,17 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 			if (tl->shadow->shadow_geometry_dirty && !tl->shadow->shadow_dirty) {
 				int size = (int)shadow_size;
 				if (tl->shadow->shadow_node && size > 0) {
+					int bw_i = effective_border_width(tl->node->desktop);
 					struct wlr_box client_r = get_client_rect(tl);
-					int buf_w = client_r.width + 2 * size;
-					int buf_h = client_r.height + 2 * size;
+					int buf_w = client_r.width + 2 * (bw_i + size);
+					int buf_h = client_r.height + 2 * (bw_i + size);
 					if (buf_w > 0 && buf_h > 0) {
 						float scale = tl->node->output ? tl->node->output->wlr_output->scale : 1.0f;
 						if (tl->shadow->shadow_buf_w == (int)(buf_w * scale) &&
 								tl->shadow->shadow_buf_h == (int)(buf_h * scale)) {
 							wlr_scene_node_lower_to_bottom(&tl->shadow->shadow_node->node);
-							wlr_scene_node_set_position(&tl->shadow->shadow_node->node, shadow_offset_x - size,
-								shadow_offset_y - size);
+							wlr_scene_node_set_position(&tl->shadow->shadow_node->node, shadow_offset_x - bw_i - size,
+								shadow_offset_y - bw_i - size);
 							if (!tl->shadow->shadow_node->node.enabled)
 								wlr_scene_node_set_enabled(&tl->shadow->shadow_node->node, true);
 							tl->shadow->shadow_geometry_dirty = false;

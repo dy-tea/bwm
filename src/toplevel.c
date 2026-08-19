@@ -312,49 +312,52 @@ void toplevel_center_and_clip_surface(toplevel_t *toplevel) {
 
 	// when tiled or floating surface is smaller than its container, update borders
 	// to wrap the actual surface instead of the full allocated space
-	if ((tiled || floating) && toplevel->border_tree &&
-			effective_border_width(toplevel->node->desktop) > 0) {
+	if ((tiled || floating) && toplevel->border_tree) {
 		unsigned int bw = effective_border_width(toplevel->node->desktop);
-		if (tiled && (x > 0 || y > 0)) {
-			int border_w = (int)toplevel->geometry.width < container_rect->width ?
-				(int)toplevel->geometry.width : container_rect->width;
-			int border_h = (int)toplevel->geometry.height < container_rect->height ?
-				(int)toplevel->geometry.height : container_rect->height;
-			struct wlr_box content_geo = {
-				0,
-				0,
-				border_w,
-				border_h
-			};
-			update_borders(toplevel->border_tree, toplevel->border_rects, content_geo, bw);
-			wlr_scene_node_set_position(&toplevel->border_tree->node, (int)x - (int)bw, (int)y - (int)bw);
-			update_border_colors(c);
-			if (toplevel->rounded && toplevel->rounded->border_shader_node && (c->border_radius > 0.0f ||
-					toplevel->rounded->gradient_count >= 2)) {
-				rounded_mark_border_size(toplevel->rounded, border_w, border_h, (int)bw,
-					toplevel->node && toplevel->node->output ? toplevel->node->output->wlr_output->scale : 1.0f);
-				if (border_w + 2 * (int)bw > 0)
-					wlr_scene_buffer_set_dest_size(toplevel->rounded->border_shader_node, border_w + 2 * (int)bw,
-						border_h + 2 * (int)bw);
+		if (bw > 0) {
+			if (tiled && (x > 0 || y > 0)) {
+				int border_w = (int)toplevel->geometry.width < container_rect->width ?
+					(int)toplevel->geometry.width : container_rect->width;
+				int border_h = (int)toplevel->geometry.height < container_rect->height ?
+					(int)toplevel->geometry.height : container_rect->height;
+				struct wlr_box content_geo = {
+					0,
+					0,
+					border_w,
+					border_h
+				};
+				update_borders(toplevel->border_tree, toplevel->border_rects, content_geo, bw);
+				wlr_scene_node_set_position(&toplevel->border_tree->node, (int)x - (int)bw, (int)y - (int)bw);
+				update_border_colors(c);
+				if (toplevel->rounded && toplevel->rounded->border_shader_node && (c->border_radius > 0.0f ||
+						toplevel->rounded->gradient_count >= 2)) {
+					rounded_mark_border_size(toplevel->rounded, border_w, border_h, (int)bw,
+						toplevel->node && toplevel->node->output ? toplevel->node->output->wlr_output->scale : 1.0f);
+					if (border_w + 2 * (int)bw > 0)
+						wlr_scene_buffer_set_dest_size(toplevel->rounded->border_shader_node, border_w + 2 * (int)bw,
+							border_h + 2 * (int)bw);
+				}
+			} else if (container_rect) {
+				struct wlr_box full_geo = {
+					0,
+					0,
+					container_rect->width,
+					container_rect->height
+				};
+				update_borders(toplevel->border_tree, toplevel->border_rects, full_geo, bw);
+				update_border_colors(c);
+				if (toplevel->rounded && toplevel->rounded->border_shader_node && (c->border_radius > 0.0f ||
+						toplevel->rounded->gradient_count >= 2)) {
+					rounded_mark_border_size(toplevel->rounded, container_rect->width, container_rect->height,
+						(int)bw,
+						toplevel->node && toplevel->node->output ? toplevel->node->output->wlr_output->scale : 1.0f);
+					if (container_rect->width + 2 * (int)bw > 0)
+						wlr_scene_buffer_set_dest_size(toplevel->rounded->border_shader_node,
+							container_rect->width + 2 * (int)bw, container_rect->height + 2 * (int)bw);
+				}
 			}
-		} else if (container_rect) {
-			struct wlr_box full_geo = {
-				0,
-				0,
-				container_rect->width,
-				container_rect->height
-			};
-			update_borders(toplevel->border_tree, toplevel->border_rects, full_geo, bw);
-			update_border_colors(c);
-			if (toplevel->rounded && toplevel->rounded->border_shader_node && (c->border_radius > 0.0f ||
-					toplevel->rounded->gradient_count >= 2)) {
-				rounded_mark_border_size(toplevel->rounded, container_rect->width, container_rect->height,
-					(int)bw,
-					toplevel->node && toplevel->node->output ? toplevel->node->output->wlr_output->scale : 1.0f);
-				if (container_rect->width + 2 * (int)bw > 0)
-					wlr_scene_buffer_set_dest_size(toplevel->rounded->border_shader_node,
-						container_rect->width + 2 * (int)bw, container_rect->height + 2 * (int)bw);
-			}
+		} else if (toplevel->border_tree->node.enabled) {
+			wlr_scene_node_set_enabled(&toplevel->border_tree->node, false);
 		}
 	}
 
