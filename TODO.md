@@ -13,7 +13,6 @@
 
 # Layout
 - Better tab grouping (see sway or Hyprland for reference)
-- When mpv is in fullscreen and closes by itself, it sometimes causes the tree to rotate unexpectedly
 
 # Misc
 - Rework the docs to be easier to use

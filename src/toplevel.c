@@ -659,8 +659,13 @@ void toplevel_map(struct wl_listener *listener, void *data) {
 	if (should_focus && target_output)
 		activate_node(target_output, target_desktop, n);
 
-	if (rule && rule->state == STATE_FULLSCREEN)
+	if (rule && rule->state == STATE_FULLSCREEN) {
 		enter_fullscreen(target_output, target_desktop, n);
+	} else if ((!rule || !(rule->has & RULE_TYPE_STATE)) &&
+			toplevel->xdg_toplevel->requested.fullscreen) {
+		// client requested fullscreen before map
+		enter_fullscreen(target_output, target_desktop, n);
+	}
 
 	toplevel->wants_fade = true;
 	arrange(target_output, target_desktop, true);
