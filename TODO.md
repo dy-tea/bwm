@@ -2,6 +2,7 @@
 - Per-window animation overrides
 - Ensure animations and blur work together without visual artifacts
 - Custom animation shaders for windows (e.g. open/close animations)
+- Resize animation still looks buggy
 
 # Effects
 - Effects per window state (e.g. unfocused, focused, ...)
@@ -13,6 +14,7 @@
 
 # Layout
 - Better tab grouping (see sway or Hyprland for reference)
+- Undersized toplevels that are tiled will jump in position unexpectedly during resize, and lose their surface clip temporarily if they have one on another axis (observed on protonvpn-app)
 
 # Misc
 - Rework the docs to be easier to use
