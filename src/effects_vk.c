@@ -47,6 +47,7 @@ struct vk_image {
 	VkDeviceMemory memory;
 	int width;
 	int height;
+	enum be_resource_state state;
 };
 
 struct vk_fbo {
@@ -561,7 +562,8 @@ static void vk_draw_full(VkPipeline pipe, VkImage src_img, VkFramebuffer dst_fb,
 	vk_ensure_cb_begun();
 	VkImageMemoryBarrier barrier = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-		.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		.oldLayout = (dst_img == VK_NULL_HANDLE) ? VK_IMAGE_LAYOUT_UNDEFINED :
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 		.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -651,6 +653,7 @@ static void vk_draw_full(VkPipeline pipe, VkImage src_img, VkFramebuffer dst_fb,
 		vkCmdDraw(vk->frame_cb, 4, 1, 0, 0);
 	}
 	vkCmdEndRenderPass(vk->frame_cb);
+	// Render-pass output is now available for sampling by subsequent effects.
 }
 
 static void vk_draw_full_no_tex(VkPipeline pipe, VkImage dst_img, VkFramebuffer dst_fb, int w, int h,
@@ -1370,21 +1373,31 @@ static void vk_fini(void) {
 
 static bool vk_output_init(be_output_state_t *state, int width, int height, int blur_w,
 		int blur_h) {
+	struct vk_fbo *capture = calloc(1, sizeof(*capture));
 	struct vk_fbo *ping = calloc(1, sizeof(*ping));
 	struct vk_fbo *pong = calloc(1, sizeof(*pong));
-	if (!ping || !pong) {
+	if (!capture || !ping || !pong) {
+		free(capture);
 		free(ping);
 		free(pong);
 		return false;
 	}
-	if (!vk_create_fbo(blur_w, blur_h, vk->vk_fmt, ping) || !vk_create_fbo(blur_w, blur_h, vk->vk_fmt,
-			pong)) {
+	if (!vk_create_fbo(blur_w, blur_h, vk->vk_fmt, capture) || !vk_create_fbo(blur_w, blur_h,
+			vk->vk_fmt, ping) || !vk_create_fbo(blur_w, blur_h, vk->vk_fmt, pong)) {
+		vk_destroy_fbo(capture);
+		free(capture);
 		vk_destroy_fbo(ping);
 		free(ping);
 		vk_destroy_fbo(pong);
 		free(pong);
 		return false;
 	}
+	state->capture.native_handle[0] = (uint64_t)(intptr_t)capture;
+	state->capture.native_handle[1] = (uint64_t)capture->img.image;
+	state->capture.width = blur_w;
+	state->capture.height = blur_h;
+	state->capture.state = BE_RESOURCE_SHADER_READ;
+	state->capture.owned = true;
 	state->ping.native_handle[0] = (uint64_t)(intptr_t)ping;
 	state->ping.native_handle[1] = (uint64_t)ping->img.image;
 	state->ping.width = blur_w;
@@ -1425,10 +1438,15 @@ static void vk_output_fini(be_output_state_t *state) {
 	if (!vk)
 		return;
 	vkQueueWaitIdle(vk->queue);
+	struct vk_fbo *capture = vk_fbo_of(state->capture.native_handle[0]);
 	struct vk_fbo *ping = vk_fbo_of(state->ping.native_handle[0]);
 	struct vk_fbo *pong = vk_fbo_of(state->pong.native_handle[0]);
 	struct vk_fbo *ss = vk_fbo_of(state->screen_shader.native_handle[0]);
 	struct vk_image *staging = (struct vk_image *)(intptr_t)state->staging.native_handle[1];
+	if (capture) {
+		vk_destroy_fbo(capture);
+		free(capture);
+	}
 	if (ping) {
 		vk_destroy_fbo(ping);
 		free(ping);
@@ -1446,6 +1464,7 @@ static void vk_output_fini(be_output_state_t *state) {
 		free(staging);
 	}
 	vk_destroy_blur_levels(state);
+	memset(&state->capture, 0, sizeof(state->capture));
 	memset(&state->ping, 0, sizeof(state->ping));
 	memset(&state->pong, 0, sizeof(state->pong));
 	memset(&state->staging, 0, sizeof(state->staging));
@@ -1638,15 +1657,17 @@ static void vk_frame_end(void) {
 	vk_flush_pending_fbo_destroys();
 }
 
-static bool vk_blit(uint64_t src_tex, uint64_t dst_fbo, int w, int h, const pixman_box32_t *scissor,
-		int n_scissor) {
+static bool vk_blit(be_effect_resource_t src, uint64_t dst_fbo, int w, int h,
+		const pixman_box32_t *scissor, int n_scissor) {
 	vk->frame_dirty = true;
 	vk_ensure_cb_begun();
 	struct vk_fbo *dst = vk_fbo_of(dst_fbo);
 	if (!dst)
 		return false;
 
-	VkImage src_img = vk_img_of(src_tex);
+	if (!src.valid || !src.handle)
+		return false;
+	VkImage src_img = vk_img_of(src.handle);
 	int n_regions = (scissor && n_scissor > 0) ? n_scissor : 1;
 	float sx = (float)vk->blur_w / (float)w;
 	float sy = (vk->blur_h > 0) ? (float)vk->blur_h / (float)h : sx;
@@ -1726,6 +1747,8 @@ static bool vk_blit(uint64_t src_tex, uint64_t dst_fbo, int w, int h, const pixm
 	vkCmdPipelineBarrier(vk->frame_cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 2, post_barriers);
 
+	if (dst->img.state != BE_RESOURCE_SHADER_READ)
+		dst->img.state = BE_RESOURCE_SHADER_READ;
 	return true;
 }
 
@@ -1770,16 +1793,19 @@ static int vk_scissor_boxes(const pixman_box32_t *scissor, int n_scissor, int w,
 	return n;
 }
 
-static bool vk_blur(be_output_state_t *state, uint64_t src_handle, int src_w, int src_h,
+static bool vk_blur(be_output_state_t *state, be_effect_resource_t src, int src_w, int src_h,
 		struct be_blur_params *p, uint64_t dst_fbo, const pixman_box32_t *scissor, int n_scissor,
-		uint64_t *out_handle) {
+		be_effect_resource_t *out_resource) {
+	if (!src.valid || !src.handle)
+		return false;
+	uint64_t src_handle = src.handle;
 	if (p->passes <= 0 || p->algorithm == BLUR_ALGORITHM_NONE) {
 		if (dst_fbo) {
-			vk_blit(src_handle, dst_fbo, src_w, src_h, NULL, 0);
-			if (out_handle)
-				*out_handle = 0;
+			vk_blit(src, dst_fbo, src_w, src_h, NULL, 0);
+			if (out_resource)
+				*out_resource = (be_effect_resource_t){0};
 		} else {
-			*out_handle = src_handle;
+			*out_resource = src;
 		}
 		return true;
 	}
@@ -1860,10 +1886,16 @@ static bool vk_blur(be_output_state_t *state, uint64_t src_handle, int src_w, in
 
 		if (dst_fbo) {
 			vk_transition_to_shader_read_after_draw(dst_img);
-			if (out_handle)
-				*out_handle = 0;
+			if (out_resource)
+				*out_resource = (be_effect_resource_t){0};
 		} else {
-			*out_handle = (uint64_t)tex0;
+			*out_resource = (be_effect_resource_t){
+				.handle = (uint64_t)tex0,
+				.width = src_w,
+				.height = src_h,
+				.state = BE_RESOURCE_SHADER_READ,
+				.valid = true
+			};
 		}
 		return true;
 	}
@@ -2002,19 +2034,31 @@ static bool vk_blur(be_output_state_t *state, uint64_t src_handle, int src_w, in
 
 	if (dst_fbo) {
 		vk_transition_to_shader_read_after_draw(dst_img);
-		if (out_handle)
-			*out_handle = 0;
+		if (out_resource)
+			*out_resource = (be_effect_resource_t){0};
 	} else {
-		*out_handle = (uint64_t)current;
+		*out_resource = (be_effect_resource_t){
+			.handle = (uint64_t)current,
+			.width = src_w,
+			.height = src_h,
+			.state = BE_RESOURCE_SHADER_READ,
+			.valid = true
+		};
 	}
 	return true;
 }
 
-static bool vk_apply_mica_tint(be_output_state_t *state, uint64_t bg_handle, float tint[4],
-		float tint_strength, uint64_t dst_fbo, int w, int h) {
+static bool vk_apply_mica_tint(be_output_state_t *state, be_effect_resource_t bg, float tint[4],
+		float tint_strength, be_effect_resource_t dst) {
 	(void)state;
-	struct vk_fbo *dst = vk_fbo_of(dst_fbo);
-	if (!dst)
+	if (!bg.valid || !bg.handle || !dst.valid || !dst.handle)
+		return false;
+	uint64_t dst_fbo = dst.handle;
+	int w = dst.width, h = dst.height;
+	if (!bg.valid || !bg.handle)
+		return false;
+	struct vk_fbo *dst_fbo_obj = vk_fbo_of(dst_fbo);
+	if (!dst_fbo_obj)
 		return false;
 	struct {
 		float tint[4];
@@ -2022,14 +2066,20 @@ static bool vk_apply_mica_tint(be_output_state_t *state, uint64_t bg_handle, flo
 	} pc;
 	memcpy(pc.tint, tint, 16);
 	pc.strength = tint_strength;
-	vk_draw_full(vk->pipe_mica, vk_img_of(bg_handle), dst->fb, w, h, dst->img.image, &pc, sizeof(pc),
-		NULL, 0);
+	vk_draw_full(vk->pipe_mica, vk_img_of(bg.handle), dst_fbo_obj->fb, w, h, dst_fbo_obj->img.image,
+		&pc, sizeof(pc), NULL, 0);
 	return true;
 }
 
-static bool vk_apply_acrylic(be_output_state_t *state, uint64_t bg_handle,
-		struct be_acrylic_params *p, uint64_t dst_fbo, int w, int h) {
-	VkImage blurred = vk_img_of(bg_handle);
+static bool vk_apply_acrylic(be_output_state_t *state, be_effect_resource_t bg,
+		struct be_acrylic_params *p, be_effect_resource_t dst) {
+	if (!bg.valid || !bg.handle || !dst.valid || !dst.handle)
+		return false;
+	uint64_t dst_fbo = dst.handle;
+	int w = dst.width, h = dst.height;
+	if (!bg.valid || !bg.handle)
+		return false;
+	VkImage blurred = vk_img_of(bg.handle);
 	struct vk_fbo *fbo0 = vk_fbo_of(state->ping.native_handle[0]);
 	struct vk_fbo *fbo1 = vk_fbo_of(state->pong.native_handle[0]);
 	VkImage tex0 = vk_img_of(state->ping.native_handle[1]);
@@ -2038,7 +2088,8 @@ static bool vk_apply_acrylic(be_output_state_t *state, uint64_t bg_handle,
 	int blur_h = state->ping.height > 0 ? state->ping.height : h;
 
 	if (p->blur_passes > 0) {
-		VkImage current = vk_img_of(bg_handle);
+		VkImage current = vk_img_of(bg.handle);
+		int target = (current == tex0) ? 1 : 0;
 		for (int i = 0; i < p->blur_passes; i++) {
 			struct {
 				float hp[2];
@@ -2048,16 +2099,17 @@ static bool vk_apply_acrylic(be_output_state_t *state, uint64_t bg_handle,
 			pc.hp[0] = 0.5f / blur_w;
 			pc.hp[1] = 0.5f / blur_h;
 			pc.off = p->blur_radius * (float)(i + 1);
-			struct vk_fbo *dfbo = (i & 1) ? fbo1 : fbo0;
-			VkImage dimg = (i & 1) ? tex1 : tex0;
+			struct vk_fbo *dfbo = target ? fbo1 : fbo0;
+			VkImage dimg = target ? tex1 : tex0;
 			vk_draw_full(vk->pipe_kawase, current, dfbo->fb, blur_w, blur_h, dfbo->img.image, &pc, sizeof(pc),
 				NULL, 0);
 			current = dimg;
+			target ^= 1;
 		}
-		blurred = (p->blur_passes & 1) ? tex1 : tex0;
+		blurred = current;
 	}
-	struct vk_fbo *dst = vk_fbo_of(dst_fbo);
-	if (!dst)
+	struct vk_fbo *dst_fbo_obj = vk_fbo_of(dst_fbo);
+	if (!dst_fbo_obj)
 		return false;
 
 	struct {
@@ -2074,13 +2126,14 @@ static bool vk_apply_acrylic(be_output_state_t *state, uint64_t bg_handle,
 	pc.res[1] = p->res_h;
 	pc.anchor[0] = p->light_anchor_x;
 	pc.anchor[1] = p->light_anchor_y;
-	vk_draw_full(vk->pipe_acrylic, blurred, dst->fb, w, h, dst->img.image, &pc, sizeof(pc), NULL, 0);
+	vk_draw_full(vk->pipe_acrylic, blurred, dst_fbo_obj->fb, w, h, dst_fbo_obj->img.image, &pc,
+		sizeof(pc), NULL, 0);
 	return true;
 }
 
 static bool vk_render_shadow(struct be_shadow_params *p, uint64_t dst_fbo) {
-	struct vk_fbo *dst = vk_fbo_of(dst_fbo);
-	if (!dst)
+	struct vk_fbo *dst_fbo_obj = vk_fbo_of(dst_fbo);
+	if (!dst_fbo_obj)
 		return false;
 	struct {
 		float res[2];
@@ -2106,14 +2159,14 @@ static bool vk_render_shadow(struct be_shadow_params *p, uint64_t dst_fbo) {
 	pc.hsize[0] = p->hole_width;
 	pc.hsize[1] = p->hole_height;
 
-	vk_draw_full_no_tex(vk->pipe_shadow, dst->img.image, dst->fb, p->buf_w, p->buf_h, true, &pc,
-		sizeof(pc), vk->pipe_layout, vk->dummy_ds);
+	vk_draw_full_no_tex(vk->pipe_shadow, dst_fbo_obj->img.image, dst_fbo_obj->fb, p->buf_w, p->buf_h,
+		true, &pc, sizeof(pc), vk->pipe_layout, vk->dummy_ds);
 	return true;
 }
 
 static bool vk_render_border(struct be_border_params *p, uint64_t dst_fbo) {
-	struct vk_fbo *dst = vk_fbo_of(dst_fbo);
-	if (!dst)
+	struct vk_fbo *dst_fbo_obj = vk_fbo_of(dst_fbo);
+	if (!dst_fbo_obj)
 		return false;
 	struct vk_border_ubo ubo;
 	memset(&ubo, 0, sizeof(ubo));
@@ -2142,8 +2195,8 @@ static bool vk_render_border(struct be_border_params *p, uint64_t dst_fbo) {
 	pc.scale = p->scale;
 	memcpy(pc.color, p->border_color, 16);
 
-	vk_draw_full_no_tex(vk->pipe_border, dst->img.image, dst->fb, p->buf_w, p->buf_h, true, &pc,
-		sizeof(pc), vk->border_pipe_layout, vk->border_ds);
+	vk_draw_full_no_tex(vk->pipe_border, dst_fbo_obj->img.image, dst_fbo_obj->fb, p->buf_w, p->buf_h,
+		true, &pc, sizeof(pc), vk->border_pipe_layout, vk->border_ds);
 	return true;
 }
 
@@ -2173,16 +2226,22 @@ static VkImageView vk_lookup_or_create_view(VkImage image) {
 	return view;
 }
 
-static bool vk_apply_corner_mask(be_output_state_t *state, uint64_t dst_fbo, int dst_w, int dst_h,
-		uint64_t bg_tex, struct be_corner_mask_params *p) {
+static bool vk_apply_corner_mask(be_output_state_t *state, be_effect_resource_t dst,
+		be_effect_resource_t bg, struct be_corner_mask_params *p) {
 	(void)state;
 	vk->frame_dirty = true;
 	vk_ensure_cb_begun();
-	struct vk_fbo *dst = vk_fbo_of(dst_fbo);
-	if (!dst)
+	if (!dst.valid || !dst.handle || dst.width <= 0 || dst.height <= 0)
+		return false;
+	uint64_t dst_fbo = dst.handle;
+	int dst_w = dst.width, dst_h = dst.height;
+	struct vk_fbo *dst_fbo_obj = vk_fbo_of(dst_fbo);
+	if (!dst_fbo_obj)
 		return false;
 
-	VkImage src_img = vk_img_of(bg_tex);
+	if (!bg.valid || !bg.handle)
+		return false;
+	VkImage src_img = vk_img_of(bg.handle);
 	VkImageView src_view = vk_lookup_or_create_view(src_img);
 	if (src_view == VK_NULL_HANDLE)
 		return false;
@@ -2249,7 +2308,7 @@ static bool vk_apply_corner_mask(be_output_state_t *state, uint64_t dst_fbo, int
 		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
 		.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 		.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-		.image = dst->img.image,
+		.image = dst_fbo_obj->img.image,
 		.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
 		.srcAccessMask = VK_ACCESS_SHADER_READ_BIT,
 		.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
@@ -2260,7 +2319,7 @@ static bool vk_apply_corner_mask(be_output_state_t *state, uint64_t dst_fbo, int
 	VkRenderPassBeginInfo rp = {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
 		.renderPass = p->pre_blit ? vk->overlay_render_pass : vk->color_clear_render_pass,
-		.framebuffer = dst->fb,
+		.framebuffer = dst_fbo_obj->fb,
 		.renderArea = {
 			{0, 0},
 			{
@@ -2305,8 +2364,8 @@ static bool vk_apply_screen_shader(uint64_t src_tex, uint64_t dst_fbo, int w, in
 		struct be_screen_shader_params *p) {
 	if (!vk->screen_shader_pipe)
 		return false;
-	struct vk_fbo *dst = vk_fbo_of(dst_fbo);
-	if (!dst)
+	struct vk_fbo *dst_fbo_obj = vk_fbo_of(dst_fbo);
+	if (!dst_fbo_obj)
 		return false;
 	VkImage src_img = vk_img_of(src_tex);
 
@@ -2318,14 +2377,14 @@ static bool vk_apply_screen_shader(uint64_t src_tex, uint64_t dst_fbo, int w, in
 	pc.res[1] = (float)h;
 	pc.time = p->time;
 
-	vk_draw_full(vk->screen_shader_pipe, src_img, dst->fb, w, h, dst->img.image, &pc, sizeof(pc), NULL,
-		0);
+	vk_draw_full(vk->screen_shader_pipe, src_img, dst_fbo_obj->fb, w, h, dst_fbo_obj->img.image, &pc,
+		sizeof(pc), NULL, 0);
 	return true;
 }
 
 static bool vk_capture_readback(struct wlr_buffer *capture_buffer, be_output_state_t *state,
 		uint64_t dst_fbo, int dst_x, int dst_y, int dst_w, int dst_h, int src_x, int src_y, int src_w,
-		int src_h, uint64_t *out_tex) {
+		int src_h, be_effect_resource_t *out_resource) {
 	vk->frame_dirty = true;
 	vk_ensure_cb_begun();
 	(void)src_w;
@@ -2347,7 +2406,7 @@ static bool vk_capture_readback(struct wlr_buffer *capture_buffer, be_output_sta
 
 	VkImageLayout src_layout = vk_attribs.layout;
 
-	VkImage result_img = vk_img_of(state->pong.native_handle[1]);
+	VkImage result_img = vk_img_of(state->capture.native_handle[1]);
 	if (dst == vk_fbo_of(state->screen_shader.native_handle[0]))
 		result_img = vk_img_of(state->screen_shader.native_handle[1]);
 
@@ -2419,7 +2478,12 @@ static bool vk_capture_readback(struct wlr_buffer *capture_buffer, be_output_sta
 	vkCmdPipelineBarrier(vk->frame_cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 2, post_barriers);
 	wlr_texture_destroy(tex);
-	*out_tex = (uint64_t)result_img;
+	out_resource->handle = (uint64_t)result_img;
+	out_resource->width = dst_w;
+	out_resource->height = dst_h;
+	out_resource->state = BE_RESOURCE_SHADER_READ;
+	out_resource->generation = 1;
+	out_resource->valid = true;
 	return true;
 }
 

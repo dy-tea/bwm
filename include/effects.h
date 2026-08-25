@@ -55,6 +55,8 @@ typedef struct effects_output_t {
 
 	be_output_state_t be_state;
 
+	be_effect_resource_t frame_capture;
+
 	struct wlr_buffer *mica_buf;
 	uint64_t mica_native[2];
 	bool mica_dirty;
@@ -90,7 +92,12 @@ typedef struct effects_output_t {
 	bool combined_bg_valid;
 	uint32_t backdrop_gen;
 	uint32_t blur_gen;
+	uint32_t mica_gen;
+	uint32_t acrylic_gen;
 	uint32_t layer_blur_gen;
+	uint32_t layer_region_generation;
+	bool applying_effect_nodes;
+	bool effect_nodes_updated;
 } effects_output_t;
 
 typedef struct effects_state_t {
