@@ -10,13 +10,6 @@ float master_stack_ratio = 0.5f;
 master_area_orientation_t master_stack_orientation = MASTER_LEFT;
 stack_layout_t master_stack_layout = STACK_VERTICAL;
 
-typedef enum {
-	DIRECTION_WEST,
-	DIRECTION_SOUTH,
-	DIRECTION_NORTH,
-	DIRECTION_EAST,
-} master_stack_direction_t;
-
 static int compare_node_order(const void *lhs, const void *rhs) {
 	const node_t *a = *(node_t *const *)lhs;
 	const node_t *b = *(node_t *const *)rhs;
@@ -532,22 +525,22 @@ static int directional_target(node_t **nodes, int count, int source_index, direc
 		bool eligible = false;
 
 		switch (direction) {
-		case DIRECTION_WEST:
+		case DIR_WEST:
 			eligible = dx < 0;
 			primary = -dx;
 			secondary = llabs(dy);
 			break;
-		case DIRECTION_SOUTH:
+		case DIR_SOUTH:
 			eligible = dy > 0;
 			primary = dy;
 			secondary = llabs(dx);
 			break;
-		case DIRECTION_NORTH:
+		case DIR_NORTH:
 			eligible = dy < 0;
 			primary = -dy;
 			secondary = llabs(dx);
 			break;
-		case DIRECTION_EAST:
+		case DIR_EAST:
 			eligible = dx > 0;
 			primary = dx;
 			secondary = llabs(dy);

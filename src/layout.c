@@ -107,11 +107,12 @@ static bool scroller_focus(desktop_t *d, direction_t dir) {
 static bool tiled_focus(desktop_t *d, direction_t dir) {
 	node_t *n = find_fence(d->focus, dir);
 	if (n != NULL) {
-		n = second_extrema(n);
+		n = dir == DIR_EAST || dir == DIR_NORTH ? first_extrema(n) : second_extrema(n);
 		if (n != NULL)
 			return focus_node(mon, d, n);
 	} else if (focus_wrapping && d->root) {
-		node_t *w = second_extrema(d->root);
+		node_t *w = dir == DIR_EAST ||
+			dir == DIR_SOUTH ? first_extrema(d->root) : second_extrema(d->root);
 		if (w && w != d->focus)
 			return focus_node(mon, d, w);
 	}
