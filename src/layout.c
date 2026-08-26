@@ -104,34 +104,6 @@ static bool scroller_focus(desktop_t *d, direction_t dir) {
 	return false;
 }
 
-static bool master_stack_focus(desktop_t *d, direction_t dir) {
-	switch (dir) {
-	case DIR_WEST:
-		return master_stack_focus_west(d);
-	case DIR_EAST:
-		return master_stack_focus_east(d);
-	case DIR_NORTH:
-		return master_stack_focus_north(d);
-	case DIR_SOUTH:
-		return master_stack_focus_south(d);
-	}
-	return false;
-}
-
-static bool master_stack_swap(output_t *m, desktop_t *d, direction_t dir) {
-	switch (dir) {
-	case DIR_WEST:
-		return master_stack_swap_west(m, d);
-	case DIR_EAST:
-		return master_stack_swap_east(m, d);
-	case DIR_NORTH:
-		return master_stack_swap_north(m, d);
-	case DIR_SOUTH:
-		return master_stack_swap_south(m, d);
-	}
-	return false;
-}
-
 static bool tiled_focus(desktop_t *d, direction_t dir) {
 	node_t *n = find_fence(d->focus, dir);
 	if (n != NULL) {

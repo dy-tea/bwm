@@ -3,7 +3,6 @@
 #include "output.h"
 #include "scratchpad.h"
 #include "server.h"
-#include "toplevel.h"
 #include "transaction.h"
 #include "tree.h"
 #include "types.h"

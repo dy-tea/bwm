@@ -502,14 +502,14 @@ static struct wlr_box node_layout_box(const node_t *node) {
 }
 
 static bool aligned_with(const struct wlr_box *source, const struct wlr_box *candidate,
-		master_stack_direction_t direction) {
-	if (direction == DIRECTION_NORTH || direction == DIRECTION_SOUTH)
+		direction_t direction) {
+	if (direction == DIR_NORTH || direction == DIR_SOUTH)
 		return source->x < candidate->x + candidate->width && candidate->x < source->x + source->width;
 	return source->y < candidate->y + candidate->height && candidate->y < source->y + source->height;
 }
 
 static int directional_target(node_t **nodes, int count, int source_index,
-		master_stack_direction_t direction, bool wrap) {
+		direction_t direction, bool wrap) {
 	struct wlr_box source = node_layout_box(nodes[source_index]);
 	int64_t source_x = (int64_t)source.x * 2 + source.width;
 	int64_t source_y = (int64_t)source.y * 2 + source.height;
@@ -590,11 +590,11 @@ static int directional_target(node_t **nodes, int count, int source_index,
 		int64_t primary;
 		int64_t secondary;
 
-		if (direction == DIRECTION_WEST || direction == DIRECTION_EAST) {
-			primary = direction == DIRECTION_WEST ? -x : x;
+		if (direction == DIR_WEST || direction == DIR_EAST) {
+			primary = direction == DIR_WEST ? -x : x;
 			secondary = llabs(y - source_y);
 		} else {
-			primary = direction == DIRECTION_NORTH ? -y : y;
+			primary = direction == DIR_NORTH ? -y : y;
 			secondary = llabs(x - source_x);
 		}
 
@@ -607,7 +607,7 @@ static int directional_target(node_t **nodes, int count, int source_index,
 	return target;
 }
 
-static bool focus_in_direction(desktop_t *d, master_stack_direction_t direction) {
+bool master_stack_focus(desktop_t *d, direction_t direction) {
 	node_t **nodes = NULL;
 	int count = 0;
 	int index = -1;
@@ -625,7 +625,7 @@ static bool focus_in_direction(desktop_t *d, master_stack_direction_t direction)
 	return target >= 0;
 }
 
-static bool swap_in_direction(output_t *m, desktop_t *d, master_stack_direction_t direction) {
+bool master_stack_swap(output_t *m, desktop_t *d, direction_t direction) {
 	node_t **nodes = NULL;
 	int count = 0;
 	int index = -1;
@@ -651,36 +651,4 @@ static bool swap_in_direction(output_t *m, desktop_t *d, master_stack_direction_
 	free(nodes);
 	arrange(m, d, true);
 	return true;
-}
-
-bool master_stack_focus_south(desktop_t *d) {
-	return focus_in_direction(d, DIRECTION_SOUTH);
-}
-
-bool master_stack_focus_north(desktop_t *d) {
-	return focus_in_direction(d, DIRECTION_NORTH);
-}
-
-bool master_stack_focus_east(desktop_t *d) {
-	return focus_in_direction(d, DIRECTION_EAST);
-}
-
-bool master_stack_focus_west(desktop_t *d) {
-	return focus_in_direction(d, DIRECTION_WEST);
-}
-
-bool master_stack_swap_south(output_t *m, desktop_t *d) {
-	return swap_in_direction(m, d, DIRECTION_SOUTH);
-}
-
-bool master_stack_swap_north(output_t *m, desktop_t *d) {
-	return swap_in_direction(m, d, DIRECTION_NORTH);
-}
-
-bool master_stack_swap_east(output_t *m, desktop_t *d) {
-	return swap_in_direction(m, d, DIRECTION_EAST);
-}
-
-bool master_stack_swap_west(output_t *m, desktop_t *d) {
-	return swap_in_direction(m, d, DIRECTION_WEST);
 }

@@ -1,11 +1,8 @@
 #pragma once
 
+#include "tree.h"
 #include <stdbool.h>
 #include <wlr/util/box.h>
-
-typedef struct node_t node_t;
-typedef struct desktop_t desktop_t;
-typedef struct output_t output_t;
 
 typedef enum {
 	MASTER_LEFT,
@@ -25,18 +22,9 @@ extern master_area_orientation_t master_stack_orientation;
 extern stack_layout_t master_stack_layout;
 
 void master_stack_arrange(struct output_t *m, desktop_t *d, struct wlr_box available);
-
 int master_stack_collect(desktop_t *d, node_t ***out_nodes);
-
-bool master_stack_focus_south(desktop_t *d);
-bool master_stack_focus_north(desktop_t *d);
-bool master_stack_focus_east(desktop_t *d);
-bool master_stack_focus_west(desktop_t *d);
-
-bool master_stack_swap_south(output_t *m, desktop_t *d);
-bool master_stack_swap_north(output_t *m, desktop_t *d);
-bool master_stack_swap_east(output_t *m, desktop_t *d);
-bool master_stack_swap_west(output_t *m, desktop_t *d);
+bool master_stack_focus(desktop_t *d, direction_t direction);
+bool master_stack_swap(output_t *m, desktop_t *d, direction_t direction);
 
 bool master_stack_increment(desktop_t *d);
 bool master_stack_decrement(desktop_t *d);
