@@ -6,7 +6,6 @@
 #include "ipc.h"
 #include "ipc_cmd.h"
 #include "ipc_helpers.h"
-#include "master_stack.h"
 #include "output.h"
 #include "realtime.h"
 #include "scroller.h"

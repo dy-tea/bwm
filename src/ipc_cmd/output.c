@@ -3,7 +3,6 @@
 #include "ipc.h"
 #include "ipc_cmd.h"
 #include "ipc_helpers.h"
-#include "master_stack.h"
 #include "output.h"
 #include "output_config.h"
 #include "server.h"
@@ -419,9 +418,9 @@ void ipc_cmd_output(char **args, int num, int client_fd) {
 		num--;
 
 		if (streq("on", *args) || streq("enable", *args) || streq("true", *args)) {
-			oc->hdr_enabled = 1;
+			oc->hdr_enabled = true;
 		} else if (streq("off", *args) || streq("disable", *args) || streq("false", *args)) {
-			oc->hdr_enabled = 0;
+			oc->hdr_enabled = false;
 		} else {
 			send_failure(client_fd, "output hdr: invalid state (on/off)\n");
 			return;
@@ -438,9 +437,9 @@ void ipc_cmd_output(char **args, int num, int client_fd) {
 		num--;
 
 		if (streq("on", *args) || streq("enable", *args) || streq("true", *args)) {
-			oc->allow_tearing = 1;
+			oc->allow_tearing = true;
 		} else if (streq("off", *args) || streq("disable", *args) || streq("false", *args)) {
-			oc->allow_tearing = 0;
+			oc->allow_tearing = false;
 		} else {
 			send_failure(client_fd, "output tearing: invalid state (on/off)\n");
 			return;
