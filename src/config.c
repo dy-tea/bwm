@@ -1358,7 +1358,8 @@ void set_keyboard_grouping(keyboard_grouping_t grouping) {
 }
 
 bool gesturebind_matches(const gesturebind_t *gb, enum gesture_type type, uint8_t fingers) {
-	return !(!gb || gb->type != type || (gb->fingers != GESTURE_FINGERS_ANY && gb->fingers != fingers));
+	return !(!gb || gb->type != type || (gb->fingers != GESTURE_FINGERS_ANY &&
+		gb->fingers != fingers));
 }
 
 void execute_gesturebind(const gesturebind_t *gb) {

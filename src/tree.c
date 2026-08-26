@@ -42,20 +42,8 @@ bool workspace_anim_slide_up = false;
 int mapping_events_count = 0;
 int directional_focus_tightness = 20;
 int ignore_ewmh_fullscreen = 0;
-padding_t monocle_padding = {
-	0,
-	0,
-	0,
-	0
-};
-
-padding_t padding = {
-	0,
-	0,
-	0,
-	0
-};
-
+padding_t monocle_padding = {0};
+padding_t padding = {0};
 int border_width = 2;
 int window_gap = 10;
 bool smart_gaps = false;
@@ -502,12 +490,7 @@ static void compute_split_rects(node_t *n, desktop_t *d, struct wlr_box rect,
 
 	if ((first_hidden || first_fullscreen) && n->second_child && !(second_hidden ||
 			second_fullscreen)) {
-		*first_rect = (struct wlr_box){
-			0,
-			0,
-			0,
-			0
-		};
+		*first_rect = (struct wlr_box){0};
 		*second_rect = rect;
 		return;
 	}
@@ -515,12 +498,7 @@ static void compute_split_rects(node_t *n, desktop_t *d, struct wlr_box rect,
 	if ((second_hidden || second_fullscreen) && n->first_child && !(first_hidden ||
 			first_fullscreen)) {
 		*first_rect = rect;
-		*second_rect = (struct wlr_box){
-			0,
-			0,
-			0,
-			0
-		};
+		*second_rect = (struct wlr_box){0};
 		return;
 	}
 

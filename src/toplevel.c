@@ -1017,8 +1017,6 @@ void toplevel_destroy(struct wl_listener *listener, void *data) {
 	}
 
 	if (toplevel->rounded) {
-		// border_shader_node lives inside border_tree which destroy_borders will free,
-		// but we still need to release the backing buffer
 		if (toplevel->rounded->border_shader_buf) {
 			effects_destroy_buffer(&toplevel->rounded->border_shader_buf,
 				toplevel->rounded->border_shader_native);

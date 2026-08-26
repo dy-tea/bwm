@@ -27,12 +27,7 @@ static struct wlr_ext_workspace_handle_v1 *find_workspace_by_name(const char *na
 static struct wlr_box window_target_rect(node_t *n) {
 	if (n && n->client && n->client->state == STATE_FLOATING)
 		return n->client->floating_rectangle;
-	return n ? n->client->tiled_rectangle : (struct wlr_box){
-		0,
-		0,
-		0,
-		0
-	};
+	return n ? n->client->tiled_rectangle : (struct wlr_box){0};
 }
 
 typedef struct {
@@ -70,7 +65,7 @@ static bool desktop_window_iter_advance(desktop_window_iter_t *it, node_t **out_
 		}
 
 		if (it->tl_cursor) {
-			struct toplevel_t *tl = it->tl_cursor;
+			toplevel_t *tl = it->tl_cursor;
 			it->tl_cursor = (tl->link.next == &server.toplevels) ? NULL : wl_container_of(tl->link.next, tl,
 				link);
 			if (tl->mapped && tl->scene_tree && tl->node && tl->node->client &&
@@ -83,7 +78,7 @@ static bool desktop_window_iter_advance(desktop_window_iter_t *it, node_t **out_
 		}
 
 		if (it->xw_cursor) {
-			struct xwayland_toplevel_t *xw = it->xw_cursor;
+			xwayland_toplevel_t *xw = it->xw_cursor;
 			it->xw_cursor = (xw->link.next == &server.xwayland.views) ? NULL : wl_container_of(xw->link.next,
 				xw, link);
 			if (xw->mapped && xw->scene_tree && xw->node && xw->node->client &&
@@ -611,7 +606,7 @@ struct wlr_ext_workspace_handle_v1 *workspace_get_active(void) {
 
 	struct wlr_ext_workspace_handle_v1 *workspace;
 	wl_list_for_each(workspace, &server.workspace_manager->workspaces, link)
-		if (workspace->state == 1)
+		if (workspace->state == EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE)
 			return workspace;
 
 	return NULL;

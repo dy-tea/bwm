@@ -1,6 +1,5 @@
 #include "master_stack.h"
 #include "output.h"
-#include "toplevel.h"
 #include "tree.h"
 #include <limits.h>
 #include <stdint.h>
@@ -508,8 +507,8 @@ static bool aligned_with(const struct wlr_box *source, const struct wlr_box *can
 	return source->y < candidate->y + candidate->height && candidate->y < source->y + source->height;
 }
 
-static int directional_target(node_t **nodes, int count, int source_index,
-		direction_t direction, bool wrap) {
+static int directional_target(node_t **nodes, int count, int source_index, direction_t direction,
+		bool wrap) {
 	struct wlr_box source = node_layout_box(nodes[source_index]);
 	int64_t source_x = (int64_t)source.x * 2 + source.width;
 	int64_t source_y = (int64_t)source.y * 2 + source.height;

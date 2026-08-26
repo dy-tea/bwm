@@ -62,9 +62,10 @@ static void xwayland_relative_to_absolute(struct wlr_xwayland_surface *parent, i
 		if (parent_view->xwayland_surface && parent_view->node) {
 			int x_offset = child_x - parent_view->xwayland_surface->x;
 			int y_offset = child_y - parent_view->xwayland_surface->y;
-			if (parent_view->node->client && parent_view->node->client->state == STATE_FLOATING) {
-				*abs_x = parent_view->node->client->floating_rectangle.x + x_offset;
-				*abs_y = parent_view->node->client->floating_rectangle.y + y_offset;
+			node_t *parent_node = parent_view->node;
+			if (parent_node->client && parent_node->client->state == STATE_FLOATING) {
+				*abs_x = parent_node->client->floating_rectangle.x + x_offset;
+				*abs_y = parent_node->client->floating_rectangle.y + y_offset;
 			} else if (parent_view->node) {
 				*abs_x = parent_view->node->rectangle.x + x_offset;
 				*abs_y = parent_view->node->rectangle.y + y_offset;

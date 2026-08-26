@@ -914,6 +914,7 @@ void rotate_counterclockwise(void) {
 	wlr_log(WLR_INFO, "Rotated tree counterclockwise");
 }
 
+
 #define RESIZE_AMOUNT 0.05
 
 static bool resize_master_stack_ratio(bool horizontal, float delta) {
