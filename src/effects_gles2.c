@@ -657,22 +657,27 @@ static bool gles2_output_init(be_output_state_t *state, int width, int height, i
 	state->capture.owned = true;
 	state->ping.width = blur_w;
 	state->ping.height = blur_h;
+	state->ping.state = BE_RESOURCE_SHADER_READ;
 	state->pong.width = blur_w;
 	state->pong.height = blur_h;
+	state->pong.state = BE_RESOURCE_SHADER_READ;
 	state->blur_scratch.width = blur_w;
 	state->blur_scratch.height = blur_h;
+	state->blur_scratch.state = BE_RESOURCE_SHADER_READ;
 
 	// Staging texture (no FBO needed)
 	create_fbo(width, height, (GLuint *)&state->staging.native_handle[0],
 		(GLuint *)&state->staging.native_handle[1]);
 	state->staging.width = width;
 	state->staging.height = height;
+	state->staging.state = BE_RESOURCE_SHADER_READ;
 
 	if (!create_fbo(width, height, (GLuint *)&state->screen_shader.native_handle[0],
 		(GLuint *)&state->screen_shader.native_handle[1]))
 		wlr_log(WLR_ERROR, "gles2: screen shader FBO creation failed (non-fatal)");
 	state->screen_shader.width = width;
 	state->screen_shader.height = height;
+	state->screen_shader.state = BE_RESOURCE_SHADER_READ;
 
 	egl_unset_current();
 	return ok;
@@ -1200,7 +1205,7 @@ static bool gles2_apply_screen_shader(be_effect_resource_t src, be_effect_resour
 
 static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_state_t *state,
 		be_effect_resource_t dst, int dst_x, int dst_y, int dst_w, int dst_h, int src_x, int src_y,
-		int src_w, int src_h, be_effect_resource_t *out_resource) {
+		int src_w, int src_h, uint32_t generation, be_effect_resource_t *out_resource) {
 	if (!be_resource_valid(&dst))
 		return false;
 	GLuint dst_fbo = (GLuint)dst.handle;
@@ -1297,7 +1302,7 @@ static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_
 	out_resource->width = dst_w;
 	out_resource->height = dst_h;
 	out_resource->state = BE_RESOURCE_SHADER_READ;
-	out_resource->generation = 1;
+	out_resource->generation = generation;
 	out_resource->valid = true;
 	return true;
 }

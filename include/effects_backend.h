@@ -179,7 +179,7 @@ typedef struct effects_backend_t {
 
 	bool (*capture_readback)(struct wlr_buffer *capture_buffer, be_output_state_t *state,
 		be_effect_resource_t dst, int dst_x, int dst_y, int dst_w, int dst_h, int src_x, int src_y,
-		int src_w, int src_h, be_effect_resource_t *out_resource);
+		int src_w, int src_h, uint32_t generation, be_effect_resource_t *out_resource);
 
 	const char *(*get_screen_shader_source)(const char *name);
 	bool (*compile_screen_shader)(const char *frag_src);

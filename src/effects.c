@@ -724,12 +724,12 @@ static be_effect_resource_t capture_bg_to_tex1_ex(output_t *output, effects_outp
 	be_effect_resource_t result = {0};
 	be_effect_resource_t dst = be_buffer_target_from_buffer(&ctx->be_state.capture, 0);
 	effects_backend->capture_readback(cap_state.buffer, &ctx->be_state, dst, region.x, region.y,
-		region.width, region.height, region.x, region.y, region.width, region.height, &result);
+		region.width, region.height, region.x, region.y, region.width, region.height,
+		ctx->backdrop_gen + 1, &result);
 	wlr_output_state_finish(&cap_state);
 
 	if (result.valid) {
 		ctx->frame_capture = result;
-		ctx->frame_capture.generation = ctx->backdrop_gen + 1;
 		ctx->shared_bg_valid = !mica_only && hide_blur_toplevels;
 		ctx->combined_bg_valid = !mica_only && !hide_blur_toplevels;
 		ctx->backdrop_gen = ctx->frame_capture.generation;
@@ -1869,12 +1869,12 @@ static be_effect_resource_t capture_corner_mask_bg(output_t *output, effects_out
 	be_effect_resource_t result = {0};
 	be_effect_resource_t dst = be_buffer_target_from_buffer(&ctx->be_state.capture, 0);
 	effects_backend->capture_readback(cap_state.buffer, &ctx->be_state, dst, 0, 0, ctx->blur_w,
-		ctx->blur_h, 0, 0, ctx->blur_w, ctx->blur_h, &result);
+		ctx->blur_h, 0, 0, ctx->blur_w, ctx->blur_h, ctx->backdrop_gen + 1, &result);
 	wlr_output_state_finish(&cap_state);
 
 	if (result.valid) {
 		ctx->frame_capture = result;
-		ctx->frame_capture.generation = ++ctx->backdrop_gen;
+		ctx->backdrop_gen = ctx->frame_capture.generation;
 		ctx->shared_bg_valid = false;
 		ctx->combined_bg_valid = false;
 	}
@@ -2026,8 +2026,7 @@ static be_effect_resource_t capture_full_scene_to_tex(output_t *output, effects_
 	if (w <= 0 || h <= 0)
 		return (be_effect_resource_t){0};
 
-	uint64_t screen_fbo = ctx->be_state.screen_shader.native_handle[0];
-	if (!screen_fbo)
+	if (!ctx->be_state.screen_shader.native_handle[0])
 		return (be_effect_resource_t){0};
 
 	wlr_scene_output_set_position(ctx->capture_scene_output, output->lx, output->ly);
@@ -2058,7 +2057,7 @@ static be_effect_resource_t capture_full_scene_to_tex(output_t *output, effects_
 	be_effect_resource_t result = {0};
 	be_effect_resource_t dst = be_buffer_target_from_buffer(&ctx->be_state.screen_shader, 0);
 	effects_backend->capture_readback(ctx->capture_state.buffer, &ctx->be_state, dst, 0, 0, w, h, 0, 0,
-		w, h, &result);
+		w, h, ctx->backdrop_gen, &result);
 
 	wlr_buffer_unlock(ctx->capture_state.buffer);
 	ctx->capture_state.buffer = NULL;
