@@ -1115,41 +1115,26 @@ void execute_bind(bind_t b) {
 	case BIND_DESKTOP_LAYOUT_MONOCLE:
 		toggle_monocle();
 		break;
-	case BIND_FOCUS_WEST:
-		focus_west();
-		break;
-	case BIND_FOCUS_SOUTH:
-		focus_south();
-		break;
 	case BIND_FOCUS_NORTH:
-		focus_north();
-		break;
+	case BIND_FOCUS_WEST:
+	case BIND_FOCUS_SOUTH:
 	case BIND_FOCUS_EAST:
-		focus_east();
-		break;
-	case BIND_SWAP_WEST:
-		swap_west();
-		break;
-	case BIND_SWAP_SOUTH:
-		swap_south();
+		focus_dir(b.action - BIND_FOCUS_NORTH);
 		break;
 	case BIND_SWAP_NORTH:
-		swap_north();
-		break;
+	case BIND_SWAP_WEST:
+	case BIND_SWAP_SOUTH:
 	case BIND_SWAP_EAST:
-		swap_east();
-		break;
-	case BIND_PRESEL_WEST:
-		presel_west();
-		break;
-	case BIND_PRESEL_SOUTH:
-		presel_south();
+		swap_dir(b.action - BIND_SWAP_NORTH);
 		break;
 	case BIND_PRESEL_NORTH:
-		presel_north();
-		break;
+	case BIND_PRESEL_WEST:
+	case BIND_PRESEL_SOUTH:
 	case BIND_PRESEL_EAST:
-		presel_east();
+		if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
+			return;
+
+		presel_dir(mon->desk->focus, b.action - BIND_PRESEL_NORTH);
 		break;
 	case BIND_PRESEL_CANCEL:
 		cancel_presel();
@@ -1167,8 +1152,6 @@ void execute_bind(bind_t b) {
 		toggle_monocle();
 		break;
 	case BIND_TOGGLE_MASTER_STACK:
-		toggle_master_stack();
-		break;
 	case BIND_DESKTOP_LAYOUT_MASTER_STACK:
 		toggle_master_stack();
 		break;
@@ -1208,10 +1191,12 @@ void execute_bind(bind_t b) {
 		rotate_counterclockwise();
 		break;
 	case BIND_FLIP_HORIZONTAL:
-		flip_horizontal();
-		break;
 	case BIND_FLIP_VERTICAL:
-		flip_vertical();
+		if (mon == NULL || mon->desk == NULL || mon->desk->root == NULL)
+			return;
+
+		flip_tree(mon->desk->root, b.action - BIND_FLIP_HORIZONTAL);
+		arrange(mon, mon->desk, true);
 		break;
 	case BIND_RESIZE_LEFT:
 		resize_left();
@@ -1373,21 +1358,12 @@ void set_keyboard_grouping(keyboard_grouping_t grouping) {
 }
 
 bool gesturebind_matches(const gesturebind_t *gb, enum gesture_type type, uint8_t fingers) {
-	if (!gb)
-		return false;
-	if (gb->type != type)
-		return false;
-	if (gb->fingers != GESTURE_FINGERS_ANY && gb->fingers != fingers)
-		return false;
-
-	return true;
+	return !(!gb || gb->type != type || (gb->fingers != GESTURE_FINGERS_ANY && gb->fingers != fingers));
 }
 
 void execute_gesturebind(const gesturebind_t *gb) {
-	if (!gb)
+	if (!gb || gb->action == BIND_ENTER_SUBMAP)
 		return;
-	if (gb->action == BIND_ENTER_SUBMAP)
-		return; // submap entry from gestures not supported
 	bind_t bind = {
 		.action = gb->action,
 		.desktop_index = gb->desktop_index,
@@ -1412,10 +1388,8 @@ hotcornerbind_t *hotcorner_bind_match(int corner_x, int corner_y) {
 }
 
 void execute_hotcornerbind(const hotcornerbind_t *hc) {
-	if (!hc)
+	if (!hc || hc->action == BIND_ENTER_SUBMAP)
 		return;
-	if (hc->action == BIND_ENTER_SUBMAP)
-		return; // submap entry from hotcorners not supported
 	bind_t bind = {
 		.action = hc->action,
 		.desktop_index = hc->desktop_index,
@@ -1440,17 +1414,17 @@ const char *bind_action_name(bind_action_t action) {
 		"desktop_focus",
 		"desktop_layout_tiled",
 		"desktop_layout_monocle",
+		"focus_north",
 		"focus_west",
 		"focus_south",
-		"focus_north",
 		"focus_east",
+		"swap_north",
 		"swap_west",
 		"swap_south",
-		"swap_north",
 		"swap_east",
+		"presel_north",
 		"presel_west",
 		"presel_south",
-		"presel_north",
 		"presel_east",
 		"presel_cancel",
 		"toggle_floating",

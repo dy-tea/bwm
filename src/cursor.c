@@ -405,10 +405,11 @@ static void process_cursor_resize(void) {
 		new_height = MIN_HEIGHT;
 
 	if (xwayland_view && xwayland_view->node && xwayland_view->node->client) {
-		xwayland_view->node->client->floating_rectangle.x = new_left;
-		xwayland_view->node->client->floating_rectangle.y = new_top;
-		xwayland_view->node->client->floating_rectangle.width = new_width;
-		xwayland_view->node->client->floating_rectangle.height = new_height;
+		client_t *c = xwayland_view->node->client;
+		c->floating_rectangle.x = new_left;
+		c->floating_rectangle.y = new_top;
+		c->floating_rectangle.width = new_width;
+		c->floating_rectangle.height = new_height;
 
 		if (xwayland_view->scene_tree) {
 			struct wlr_scene_node *stn = &xwayland_view->scene_tree->node;
@@ -426,7 +427,6 @@ static void process_cursor_resize(void) {
 			return;
 
 		// update borders
-		client_t *client = xwayland_view->node->client;
 		unsigned int bw = effective_border_width(xwayland_view->node->desktop);
 		if (bw != 0) {
 			const struct wlr_box geo = {
@@ -436,7 +436,7 @@ static void process_cursor_resize(void) {
 				new_height
 			};
 			update_borders(xwayland_view->border_tree, xwayland_view->border_rects, geo, bw);
-			update_border_colors(client);
+			update_border_colors(c);
 		}
 
 		return;
@@ -445,11 +445,11 @@ static void process_cursor_resize(void) {
 	if (!toplevel || !toplevel->node || !toplevel->node->client)
 		return;
 
-	client_t *client = toplevel->node->client;
-	client->floating_rectangle.x = new_left;
-	client->floating_rectangle.y = new_top;
-	client->floating_rectangle.width = new_width;
-	client->floating_rectangle.height = new_height;
+	client_t *c = toplevel->node->client;
+	c->floating_rectangle.x = new_left;
+	c->floating_rectangle.y = new_top;
+	c->floating_rectangle.width = new_width;
+	c->floating_rectangle.height = new_height;
 
 	struct wlr_scene_node *stn = &toplevel->scene_tree->node;
 	if (stn->x != new_left || stn->y != new_top) {
@@ -469,8 +469,8 @@ static void process_cursor_resize(void) {
 			new_height
 		};
 		update_borders(toplevel->border_tree, toplevel->border_rects, geo, bw);
-		update_border_colors(client);
-		if (client->border_radius > 0.0f && toplevel->rounded) {
+		update_border_colors(c);
+		if (c->border_radius > 0.0f && toplevel->rounded) {
 			rounded_mark_border_size(toplevel->rounded, new_width, new_height, (int)bw,
 				toplevel->node && toplevel->node->output ? toplevel->node->output->wlr_output->scale : 1.0f);
 		}

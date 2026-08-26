@@ -48,10 +48,7 @@ void keyboard_group_remove(keyboard_t *keyboard);
 void keyboard_group_remove_invalid(keyboard_t *keyboard);
 
 // window navigation
-void focus_west(void);
-void focus_east(void);
-void focus_north(void);
-void focus_south(void);
+void focus_dir(direction_t dir);
 
 // window manipulation
 void close_focused(void);
@@ -62,10 +59,7 @@ void toggle_pseudo_tiled(void);
 void toggle_block_out_from_screenshare(void);
 
 // window swapping
-void swap_west(void);
-void swap_east(void);
-void swap_north(void);
-void swap_south(void);
+void swap_dir(direction_t dir);
 
 // desktop/monitor
 void focus_next_desktop(void);
@@ -83,8 +77,6 @@ void toggle_master_stack(void);
 // layout
 void rotate_clockwise(void);
 void rotate_counterclockwise(void);
-void flip_horizontal(void);
-void flip_vertical(void);
 
 // resizing
 void resize_left(void);
@@ -92,11 +84,7 @@ void resize_right(void);
 void resize_up(void);
 void resize_down(void);
 
-// preselection
-void presel_west(void);
-void presel_east(void);
-void presel_north(void);
-void presel_south(void);
+// presel
 void cancel_presel(void);
 
 // keybind processing

@@ -211,10 +211,6 @@ static void schedule_output(output_t *output) {
 	output_schedule_frame(output);
 }
 
-static void destroy_snapshot_buffers(animation_entry_t *entry) {
-	(void)entry;
-}
-
 static void tick_entry(animation_entry_t *entry, struct timespec now) {
 	if (entry->use_spring) {
 		double elapsed = elapsed_ms(entry->spring_last_tick, now) / 1000.0;
@@ -366,7 +362,6 @@ void animation_cancel_scene_tree(struct wlr_scene_tree *scene_tree) {
 		if (entry->saved_tree)
 			wlr_scene_node_destroy(&entry->saved_tree->node);
 
-		destroy_snapshot_buffers(entry);
 		wl_list_remove(&entry->link);
 		free(entry);
 	}

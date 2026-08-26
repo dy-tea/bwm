@@ -15,19 +15,17 @@
 static void handle_new_input(struct wl_listener *listener, void *data) {
 	(void)listener;
 	struct wlr_input_device *device = data;
-	struct seat_t *seat = NULL;
+	const struct seat_t *seat = NULL;
 
 	switch (device->type) {
 	case WLR_INPUT_DEVICE_KEYBOARD: {
 		keyboard_t *keyboard = keyboard_create(device);
 		if (keyboard)
 			seat = keyboard->seat;
-		input_apply_config(device);
 		break;
 	}
 	case WLR_INPUT_DEVICE_POINTER:
 		pointer_create(device);
-		input_apply_config(device);
 		break;
 	case WLR_INPUT_DEVICE_TABLET: {
 		tablet_t *tablet = tablet_create(device);
@@ -35,7 +33,6 @@ static void handle_new_input(struct wl_listener *listener, void *data) {
 			tablet_configure(tablet);
 			seat = tablet->seat;
 		}
-		input_apply_config(device);
 		break;
 	}
 	case WLR_INPUT_DEVICE_TABLET_PAD: {
@@ -44,18 +41,17 @@ static void handle_new_input(struct wl_listener *listener, void *data) {
 			tablet_pad_configure(pad);
 			seat = pad->seat;
 		}
-		input_apply_config(device);
 		break;
 	}
 	case WLR_INPUT_DEVICE_TOUCH: {
 		touch_create(device);
-		input_apply_config(device);
 		break;
 	}
 	default:
-		input_apply_config(device);
 		break;
 	}
+
+	input_apply_config(device);
 
 	if (seat) {
 		uint32_t caps = WL_SEAT_CAPABILITY_POINTER;

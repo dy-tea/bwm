@@ -132,6 +132,20 @@ static bool master_stack_swap(output_t *m, desktop_t *d, direction_t dir) {
 	return false;
 }
 
+static bool tiled_focus(desktop_t *d, direction_t dir) {
+	node_t *n = find_fence(d->focus, dir);
+	if (n != NULL) {
+		n = second_extrema(n);
+		if (n != NULL)
+			return focus_node(mon, d, n);
+	} else if (focus_wrapping && d->root) {
+		node_t *w = second_extrema(d->root);
+		if (w && w != d->focus)
+			return focus_node(mon, d, w);
+	}
+	return false;
+}
+
 static bool tiled_swap(output_t *m, desktop_t *d, direction_t dir) {
 	node_t *n = find_fence(d->focus, dir);
 	if (n != NULL) {
@@ -148,7 +162,7 @@ static const layout_impl_t tiled_impl = {
 	.name = "tiled",
 	.arrange = tiled_arrange,
 	.on_focus = NULL,
-	.focus = NULL,
+	.focus = tiled_focus,
 	.swap = tiled_swap,
 	.init_client = NULL,
 	.collect = tiled_collect,
@@ -160,7 +174,7 @@ static const layout_impl_t monocle_impl = {
 	.name = "monocle",
 	.arrange = monocle_arrange,
 	.on_focus = monocle_on_focus,
-	.focus = NULL,
+	.focus = tiled_focus,
 	.swap = NULL,
 	.init_client = NULL,
 	.collect = tiled_collect,

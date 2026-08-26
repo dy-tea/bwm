@@ -324,13 +324,7 @@ bool handle_keybind(uint32_t modifiers, xkb_keysym_t sym) {
 	return true;
 }
 
-// navigation actions
-static bool layout_focus_direction(desktop_t *d, direction_t dir) {
-	const layout_impl_t *impl = layout_get_impl(d->layout);
-	return impl && impl->focus && impl->focus(d, dir);
-}
-
-void focus_west(void) {
+void focus_dir(direction_t dir) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
 
@@ -346,126 +340,18 @@ void focus_west(void) {
 		return;
 	}
 
-	if (layout_focus_direction(d, DIR_WEST))
-		return;
-
-	node_t *n = find_fence(d->focus, DIR_WEST);
-	if (n != NULL) {
-		n = second_extrema(n);
-		if (n != NULL)
-			focus_node(mon, d, n);
-	} else if (focus_wrapping && d->root) {
-		node_t *w = second_extrema(d->root);
-		if (w && w != d->focus)
-			focus_node(mon, d, w);
-	}
-}
-
-void focus_east(void) {
-	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
-		return;
-
-	desktop_t *d = mon->desk;
-
-	node_t *tab_anc = tabbed_ancestor(d->focus);
-	if (tab_anc != NULL) {
-		node_t *next = tab_next_leaf(tab_anc, d->focus);
-		if (next != NULL && next != d->focus) {
-			focus_node(mon, d, next);
-			arrange(mon, d, true);
-		}
-		return;
-	}
-
-	if (layout_focus_direction(d, DIR_EAST))
-		return;
-
-	node_t *n = find_fence(d->focus, DIR_EAST);
-	if (n != NULL) {
-		n = first_extrema(n);
-		if (n != NULL)
-			focus_node(mon, d, n);
-	} else if (focus_wrapping && d->root) {
-		node_t *w = first_extrema(d->root);
-		if (w && w != d->focus)
-			focus_node(mon, d, w);
-	}
-}
-
-void focus_south(void) {
-	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
-		return;
-
-	desktop_t *d = mon->desk;
-
-	if (layout_focus_direction(d, DIR_SOUTH))
-		return;
-
-	node_t *n = find_fence(d->focus, DIR_SOUTH);
-	if (n != NULL) {
-		n = second_extrema(n);
-		if (n != NULL)
-			focus_node(mon, d, n);
-	} else if (focus_wrapping && d->root) {
-		node_t *w = first_extrema(d->root);
-		if (w && w != d->focus)
-			focus_node(mon, d, w);
-	}
-}
-
-void focus_north(void) {
-	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
-		return;
-
-	desktop_t *d = mon->desk;
-
-	if (layout_focus_direction(d, DIR_NORTH))
-		return;
-
-	node_t *n = find_fence(d->focus, DIR_NORTH);
-	if (n != NULL) {
-		n = first_extrema(n);
-		if (n != NULL)
-			focus_node(mon, d, n);
-	} else if (focus_wrapping && d->root) {
-		node_t *w = second_extrema(d->root);
-		if (w && w != d->focus)
-			focus_node(mon, d, w);
-	}
-}
-
-// Window swapping actions
-static bool layout_swap_direction(output_t *m, desktop_t *d, direction_t dir) {
 	const layout_impl_t *impl = layout_get_impl(d->layout);
-	return impl && impl->swap && impl->swap(m, d, dir);
+	if (impl && impl->focus)
+		impl->focus(d, dir);
 }
 
-void swap_west(void) {
+void swap_dir(direction_t dir) {
 	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
 		return;
 
-	layout_swap_direction(mon, mon->desk, DIR_WEST);
-}
-
-void swap_east(void) {
-	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
-		return;
-
-	layout_swap_direction(mon, mon->desk, DIR_EAST);
-}
-
-void swap_north(void) {
-	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
-		return;
-
-	layout_swap_direction(mon, mon->desk, DIR_NORTH);
-}
-
-void swap_south(void) {
-	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
-		return;
-
-	layout_swap_direction(mon, mon->desk, DIR_SOUTH);
+	const layout_impl_t *impl = layout_get_impl(mon->desk->layout);
+	if (impl && impl->swap)
+		impl->swap(mon, mon->desk, dir);
 }
 
 void close_focused(void) {
@@ -1028,25 +914,6 @@ void rotate_counterclockwise(void) {
 	wlr_log(WLR_INFO, "Rotated tree counterclockwise");
 }
 
-void flip_horizontal(void) {
-	if (mon == NULL || mon->desk == NULL || mon->desk->root == NULL)
-		return;
-
-	flip_tree(mon->desk->root, FLIP_HORIZONTAL);
-	arrange(mon, mon->desk, true);
-	wlr_log(WLR_INFO, "Flipped tree horizontally");
-}
-
-void flip_vertical(void) {
-	if (mon == NULL || mon->desk == NULL || mon->desk->root == NULL)
-		return;
-
-	flip_tree(mon->desk->root, FLIP_VERTICAL);
-	arrange(mon, mon->desk, true);
-	wlr_log(WLR_INFO, "Flipped tree vertically");
-}
-
-
 #define RESIZE_AMOUNT 0.05
 
 static bool resize_master_stack_ratio(bool horizontal, float delta) {
@@ -1259,38 +1126,6 @@ void resize_down(void) {
 	} else {
 		wlr_log(WLR_ERROR, "resize_down: no HORIZONTAL ancestor found");
 	}
-}
-
-void presel_west(void) {
-	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
-		return;
-
-	presel_dir(mon->desk->focus, DIR_WEST);
-	wlr_log(WLR_INFO, "Preselected west");
-}
-
-void presel_east(void) {
-	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
-		return;
-
-	presel_dir(mon->desk->focus, DIR_EAST);
-	wlr_log(WLR_INFO, "Preselected east");
-}
-
-void presel_north(void) {
-	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
-		return;
-
-	presel_dir(mon->desk->focus, DIR_NORTH);
-	wlr_log(WLR_INFO, "Preselected north");
-}
-
-void presel_south(void) {
-	if (mon == NULL || mon->desk == NULL || mon->desk->focus == NULL)
-		return;
-
-	presel_dir(mon->desk->focus, DIR_SOUTH);
-	wlr_log(WLR_INFO, "Preselected south");
 }
 
 void cancel_presel(void) {
