@@ -804,11 +804,11 @@ static void gles2_frame_end(void) {
 	egl_unset_current();
 }
 
-static bool gles2_blit(be_effect_resource_t src, uint64_t dst_fbo, int w, int h,
+static bool gles2_blit(be_effect_resource_t src, be_effect_resource_t dst, int w, int h,
 		const pixman_box32_t *scissor, int n_scissor) {
-	if (!src.valid || !src.handle)
+	if (!be_resource_readable(&src) || !be_resource_valid(&dst))
 		return false;
-	glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst_fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst.handle);
 	glViewport(0, 0, w, h);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, (GLuint)src.handle);
@@ -832,16 +832,15 @@ static bool gles2_blit(be_effect_resource_t src, uint64_t dst_fbo, int w, int h,
 }
 
 static bool gles2_blur(be_output_state_t *state, be_effect_resource_t src, int src_w, int src_h,
-		struct be_blur_params *p, uint64_t dst_fbo, const pixman_box32_t *scissor, int n_scissor,
+		struct be_blur_params *p, be_effect_resource_t dst, const pixman_box32_t *scissor, int n_scissor,
 		be_effect_resource_t *out_resource) {
-	GLuint dst = (GLuint)dst_fbo;
-	if (!src.valid || !src.handle)
+	if (!be_resource_readable(&src))
 		return false;
 	uint64_t src_handle = src.handle;
 
 	if (p->passes <= 0 || p->algorithm == BLUR_ALGORITHM_NONE) {
-		if (dst) {
-			gles2_blit(src, dst_fbo, src_w, src_h, NULL, 0);
+		if (dst.valid) {
+			gles2_blit(src, dst, src_w, src_h, NULL, 0);
 			if (out_resource)
 				*out_resource = (be_effect_resource_t){0};
 		} else {
@@ -889,8 +888,8 @@ static bool gles2_blur(be_output_state_t *state, be_effect_resource_t src, int s
 			bool final = (i == 0);
 			int uw = final ? src_w : lw[i - 1];
 			int uh = final ? src_h : lh[i - 1];
-			GLuint target = final ? (dst ? dst : (GLuint)state->blur_scratch.native_handle[0]) : level_fbo[i
-				- 1];
+			GLuint target = final ? (dst.valid ? (GLuint)dst.handle :
+				(GLuint)state->blur_scratch.native_handle[0]) : level_fbo[i - 1];
 
 			glBindFramebuffer(GL_FRAMEBUFFER, target);
 			glViewport(0, 0, uw, uh);
@@ -910,13 +909,13 @@ static bool gles2_blur(be_output_state_t *state, be_effect_resource_t src, int s
 			draw_quad();
 
 			if (final)
-				cur_tex = dst ? 0 : (GLuint)state->blur_scratch.native_handle[1];
+				cur_tex = dst.valid ? 0 : (GLuint)state->blur_scratch.native_handle[1];
 			else
 				cur_tex = level_tex[i - 1];
 		}
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		if (out_resource)
-			*out_resource = dst ? (be_effect_resource_t){0} : (be_effect_resource_t){
+			*out_resource = dst.valid ? (be_effect_resource_t){0} : (be_effect_resource_t){
 				.handle = (uint64_t)state->blur_scratch.native_handle[1],
 				.width = src_w,
 				.height = src_h,
@@ -943,13 +942,14 @@ static bool gles2_blur(be_output_state_t *state, be_effect_resource_t src, int s
 	}
 
 	for (int i = 0; i < p->passes; i++) {
-		bool last = dst && (i == p->passes - 1);
+		bool last = dst.valid && (i == p->passes - 1);
 		int pong = ping ^ 1;
 		if (p->algorithm == BLUR_ALGORITHM_GAUSSIAN) {
 			if (last) {
 				gaussian_pass_dir(g->prog_gauss_h, current, fbo0, src_w, src_h, p, scissor, n_scissor);
-				gaussian_pass_dir(g->prog_gauss_v, tex0, dst, src_w, src_h, p, scissor, n_scissor);
-				current = dst;
+				gaussian_pass_dir(g->prog_gauss_v, tex0, (GLuint)dst.handle, src_w, src_h, p, scissor,
+					n_scissor);
+				current = (GLuint)dst.handle;
 			} else {
 				gaussian_pass(current, fbo0, tex0, fbo1, src_w, src_h, p, scissor, n_scissor);
 				current = tex1;
@@ -957,8 +957,8 @@ static bool gles2_blur(be_output_state_t *state, be_effect_resource_t src, int s
 		} else if (p->algorithm == BLUR_ALGORITHM_BOX) {
 			if (last) {
 				box_pass_dir(g->prog_box_h, current, fbo0, src_w, src_h, p, scissor, n_scissor);
-				box_pass_dir(g->prog_box_v, tex0, dst, src_w, src_h, p, scissor, n_scissor);
-				current = dst;
+				box_pass_dir(g->prog_box_v, tex0, (GLuint)dst.handle, src_w, src_h, p, scissor, n_scissor);
+				current = (GLuint)dst.handle;
 			} else {
 				box_pass(current, fbo0, tex0, fbo1, src_w, src_h, p, scissor, n_scissor);
 				current = tex1;
@@ -966,30 +966,31 @@ static bool gles2_blur(be_output_state_t *state, be_effect_resource_t src, int s
 		} else if (p->algorithm == BLUR_ALGORITHM_REFRACTION ||
 				p->algorithm == BLUR_ALGORITHM_LENS_REFRACTION) {
 			int mode = (p->algorithm == BLUR_ALGORITHM_LENS_REFRACTION) ? 1 : 0;
-			refraction_pass(current, last ? dst : (pong ? fbo1 : fbo0), src_w, src_h, p, mode, scissor,
-				n_scissor);
-			current = last ? dst : (pong ? tex1 : tex0);
+			refraction_pass(current, last ? (GLuint)dst.handle : (pong ? fbo1 : fbo0), src_w, src_h, p, mode,
+				scissor, n_scissor);
+			current = last ? (GLuint)dst.handle : (pong ? tex1 : tex0);
 			ping = pong;
 		} else {
-			blur_pass(current, last ? dst : (ping ? fbo1 : fbo0), src_w, src_h, i, p, scissor, n_scissor);
-			current = last ? dst : (ping ? tex1 : tex0);
+			blur_pass(current, last ? (GLuint)dst.handle : (ping ? fbo1 : fbo0), src_w, src_h, i, p, scissor,
+				n_scissor);
+			current = last ? (GLuint)dst.handle : (ping ? tex1 : tex0);
 			ping ^= 1;
 		}
 	}
 
 	// Copy the source when no pass produced a separate blur texture.
-	if (!dst && current == (GLuint)src_handle) {
+	if (!dst.valid && current == (GLuint)src_handle) {
 		gles2_blit((be_effect_resource_t){
 			.handle = current,
 			.width = src_w,
 			.height = src_h,
 			.valid = true
-		}, fbo0, src_w, src_h, NULL, 0);
+		}, be_buffer_target_from_buffer(&state->ping, src.generation), src_w, src_h, NULL, 0);
 		current = tex0;
 	}
 
 	if (out_resource)
-		*out_resource = dst ? (be_effect_resource_t){0} : (be_effect_resource_t){
+		*out_resource = dst.valid ? (be_effect_resource_t){0} : (be_effect_resource_t){
 			.handle = (uint64_t)current,
 			.width = src_w,
 			.height = src_h,
@@ -1068,11 +1069,11 @@ static bool gles2_apply_acrylic(be_output_state_t *state, be_effect_resource_t b
 	return true;
 }
 
-static bool gles2_render_shadow(struct be_shadow_params *p, uint64_t dst_fbo) {
-	if (!g->prog_shadow)
+static bool gles2_render_shadow(struct be_shadow_params *p, be_effect_resource_t dst) {
+	if (!g->prog_shadow || !be_resource_valid(&dst))
 		return false;
 
-	glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst_fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst.handle);
 	glViewport(0, 0, p->buf_w, p->buf_h);
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
@@ -1091,11 +1092,11 @@ static bool gles2_render_shadow(struct be_shadow_params *p, uint64_t dst_fbo) {
 	return true;
 }
 
-static bool gles2_render_border(struct be_border_params *p, uint64_t dst_fbo) {
-	if (!g->prog_border)
+static bool gles2_render_border(struct be_border_params *p, be_effect_resource_t dst) {
+	if (!g->prog_border || !be_resource_valid(&dst))
 		return false;
 
-	glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst_fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst.handle);
 	glViewport(0, 0, p->buf_w, p->buf_h);
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
@@ -1174,15 +1175,15 @@ static bool gles2_apply_corner_mask(be_output_state_t *state, be_effect_resource
 	return true;
 }
 
-static bool gles2_apply_screen_shader(uint64_t src_tex, uint64_t dst_fbo, int w, int h,
-		struct be_screen_shader_params *p) {
-	if (!g->screen_shader_prog)
+static bool gles2_apply_screen_shader(be_effect_resource_t src, be_effect_resource_t dst, int w,
+		int h, struct be_screen_shader_params *p) {
+	if (!g->screen_shader_prog || !be_resource_readable(&src) || !be_resource_valid(&dst))
 		return false;
 
-	glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst_fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst.handle);
 	glViewport(0, 0, w, h);
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, (GLuint)src_tex);
+	glBindTexture(GL_TEXTURE_2D, (GLuint)src.handle);
 	glUseProgram(g->screen_shader_prog);
 
 	if (g->screen_shader_u_tex >= 0)
@@ -1198,8 +1199,11 @@ static bool gles2_apply_screen_shader(uint64_t src_tex, uint64_t dst_fbo, int w,
 }
 
 static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_state_t *state,
-		uint64_t dst_fbo, int dst_x, int dst_y, int dst_w, int dst_h, int src_x, int src_y, int src_w,
-		int src_h, be_effect_resource_t *out_resource) {
+		be_effect_resource_t dst, int dst_x, int dst_y, int dst_w, int dst_h, int src_x, int src_y,
+		int src_w, int src_h, be_effect_resource_t *out_resource) {
+	if (!be_resource_valid(&dst))
+		return false;
+	GLuint dst_fbo = (GLuint)dst.handle;
 	GLuint capture_fbo = wlr_gles2_renderer_get_buffer_fbo(g->renderer, capture_buffer);
 	if (!capture_fbo) {
 		wlr_log(WLR_INFO, "gles2: capture_readback: no FBO");
@@ -1219,7 +1223,7 @@ static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	if (attach_type == GL_TEXTURE && attach_name > 0 && g->prog_ext_blit) {
-		glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst_fbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, dst_fbo);
 		glViewport(dst_x, dst_y, dst_w, dst_h);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_EXTERNAL_OES, (GLuint)attach_name);
@@ -1231,7 +1235,7 @@ static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_
 		if (dst_fbo == state->screen_shader.native_handle[0])
 			result_tex = (GLuint)state->screen_shader.native_handle[1];
 	} else if (attach_type == GL_TEXTURE && attach_name > 0) {
-		glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst_fbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, dst_fbo);
 		glViewport(dst_x, dst_y, dst_w, dst_h);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, (GLuint)attach_name);
@@ -1274,7 +1278,7 @@ static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_
 			g->readback_pixels);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-		glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst_fbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, dst_fbo);
 		glViewport(dst_x, dst_y, dst_w, dst_h);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, staging_tex);

@@ -722,9 +722,9 @@ static be_effect_resource_t capture_bg_to_tex1_ex(output_t *output, effects_outp
 	}
 
 	be_effect_resource_t result = {0};
-	effects_backend->capture_readback(cap_state.buffer, &ctx->be_state,
-		ctx->be_state.capture.native_handle[0], region.x, region.y, region.width, region.height, region.x,
-		region.y, region.width, region.height, &result);
+	be_effect_resource_t dst = be_buffer_target_from_buffer(&ctx->be_state.capture, 0);
+	effects_backend->capture_readback(cap_state.buffer, &ctx->be_state, dst, region.x, region.y,
+		region.width, region.height, region.x, region.y, region.width, region.height, &result);
 	wlr_output_state_finish(&cap_state);
 
 	if (result.valid) {
@@ -847,9 +847,18 @@ static bool rebuild_live_blur(output_t *output, be_effect_resource_t shared_blur
 		// Blur in RGBA scratch buffers, then copy the finished frame into the retained buffer.
 		be_effect_resource_t blur_result = {0};
 		be_effect_resource_t blur_source = shared_blurred;
-		if (!effects_backend->blur(&ctx->be_state, blur_source, ctx->blur_w, ctx->blur_h, &bp, 0, NULL, 0,
-				&blur_result) || !blur_result.valid || !effects_backend->blit(blur_result, ctx->blur_native[0],
-				ctx->blur_w, ctx->blur_h, NULL, 0)) {
+		be_effect_resource_t blur_dst = {0};
+		be_buffer_t blur_out_buf = {
+			.native_handle = {ctx->blur_native[0], ctx->blur_native[1]},
+			.width = ctx->blur_w,
+			.height = ctx->blur_h,
+			.state = BE_RESOURCE_COLOR_ATTACHMENT,
+			.owned = false,
+		};
+		be_effect_resource_t blur_out_target = be_buffer_target_from_buffer(&blur_out_buf, 0);
+		if (!effects_backend->blur(&ctx->be_state, blur_source, ctx->blur_w, ctx->blur_h, &bp, blur_dst,
+				NULL, 0, &blur_result) || !blur_result.valid || !effects_backend->blit(blur_result,
+				blur_out_target, ctx->blur_w, ctx->blur_h, NULL, 0)) {
 			ctx->blur_gen = 0;
 			return false;
 		}
@@ -913,20 +922,23 @@ static bool rebuild_live_blur(output_t *output, be_effect_resource_t shared_blur
 			continue;
 		}
 
-		effects_backend->apply_corner_mask(&ctx->be_state, (be_effect_resource_t){
-			.handle = tl->blur->blur_native[0],
+		be_buffer_t win_blur_buf = {
+			.native_handle = {tl->blur->blur_native[0], tl->blur->blur_native[1]},
 			.width = params.out_w,
 			.height = params.out_h,
 			.state = BE_RESOURCE_COLOR_ATTACHMENT,
-			.valid = true
-		}, (be_effect_resource_t){
-			.handle = ctx->blur_native[1],
+			.owned = false,
+		};
+		be_buffer_t out_blur_buf = {
+			.native_handle = {ctx->blur_native[0], ctx->blur_native[1]},
 			.width = ctx->blur_w,
 			.height = ctx->blur_h,
 			.state = BE_RESOURCE_SHADER_READ,
+			.owned = false,
 			.generation = ctx->blur_gen,
-			.valid = ctx->blur_native[1] != 0
-		}, &params);
+		};
+		effects_backend->apply_corner_mask(&ctx->be_state, be_buffer_target_from_buffer(&win_blur_buf, 0),
+			be_buffer_resource_from_buffer(&out_blur_buf, BE_RESOURCE_SHADER_READ, ctx->blur_gen), &params);
 		tl->blur->blur_mask_params = params;
 		tl->blur->blur_mask_valid = true;
 		any = true;
@@ -1140,9 +1152,18 @@ static bool rebuild_live_blur_layers(output_t *output, be_effect_resource_t bg_t
 
 	be_effect_resource_t layer_result = {0};
 	be_effect_resource_t layer_source = bg_tex;
-	if (!effects_backend->blur(&ctx->be_state, layer_source, ctx->blur_w, ctx->blur_h, &bp, 0, NULL, 0,
-			&layer_result) || !layer_result.valid || !effects_backend->blit(layer_result,
-			ctx->layer_blur_native[0], ctx->blur_w, ctx->blur_h, NULL, 0)) {
+	be_buffer_t layer_out_buf = {
+		.native_handle = {ctx->layer_blur_native[0], ctx->layer_blur_native[1]},
+		.width = ctx->blur_w,
+		.height = ctx->blur_h,
+		.state = BE_RESOURCE_COLOR_ATTACHMENT,
+		.owned = false,
+	};
+	be_effect_resource_t layer_out_target = be_buffer_target_from_buffer(&layer_out_buf, 0);
+	be_effect_resource_t no_dst = {0};
+	if (!effects_backend->blur(&ctx->be_state, layer_source, ctx->blur_w, ctx->blur_h, &bp, no_dst,
+			NULL, 0, &layer_result) || !layer_result.valid || !effects_backend->blit(layer_result,
+			layer_out_target, ctx->blur_w, ctx->blur_h, NULL, 0)) {
 		ctx->layer_blur_gen = 0;
 		return false;
 	}
@@ -1309,13 +1330,15 @@ static bool rebuild_live_acrylic(output_t *output, pixman_region32_t *damage,
 			.blur_passes = acrylic_blur_passes,
 			.blur_radius = blur_radius,
 		};
-		effects_backend->apply_acrylic(&ctx->be_state, src, &ap, (be_effect_resource_t){
-			.handle = tl->blur->acrylic_native[0],
+		be_buffer_t acrylic_buf = {
+			.native_handle = {tl->blur->acrylic_native[0], tl->blur->acrylic_native[1]},
 			.width = w,
 			.height = h,
 			.state = BE_RESOURCE_COLOR_ATTACHMENT,
-			.valid = true
-		});
+			.owned = false,
+		};
+		effects_backend->apply_acrylic(&ctx->be_state, src, &ap, be_buffer_target_from_buffer(&acrylic_buf,
+			0));
 
 		client_t *c = tl->node->client;
 		if (c && c->border_radius > 0.0f && c->state != STATE_FULLSCREEN) {
@@ -1341,13 +1364,8 @@ static bool rebuild_live_acrylic(output_t *output, pixman_region32_t *damage,
 				.bg_sh = 1.0f,
 				.pre_blit = true,
 			};
-			effects_backend->apply_corner_mask(&ctx->be_state, (be_effect_resource_t){
-				.handle = tl->blur->acrylic_native[0],
-				.width = w,
-				.height = h,
-				.state = BE_RESOURCE_COLOR_ATTACHMENT,
-				.valid = true
-			}, src, &params);
+			effects_backend->apply_corner_mask(&ctx->be_state, be_buffer_target_from_buffer(&acrylic_buf, 0),
+				src, &params);
 		}
 
 		any = true;
@@ -1420,7 +1438,9 @@ static bool rebuild_mica(output_t *output, be_effect_resource_t pre_captured_bg)
 		.contrast = blur_contrast,
 	};
 	be_effect_resource_t mica_blur = {0};
-	effects_backend->blur(&ctx->be_state, src, ctx->blur_w, ctx->blur_h, &bp, 0, NULL, 0, &mica_blur);
+	be_effect_resource_t no_dst = {0};
+	effects_backend->blur(&ctx->be_state, src, ctx->blur_w, ctx->blur_h, &bp, no_dst, NULL, 0,
+		&mica_blur);
 	if (!mica_blur.valid)
 		return false;
 
@@ -1428,14 +1448,15 @@ static bool rebuild_mica(output_t *output, be_effect_resource_t pre_captured_bg)
 		ctx->mica_dirty = false;
 		return false;
 	}
-	effects_backend->apply_mica_tint(&ctx->be_state, mica_blur, mica_tint, mica_tint_strength,
-			(be_effect_resource_t){
-		.handle = ctx->mica_native[0],
+	be_buffer_t mica_buf = {
+		.native_handle = {ctx->mica_native[0], ctx->mica_native[1]},
 		.width = w,
 		.height = h,
 		.state = BE_RESOURCE_COLOR_ATTACHMENT,
-		.valid = true
-	});
+		.owned = false,
+	};
+	effects_backend->apply_mica_tint(&ctx->be_state, mica_blur, mica_tint, mica_tint_strength,
+		be_buffer_target_from_buffer(&mica_buf, 0));
 
 	ctx->mica_dirty = false;
 	return true;
@@ -1659,7 +1680,14 @@ static bool blur_render_shadow(toplevel_t *tl) {
 		.buf_w = (int)phys_buf_w,
 		.buf_h = (int)phys_buf_h,
 	};
-	effects_backend->render_shadow(&sp, tl->shadow->shadow_native[0]);
+	be_buffer_t shadow_buf = {
+		.native_handle = {tl->shadow->shadow_native[0], tl->shadow->shadow_native[1]},
+		.width = (int)phys_buf_w,
+		.height = (int)phys_buf_h,
+		.state = BE_RESOURCE_COLOR_ATTACHMENT,
+		.owned = false,
+	};
+	effects_backend->render_shadow(&sp, be_buffer_target_from_buffer(&shadow_buf, 0));
 
 	wlr_scene_node_lower_to_bottom(&tl->shadow->shadow_node->node);
 	if (tl->shadow->shadow_node->buffer != tl->shadow->shadow_buf)
@@ -1739,10 +1767,17 @@ static bool blur_render_border(toplevel_t *tl, int content_w, int content_h) {
 	bp.buf_w = phys_w;
 	bp.buf_h = phys_h;
 
+	be_buffer_t border_buf = {
+		.native_handle = {tl->rounded->border_shader_native[0], tl->rounded->border_shader_native[1]},
+		.width = phys_w,
+		.height = phys_h,
+		.state = BE_RESOURCE_COLOR_ATTACHMENT,
+		.owned = false,
+	};
 	if (!tl->rounded->border_cache_valid ||
 			tl->rounded->border_shader_buf != tl->rounded->cached_border_buf || memcmp(&bp,
 			&tl->rounded->cached_border_params, sizeof(bp)) != 0) {
-		effects_backend->render_border(&bp, tl->rounded->border_shader_native[0]);
+		effects_backend->render_border(&bp, be_buffer_target_from_buffer(&border_buf, 0));
 		tl->rounded->cached_border_params = bp;
 		tl->rounded->cached_border_buf = tl->rounded->border_shader_buf;
 		tl->rounded->border_cache_valid = true;
@@ -1832,9 +1867,9 @@ static be_effect_resource_t capture_corner_mask_bg(output_t *output, effects_out
 	}
 
 	be_effect_resource_t result = {0};
-	effects_backend->capture_readback(cap_state.buffer, &ctx->be_state,
-		ctx->be_state.capture.native_handle[0], 0, 0, ctx->blur_w, ctx->blur_h, 0, 0, ctx->blur_w,
-		ctx->blur_h, &result);
+	be_effect_resource_t dst = be_buffer_target_from_buffer(&ctx->be_state.capture, 0);
+	effects_backend->capture_readback(cap_state.buffer, &ctx->be_state, dst, 0, 0, ctx->blur_w,
+		ctx->blur_h, 0, 0, ctx->blur_w, ctx->blur_h, &result);
 	wlr_output_state_finish(&cap_state);
 
 	if (result.valid) {
@@ -1912,14 +1947,16 @@ static bool rebuild_corner_masks(output_t *output) {
 			.pre_blit = true,
 		};
 
-		effects_backend->blit(src, tl->rounded->corner_mask_native[0], w, h, NULL, 0);
-		effects_backend->apply_corner_mask(&ctx->be_state, (be_effect_resource_t){
-			.handle = tl->rounded->corner_mask_native[0],
+		be_buffer_t cm_buf = {
+			.native_handle = {tl->rounded->corner_mask_native[0], tl->rounded->corner_mask_native[1]},
 			.width = w,
 			.height = h,
 			.state = BE_RESOURCE_COLOR_ATTACHMENT,
-			.valid = true
-		}, src, &params);
+			.owned = false,
+		};
+		be_effect_resource_t cm_target = be_buffer_target_from_buffer(&cm_buf, 0);
+		effects_backend->blit(src, cm_target, w, h, NULL, 0);
+		effects_backend->apply_corner_mask(&ctx->be_state, cm_target, src, &params);
 
 		tl->rounded->corner_mask_dirty = false;
 		any = true;
@@ -2019,8 +2056,9 @@ static be_effect_resource_t capture_full_scene_to_tex(output_t *output, effects_
 	}
 
 	be_effect_resource_t result = {0};
-	effects_backend->capture_readback(ctx->capture_state.buffer, &ctx->be_state, screen_fbo, 0, 0, w, h,
-		0, 0, w, h, &result);
+	be_effect_resource_t dst = be_buffer_target_from_buffer(&ctx->be_state.screen_shader, 0);
+	effects_backend->capture_readback(ctx->capture_state.buffer, &ctx->be_state, dst, 0, 0, w, h, 0, 0,
+		w, h, &result);
 
 	wlr_buffer_unlock(ctx->capture_state.buffer);
 	ctx->capture_state.buffer = NULL;
@@ -2061,7 +2099,15 @@ static void handle_screen_shader_frame(output_t *output) {
 		.time = (float)(now.tv_sec) + (float)(now.tv_nsec) * 1e-9f,
 		.scale = output->wlr_output->scale
 	};
-	effects_backend->apply_screen_shader(src.handle, ctx->screen_shader_native[0], w, h, &ssp);
+	be_buffer_t ss_out_buf = {
+		.native_handle = {ctx->screen_shader_native[0], ctx->screen_shader_native[1]},
+		.width = w,
+		.height = h,
+		.state = BE_RESOURCE_COLOR_ATTACHMENT,
+		.owned = false,
+	};
+	effects_backend->apply_screen_shader(src, be_buffer_target_from_buffer(&ss_out_buf, 0), w, h,
+		&ssp);
 
 	wlr_scene_buffer_set_buffer(ctx->screen_shader_node, ctx->screen_shader_buf);
 	struct wlr_fbox src_box = {

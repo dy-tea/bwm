@@ -110,7 +110,7 @@ struct be_corner_mask_params {
 	float scale;
 	float bg_u, bg_v;
 	float bg_sw, bg_sh;
-	bool pre_blit; // true if dst already has content
+	bool pre_blit;
 };
 
 struct be_acrylic_params {
@@ -154,11 +154,11 @@ typedef struct effects_backend_t {
 	void (*frame_begin)(void);
 	void (*frame_end)(void);
 
-	bool (*blit)(be_effect_resource_t src, uint64_t dst_fbo, int w, int h,
+	bool (*blit)(be_effect_resource_t src, be_effect_resource_t dst, int w, int h,
 		const pixman_box32_t *scissor, int n_scissor);
 
 	bool (*blur)(be_output_state_t *state, be_effect_resource_t src, int src_w, int src_h,
-		struct be_blur_params *p, uint64_t dst_fbo, const pixman_box32_t *scissor, int n_scissor,
+		struct be_blur_params *p, be_effect_resource_t dst, const pixman_box32_t *scissor, int n_scissor,
 		be_effect_resource_t *out_resource);
 
 	bool (*apply_mica_tint)(be_output_state_t *state, be_effect_resource_t bg, float tint[4],
@@ -167,19 +167,19 @@ typedef struct effects_backend_t {
 	bool (*apply_acrylic)(be_output_state_t *state, be_effect_resource_t bg,
 		struct be_acrylic_params *p, be_effect_resource_t dst);
 
-	bool (*render_shadow)(struct be_shadow_params *p, uint64_t dst_fbo);
+	bool (*render_shadow)(struct be_shadow_params *p, be_effect_resource_t dst);
 
-	bool (*render_border)(struct be_border_params *p, uint64_t dst_fbo);
+	bool (*render_border)(struct be_border_params *p, be_effect_resource_t dst);
 
 	bool (*apply_corner_mask)(be_output_state_t *state, be_effect_resource_t dst,
 		be_effect_resource_t bg, struct be_corner_mask_params *p);
 
-	bool (*apply_screen_shader)(uint64_t src_tex, uint64_t dst_fbo, int w, int h,
+	bool (*apply_screen_shader)(be_effect_resource_t src, be_effect_resource_t dst, int w, int h,
 		struct be_screen_shader_params *p);
 
 	bool (*capture_readback)(struct wlr_buffer *capture_buffer, be_output_state_t *state,
-		uint64_t dst_fbo, int dst_x, int dst_y, int dst_w, int dst_h, int src_x, int src_y, int src_w,
-		int src_h, be_effect_resource_t *out_resource);
+		be_effect_resource_t dst, int dst_x, int dst_y, int dst_w, int dst_h, int src_x, int src_y,
+		int src_w, int src_h, be_effect_resource_t *out_resource);
 
 	const char *(*get_screen_shader_source)(const char *name);
 	bool (*compile_screen_shader)(const char *frag_src);
@@ -196,4 +196,95 @@ static inline void effects_destroy_buffer(struct wlr_buffer **buf, uint64_t *nat
 	else
 		wlr_buffer_unlock(*buf);
 	*buf = NULL;
+}
+
+/*
+ * Canonical resource construction helpers.
+ * These are the only approved way to create be_effect_resource_t values
+ * from backend-owned buffers. Never construct effect resources manually
+ * from raw native handles.
+ */
+
+static inline be_effect_resource_t be_buffer_resource(const be_buffer_t *buffer,
+		enum be_resource_state expected_state, uint32_t generation) {
+	if (!buffer || buffer->native_handle[1] == 0 || buffer->width <= 0 || buffer->height <= 0) {
+		return (be_effect_resource_t){0};
+	}
+	return (be_effect_resource_t){
+		.handle = buffer->native_handle[1],
+		.width = buffer->width,
+		.height = buffer->height,
+		.state = buffer->state,
+		.generation = generation,
+		.valid = buffer->state == expected_state,
+	};
+}
+
+static inline be_effect_resource_t be_buffer_target(be_buffer_t *buffer, int width, int height,
+		uint32_t generation) {
+	if (!buffer || buffer->native_handle[0] == 0 || width <= 0 || height <= 0) {
+		return (be_effect_resource_t){0};
+	}
+	return (be_effect_resource_t){
+		.handle = buffer->native_handle[0],
+		.width = width,
+		.height = height,
+		.state = BE_RESOURCE_COLOR_ATTACHMENT,
+		.generation = generation,
+		.valid = true,
+	};
+}
+
+static inline be_effect_resource_t be_buffer_target_from_buffer(const be_buffer_t *buffer,
+		uint32_t generation) {
+	if (!buffer || buffer->native_handle[0] == 0) {
+		return (be_effect_resource_t){0};
+	}
+	return (be_effect_resource_t){
+		.handle = buffer->native_handle[0],
+		.width = buffer->width,
+		.height = buffer->height,
+		.state = BE_RESOURCE_COLOR_ATTACHMENT,
+		.generation = generation,
+		.valid = buffer->width > 0 && buffer->height > 0,
+	};
+}
+
+static inline be_effect_resource_t be_buffer_resource_from_buffer(const be_buffer_t *buffer,
+		enum be_resource_state expected_state, uint32_t generation) {
+	if (!buffer || buffer->native_handle[1] == 0) {
+		return (be_effect_resource_t){0};
+	}
+	return (be_effect_resource_t){
+		.handle = buffer->native_handle[1],
+		.width = buffer->width,
+		.height = buffer->height,
+		.state = buffer->state,
+		.generation = generation,
+		.valid = buffer->width > 0 && buffer->height > 0 && buffer->state == expected_state,
+	};
+}
+
+/*
+ * Resource validation helpers.
+ */
+
+static inline bool be_resource_valid(const be_effect_resource_t *resource) {
+	return resource && resource->valid && resource->handle != 0 && resource->width > 0 &&
+		resource->height > 0;
+}
+
+static inline bool be_resource_matches(const be_effect_resource_t *resource, int w, int h) {
+	return resource && resource->width == w && resource->height == h;
+}
+
+static inline bool be_resources_alias(const be_effect_resource_t *a,
+		const be_effect_resource_t *b) {
+	if (!a || !b)
+		return false;
+	return a->handle == b->handle;
+}
+
+static inline bool be_resource_readable(const be_effect_resource_t *resource) {
+	return be_resource_valid(resource) && resource->state == BE_RESOURCE_SHADER_READ;
 }
