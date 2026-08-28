@@ -2756,7 +2756,8 @@ void screen_shader_clear(void) {
 }
 
 void screen_shader_hide_nodes(void) {
-	for (output_t *m = mon_head; m != NULL; m = m->next) {
+	output_t *m;
+	wl_list_for_each(m, &mon_list, link) {
 		if (!m->effects || !m->effects->screen_shader_node)
 			continue;
 		struct wlr_scene_buffer *node = m->effects->screen_shader_node;

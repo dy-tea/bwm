@@ -145,7 +145,7 @@ void scratchpad_show(node_t *n) {
 
 	desktop_t *d = out->desk;
 	if (!d)
-		d = out->desk_head;
+		d = wl_list_empty(&out->desk_list) ? NULL : wl_container_of(out->desk_list.next, d, link);
 	if (!d) {
 		wlr_log(WLR_ERROR, "scratchpad_show: no desktop on output");
 		return;

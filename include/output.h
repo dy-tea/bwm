@@ -61,8 +61,8 @@ typedef struct output_t {
 
 	struct wlr_box rectangle;
 	desktop_t *desk, *last_desk;
-	desktop_t *desk_head, *desk_tail;
-	struct output_t *prev, *next;
+	struct wl_list desk_list;
+	struct wl_list link;
 } output_t;
 
 void output_create(struct wlr_output *wlr_output);

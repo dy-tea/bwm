@@ -86,13 +86,11 @@ void refresh_border_color_cache(void) {
 
 // global state
 output_t *mon = NULL;
-output_t *mon_head = NULL;
-output_t *mon_tail = NULL;
+struct wl_list mon_list;
 uint32_t next_node_id = 1;
 uint32_t next_desktop_id = 1;
 uint32_t next_monitor_id = 1;
-desktop_t *orphan_desk_head = NULL;
-desktop_t *orphan_desk_tail = NULL;
+struct wl_list orphan_desk_list;
 static uint64_t next_master_stack_order = 1;
 
 node_t *make_node(uint32_t id) {
@@ -168,10 +166,14 @@ void free_node(node_t *n) {
 		return;
 
 	// clear any desktop focus pointer that still points to this node
-	for (output_t *o = mon_head; o; o = o->next)
-		for (desktop_t *d = o->desk_head; d; d = d->next)
+	output_t *o;
+	wl_list_for_each(o, &mon_list, link) {
+		desktop_t *d;
+		wl_list_for_each(d, &o->desk_list, link) {
 			if (d->focus == n)
 				d->focus = NULL;
+		}
+	}
 
 	animation_cancel_node(n);
 
@@ -1649,7 +1651,8 @@ static void get_border_color(client_t *client, float *color) {
 
 	border_state_t bs = get_border_state(client);
 
-	bool the_only_window = (mon_head == mon_tail) && bs.desk && bs.desk->root && bs.desk->root->client;
+	bool the_only_window = (wl_list_length(&mon_list) == 1) && bs.desk && bs.desk->root &&
+		bs.desk->root->client;
 	bool no_border = (borderless_monocle && bs.desk && bs.desk->layout == LAYOUT_MONOCLE &&
 		IS_TILED(client)) || (borderless_singleton && the_only_window) ||
 		client->state == STATE_FULLSCREEN;
@@ -1816,8 +1819,10 @@ fallback_rects:
 
 void refresh_border_colors(void) {
 	refresh_border_color_cache();
-	for (output_t *m = mon_head; m != NULL; m = m->next) {
-		for (desktop_t *d = m->desk_head; d != NULL; d = d->next) {
+	output_t *m;
+	wl_list_for_each(m, &mon_list, link) {
+		desktop_t *d;
+		wl_list_for_each(d, &m->desk_list, link) {
 			if (d->root == NULL)
 				continue;
 
@@ -1832,7 +1837,8 @@ void refresh_border_colors(void) {
 }
 
 output_t *output_at(double x, double y) {
-	for (output_t *m = mon_head; m != NULL; m = m->next)
+	output_t *m;
+	wl_list_for_each(m, &mon_list, link)
 		if (wlr_box_contains_point(&m->rectangle, (int)x, (int)y))
 			return m;
 
@@ -1840,17 +1846,17 @@ output_t *output_at(double x, double y) {
 }
 
 desktop_t *find_desktop_by_name_in_monitor(output_t *mon, const char *name) {
-	desktop_t *d = mon->desk_head;
-	while (d) {
+	desktop_t *d;
+	wl_list_for_each(d, &mon->desk_list, link) {
 		if (strcmp(d->name, name) == 0)
 			return d;
-		d = d->next;
 	}
 	return NULL;
 }
 
 output_t *find_output_by_name(const char *name) {
-	for (output_t *m = mon_head; m != NULL; m = m->next)
+	output_t *m;
+	wl_list_for_each(m, &mon_list, link)
 		if (strcmp(m->name, name) == 0)
 			return m;
 	return NULL;

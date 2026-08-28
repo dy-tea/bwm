@@ -13,8 +13,7 @@
 static int ipc_socket_fd = -1;
 static char socket_path[256];
 
-subscriber_t *subscriber_head = NULL;
-subscriber_t *subscriber_tail = NULL;
+struct wl_list subscriber_list;
 
 void remove_subscriber(subscriber_t *sb);
 
@@ -98,11 +97,13 @@ bool ipc_print_report(int fd) {
 	char buf[DOORS_BUFSIZ];
 	size_t offset = 0;
 
-	for (output_t *m = mon_head; m; m = m->next) {
+	output_t *m;
+	wl_list_for_each(m, &mon_list, link) {
 		char mon_flag = (server.focused_output == m) ? 'M' : 'm';
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "%c%s", mon_flag, m->name);
 
-		for (desktop_t *d = m->desk_head; d != NULL; d = d->next) {
+		desktop_t *d;
+		wl_list_for_each(d, &m->desk_list, link) {
 			char desk_flag;
 			if (m->desk == d)
 				desk_flag = d->focus ? 'O' : 'F';
@@ -149,7 +150,7 @@ bool ipc_print_report(int fd) {
 			}
 		}
 
-		if (m->next)
+		if (m->link.next != &mon_list)
 			offset += snprintf(buf + offset, sizeof(buf) - offset, "%s", ":");
 	}
 
@@ -158,7 +159,7 @@ bool ipc_print_report(int fd) {
 }
 
 void ipc_put_status(subscriber_mask_t mask, const char *fmt, ...) {
-	subscriber_t *sb = subscriber_head;
+	subscriber_t *sb, *tmp;
 	char buf[DOORS_BUFSIZ];
 	size_t len = 0;
 
@@ -169,8 +170,9 @@ void ipc_put_status(subscriber_mask_t mask, const char *fmt, ...) {
 		va_end(args);
 		if (len >= sizeof(buf))
 			len = sizeof(buf) - 1;
-	} while (sb != NULL) {
-		subscriber_t *next = sb->next;
+	}
+
+	wl_list_for_each_safe(sb, tmp, &subscriber_list, link) {
 		if (sb->mask & mask) {
 			if (sb->count > 0)
 				sb->count--;
@@ -185,12 +187,13 @@ void ipc_put_status(subscriber_mask_t mask, const char *fmt, ...) {
 			if (!ok || sb->count == 0)
 				remove_subscriber(sb);
 		}
-		sb = next;
 	}
 }
 
 void ipc_init(void) {
 	ONCE();
+	wl_list_init(&subscriber_list);
+
 	struct sockaddr_un addr;
 	socklen_t len;
 
@@ -256,9 +259,9 @@ void ipc_fini(void) {
 		ipc_socket_fd = -1;
 	}
 
-	subscriber_t *sb = subscriber_head;
-	while (sb != NULL) {
-		subscriber_t *next = sb->next;
+	subscriber_t *sb, *tmp;
+	wl_list_for_each_safe(sb, tmp, &subscriber_list, link) {
+		wl_list_remove(&sb->link);
 		if (sb->event_source)
 			wl_event_source_remove(sb->event_source);
 		close(sb->client_fd);
@@ -267,7 +270,6 @@ void ipc_fini(void) {
 			free(sb->fifo_path);
 		}
 		free(sb);
-		sb = next;
 	}
-	subscriber_head = subscriber_tail = NULL;
+	wl_list_init(&subscriber_list);
 }

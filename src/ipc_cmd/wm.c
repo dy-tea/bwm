@@ -27,12 +27,13 @@ void ipc_cmd_wm(char **args, int num, int client_fd) {
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "  \"monitors\": [\n");
 
 		bool first_mon = true;
-		for (output_t *m = mon_head; m != NULL; m = m->next) {
+		output_t *out;
+		wl_list_for_each(out, &mon_list, link) {
 			if (!first_mon)
 				offset += snprintf(buf + offset, sizeof(buf) - offset, ",\n");
 			first_mon = false;
 			offset += snprintf(buf + offset, sizeof(buf) - offset,
-				"    {\"name\": \"%s\", \"id\": %u, \"rect\": {\"x\": %d, \"y\": %d, \"width\": %d, \"height\": %d}}", m->name, m->id, m->rectangle.x, m->rectangle.y, m->rectangle.width, m->rectangle.height);
+				"    {\"name\": \"%s\", \"id\": %u, \"rect\": {\"x\": %d, \"y\": %d, \"width\": %d, \"height\": %d}}", out->name, out->id, out->rectangle.x, out->rectangle.y, out->rectangle.width, out->rectangle.height);
 		}
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "\n  ],\n");
 
@@ -130,13 +131,14 @@ void ipc_cmd_wm(char **args, int num, int client_fd) {
 		send_success(client_fd, buf);
 	} else if (streq("-g", *args) || streq("--get-status", *args)) {
 		int output_count = 0;
-		for (output_t *m = mon_head; m != NULL; m = m->next)
+		output_t *m;
+		wl_list_for_each(m, &mon_list, link)
 			output_count++;
 
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "status: running\n"
 			"monitors: %d\n", output_count);
 
-		output_t *m = server.focused_output;
+		m = server.focused_output;
 		if (m && m->desk) {
 			offset += snprintf(buf + offset, sizeof(buf) - offset, "focused_monitor: %s\n"
 				"focused_desktop: %s\n", m->name, m->desk->name);

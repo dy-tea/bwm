@@ -39,11 +39,10 @@ typedef struct subscriber_t {
 	subscriber_mask_t mask;
 	int count;
 	struct wl_event_source *event_source;
-	struct subscriber_t *prev, *next;
+	struct wl_list link;
 } subscriber_t;
 
-extern subscriber_t *subscriber_head;
-extern subscriber_t *subscriber_tail;
+extern struct wl_list subscriber_list;
 
 void ipc_init(void);
 int ipc_get_socket_fd(void);

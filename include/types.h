@@ -1,7 +1,9 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
+#include <wayland-server-core.h>
 #include <wlr/util/box.h>
 
 #define MAXLEN 256
@@ -201,7 +203,7 @@ typedef struct desktop_t {
 	layout_t layout, user_layout;
 	node_t *root, *focus;
 	struct scroller_state_t *scroller_state;
-	struct desktop_t *prev, *next;
+	struct wl_list link;
 	padding_t padding;
 	int window_gap;
 	int master_stack_count;
@@ -300,10 +302,8 @@ extern border_theme_t focused_border_theme;
 
 // global state
 extern struct output_t *mon;
-extern struct output_t *mon_head;
-extern struct output_t *mon_tail;
+extern struct wl_list mon_list;
 extern uint32_t next_node_id;
 extern uint32_t next_desktop_id;
 extern uint32_t next_monitor_id;
-extern desktop_t *orphan_desk_head;
-extern desktop_t *orphan_desk_tail;
+extern struct wl_list orphan_desk_list;

@@ -17,7 +17,7 @@ static subscriber_t *make_subscriber(int client_fd, char *fifo_path, subscriber_
 	sb->fifo_path = fifo_path;
 	sb->mask = mask;
 	sb->count = count;
-	sb->prev = sb->next = NULL;
+	wl_list_init(&sb->link);
 	sb->event_source = NULL;
 	return sb;
 }
@@ -26,18 +26,7 @@ void remove_subscriber(subscriber_t *sb) {
 	if (!sb)
 		return;
 
-	subscriber_t *a = sb->prev;
-	subscriber_t *b = sb->next;
-
-	if (a)
-		a->next = b;
-	else
-		subscriber_head = b;
-
-	if (b)
-		b->prev = a;
-	else
-		subscriber_tail = a;
+	wl_list_remove(&sb->link);
 
 	if (sb->event_source) {
 		wl_event_source_remove(sb->event_source);
@@ -52,13 +41,7 @@ void remove_subscriber(subscriber_t *sb) {
 }
 
 void add_subscriber(subscriber_t *sb) {
-	if (subscriber_head == NULL) {
-		subscriber_head = subscriber_tail = sb;
-	} else {
-		subscriber_tail->next = sb;
-		sb->prev = subscriber_tail;
-		subscriber_tail = sb;
-	}
+	wl_list_insert(subscriber_list.prev, &sb->link);
 
 	int flags = fcntl(sb->client_fd, F_GETFD);
 	fcntl(sb->client_fd, F_SETFD, flags & ~FD_CLOEXEC);

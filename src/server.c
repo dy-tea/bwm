@@ -153,6 +153,9 @@ void server_init(void) {
 	wl_list_init(&server.keyboard_groups);
 	wl_list_init(&server.physical_keyboards);
 
+	wl_list_init(&mon_list);
+	wl_list_init(&orphan_desk_list);
+
 	output_mgmt_init();
 
 	// scene

@@ -131,7 +131,8 @@ static void unmanaged_handle_map(struct wl_listener *listener, void *data) {
 
 			if (!focused_view) {
 				wlr_log(WLR_INFO, "last_focused is NULL, searching for any mapped xwayland window");
-				output_t *mon = server.focused_output ? server.focused_output : mon_head;
+				output_t *mon = server.focused_output ? server.focused_output : (wl_list_empty(&mon_list) ? NULL
+					: wl_container_of(mon_list.next, mon, link));
 
 				if (mon && mon->desk) {
 					desktop_t *d = mon->desk;
@@ -490,7 +491,8 @@ static void handle_map(struct wl_listener *listener, void *data) {
 	xwayland_view->geometry.width = xsurface->width;
 	xwayland_view->geometry.height = xsurface->height;
 
-	output_t *mon = server.focused_output ? server.focused_output : mon_head;
+	output_t *mon = server.focused_output ? server.focused_output : (wl_list_empty(&mon_list) ? NULL :
+		wl_container_of(mon_list.next, mon, link));
 	if (!mon) {
 		wlr_log(WLR_ERROR, "No monitor available for xwayland view");
 		return;
@@ -737,7 +739,8 @@ static void handle_unmap(struct wl_listener *listener, void *data) {
 		desktop_t *desk = NULL;
 
 		if (mon) {
-			for (desktop_t *d = mon->desk_head; d; d = d->next) {
+			desktop_t *d;
+			wl_list_for_each(d, &mon->desk_list, link) {
 				node_t *n = d->root;
 				if (n == xwayland_view->node || (n && (n->first_child == xwayland_view->node ||
 						n->second_child == xwayland_view->node))) {
@@ -951,7 +954,8 @@ static void handle_request_activate(struct wl_listener *listener, void *data) {
 	if (xwayland_view->node) {
 		output_t *mon = xwayland_view->node->output;
 		if (mon) {
-			for (desktop_t *d = mon->desk_head; d; d = d->next) {
+			desktop_t *d;
+			wl_list_for_each(d, &mon->desk_list, link) {
 				node_t *n = d->root;
 				if (n == xwayland_view->node || (n && (n->first_child == xwayland_view->node ||
 						n->second_child == xwayland_view->node))) {

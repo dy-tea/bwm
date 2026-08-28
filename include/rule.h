@@ -4,6 +4,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <wayland-server-core.h>
 
 #define MAX_RULES 128
 
@@ -58,11 +59,10 @@ typedef struct {
 typedef struct rule_t {
 	rule_match_t match;
 	rule_consequence_t consequence;
-	struct rule_t *next;
+	struct wl_list link;
 } rule_t;
 
-extern rule_t *rule_head;
-extern rule_t *rule_tail;
+extern struct wl_list rule_list;
 
 void rule_init(void);
 void rule_fini(void);

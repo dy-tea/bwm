@@ -6,8 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-rule_t *rule_head = NULL;
-rule_t *rule_tail = NULL;
+struct wl_list rule_list;
 
 rule_t *make_rule(void) {
 	rule_t *r = calloc(1, sizeof(rule_t));
@@ -16,70 +15,43 @@ rule_t *make_rule(void) {
 		r->match.title[0] = '\0';
 		r->match.tag[0] = '\0';
 		r->match.one_shot = false;
+		wl_list_init(&r->link);
 	}
 	return r;
 }
 
 void add_rule(rule_t *r) {
-	if (rule_tail == NULL) {
-		rule_head = rule_tail = r;
-	} else {
-		rule_tail->next = r;
-		rule_tail = r;
-	}
+	wl_list_insert(rule_list.prev, &r->link);
 }
 
 void remove_rule(rule_t *r) {
 	if (r == NULL)
 		return;
 
-	rule_t *prev = NULL;
-	rule_t *cur = rule_head;
-	while (cur && cur != r) {
-		prev = cur;
-		cur = cur->next;
-	}
-	if (cur == NULL)
-		return;
-
-	if (prev)
-		prev->next = r->next;
-	else
-		rule_head = r->next;
-
-	if (r == rule_tail)
-		rule_tail = prev;
-
+	wl_list_remove(&r->link);
 	free(r);
 }
 
 bool remove_rule_by_index(int idx) {
-	rule_t *prev = NULL;
-	rule_t *cur = rule_head;
-	for (int i = 0; cur != NULL && i < idx; prev = cur, cur = cur->next, ++i)
-		;
-
-	if (cur == NULL)
-		return false;
-
-	if (prev)
-		prev->next = cur->next;
-	else
-		rule_head = cur->next;
-
-	if (cur == rule_tail)
-		rule_tail = prev;
-
-	free(cur);
-	return true;
+	int i = 0;
+	rule_t *r;
+	wl_list_for_each(r, &rule_list, link) {
+		if (i == idx) {
+			wl_list_remove(&r->link);
+			free(r);
+			return true;
+		}
+		i++;
+	}
+	return false;
 }
 
 void list_rules(char *buf, size_t buf_size) {
 	size_t offset = 0;
 	int idx = 0;
 
-	rule_t *r = rule_head;
-	while (r != NULL) {
+	rule_t *r;
+	wl_list_for_each(r, &rule_list, link) {
 		offset += snprintf(buf + offset, buf_size - offset, "%d: ", idx);
 
 		if (r->match.app_id[0] != '\0')
@@ -175,7 +147,6 @@ void list_rules(char *buf, size_t buf_size) {
 
 		offset += snprintf(buf + offset, buf_size - offset, "\n");
 
-		r = r->next;
 		idx++;
 	}
 
@@ -196,10 +167,8 @@ rule_consequence_t *find_matching_rule(const char *app_id, const char *title, co
 	static rule_consequence_t merged;
 	memset(&merged, 0, sizeof(merged));
 
-	rule_t *r = rule_head;
-	while (r != NULL) {
-		rule_t *next = r->next;
-
+	rule_t *r, *tmp;
+	wl_list_for_each_safe(r, tmp, &rule_list, link) {
 		bool app_id_matches = match_string(r->match.app_id, app_id);
 		bool title_matches = match_string(r->match.title, title);
 		bool tag_matches = match_string(r->match.tag, tag);
@@ -227,8 +196,6 @@ rule_consequence_t *find_matching_rule(const char *app_id, const char *title, co
 			if (r->match.one_shot)
 				remove_rule(r);
 		}
-
-		r = next;
 	}
 
 	return merged.has ? &merged : NULL;
@@ -297,18 +264,15 @@ void rule_apply_consequence(node_t *node, client_t *client, const rule_consequen
 
 void rule_init(void) {
 	ONCE();
-	rule_head = NULL;
-	rule_tail = NULL;
+	wl_list_init(&rule_list);
 }
 
 void rule_fini(void) {
 	ONCE();
-	rule_t *r = rule_head;
-	while (r != NULL) {
-		rule_t *next = r->next;
+	rule_t *r, *tmp;
+	wl_list_for_each_safe(r, tmp, &rule_list, link) {
+		wl_list_remove(&r->link);
 		free(r);
-		r = next;
 	}
-	rule_head = NULL;
-	rule_tail = NULL;
+	wl_list_init(&rule_list);
 }

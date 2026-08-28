@@ -63,7 +63,8 @@ void ipc_cmd_output(char **args, int num, int client_fd) {
 		int offset = 0;
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "[\n");
 		bool first = true;
-		for (output_t *output = mon_head; output != NULL; output = output->next) {
+		output_t *output;
+		wl_list_for_each(output, &mon_list, link) {
 			struct wlr_output *wo = output->wlr_output;
 			if (!first)
 				offset += snprintf(buf + offset, sizeof(buf) - offset, ",\n");
@@ -172,7 +173,8 @@ void ipc_cmd_output(char **args, int num, int client_fd) {
 		send_success(client_fd, "output mode set\n");
 	} else if (streq("modes", subcmd)) {
 		output_t *target = NULL;
-		for (output_t *o = mon_head; o != NULL; o = o->next) {
+		output_t *o;
+		wl_list_for_each(o, &mon_list, link) {
 			if (streq(o->name, output_name) || streq(o->wlr_output->name, output_name)) {
 				target = o;
 				break;
@@ -513,15 +515,10 @@ void ipc_cmd_output(char **args, int num, int client_fd) {
 			d->root = NULL;
 			d->focus = NULL;
 
-			if (mon->desk_tail) {
-				d->prev = mon->desk_tail;
-				mon->desk_tail->next = d;
-				mon->desk_tail = d;
-			} else {
+			if (wl_list_empty(&mon->desk_list))
 				mon->desk = d;
-				mon->desk_head = d;
-				mon->desk_tail = d;
-			}
+			wl_list_init(&d->link);
+			wl_list_insert(mon->desk_list.prev, &d->link);
 			d->output = mon;
 
 			workspace_create_desktop(d->name);
@@ -540,7 +537,8 @@ void ipc_cmd_output(char **args, int num, int client_fd) {
 		if (num < 2) {
 			char buf[DOORS_BUFSIZ];
 			size_t offset = 0;
-			for (desktop_t *d = mon->desk_head; d != NULL; d = d->next) {
+			desktop_t *d;
+			wl_list_for_each(d, &mon->desk_list, link) {
 				offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", d->name);
 			}
 			send_success(client_fd, buf);
@@ -548,8 +546,11 @@ void ipc_cmd_output(char **args, int num, int client_fd) {
 			args++;
 			num--;
 
-			desktop_t *d = mon->desk_head;
-			for (; num > 0 && d != NULL; d = d->next) {
+			desktop_t *d = wl_list_empty(&mon->desk_list) ? NULL : wl_container_of(mon->desk_list.next, d,
+				link);
+			for (; num > 0 &&
+					d != NULL; d = d->link.next == &mon->desk_list ? NULL : wl_container_of(d->link.next, d,
+					link)) {
 				strncpy(d->name, *args, SMALEN - 1);
 				d->name[SMALEN - 1] = '\0';
 				workspace_create_desktop(d->name);
@@ -572,40 +573,24 @@ void ipc_cmd_output(char **args, int num, int client_fd) {
 				newd->root = NULL;
 				newd->focus = NULL;
 
-				if (mon->desk_tail) {
-					newd->prev = mon->desk_tail;
-					mon->desk_tail->next = newd;
-					mon->desk_tail = newd;
-				} else {
+				if (wl_list_empty(&mon->desk_list))
 					mon->desk = newd;
-					mon->desk_head = newd;
-					mon->desk_tail = newd;
-				}
+				wl_list_init(&newd->link);
+				wl_list_insert(mon->desk_list.prev, &newd->link);
 				newd->output = mon;
 
 				workspace_create_desktop(newd->name);
 				args++;
 				num--;
 			} while (d != NULL) {
+				desktop_t *next = d->link.next == &mon->desk_list ? NULL : wl_container_of(d->link.next, d,
+					link);
 				if (d == mon->desk) {
-					mon->desk = d->next;
-					if (mon->desk)
-						mon->desk->prev = NULL;
-					if (mon->desk_head == d)
-						mon->desk_head = d->next;
-					if (mon->desk_tail == d)
-						mon->desk_tail = d->prev;
+					mon->desk = next;
 					if (mon->desk)
 						focus_node(mon, mon->desk, mon->desk->focus);
-				} else {
-					if (d->prev)
-						d->prev->next = d->next;
-					if (d->next)
-						d->next->prev = d->prev;
-					if (mon->desk_tail == d)
-						mon->desk_tail = d->prev;
 				}
-				desktop_t *next = d->next;
+				wl_list_remove(&d->link);
 				free(d);
 				d = next;
 			}
@@ -644,29 +629,38 @@ void ipc_cmd_output(char **args, int num, int client_fd) {
 		desktop_t *d0 = m0->desk;
 		desktop_t *d1 = m1->desk;
 
-		m0->desk = d1;
-		m0->desk_head = d1 ? d1 : m0->desk_head;
-		m0->desk_tail = d1 ? (d1->prev ? d1->prev : d1) : m0->desk_tail;
+		struct wl_list *a = &m0->desk_list;
+		struct wl_list *b = &m1->desk_list;
 
-		m1->desk = d0;
-		m1->desk_head = d0 ? d0 : m1->desk_head;
-		m1->desk_tail = d0 ? (d0->prev ? d0->prev : d0) : m1->desk_tail;
-
-		if (d0) {
-			for (desktop_t *d = d0; d != NULL; d = d->next)
-				d->output = m1;
-			d0->prev = NULL;
-			desktop_t *tail = d0;
-			for (; tail->next; tail = tail->next)
-				;
-			tail->next = d1;
-			if (d1)
-				d1->prev = tail;
+		if (wl_list_empty(a)) {
+			wl_list_insert_list(a, b);
+			wl_list_init(b);
+		} else if (wl_list_empty(b)) {
+			wl_list_insert_list(b, a);
+			wl_list_init(a);
+		} else {
+			struct wl_list *a_first = a->next;
+			struct wl_list *a_last = a->prev;
+			struct wl_list *b_first = b->next;
+			struct wl_list *b_last = b->prev;
+			a->next = b_first;
+			b_first->prev = a;
+			a->prev = b_last;
+			b_last->next = a;
+			b->next = a_first;
+			a_first->prev = b;
+			b->prev = a_last;
+			a_last->next = b;
 		}
 
-		if (d1)
-			for (desktop_t *d = d1; d != NULL; d = d->next)
-				d->output = m0;
+		m0->desk = d1;
+		m1->desk = d0;
+
+		desktop_t *d;
+		wl_list_for_each(d, &m0->desk_list, link)
+			d->output = m0;
+		wl_list_for_each(d, &m1->desk_list, link)
+			d->output = m1;
 
 		if (server.focused_output == m0)
 			server.focused_output = m1;
@@ -676,7 +670,7 @@ void ipc_cmd_output(char **args, int num, int client_fd) {
 		transaction_commit_dirty();
 		send_success(client_fd, "swapped\n");
 	} else if (streq("remove", subcmd) || streq("-r", subcmd) || streq("--remove", subcmd)) {
-		if (!mon->prev && !mon->next) {
+		if (wl_list_length(&mon_list) == 1) {
 			send_failure(client_fd, "output remove: cannot remove the only output\n");
 			return;
 		}
@@ -686,19 +680,14 @@ void ipc_cmd_output(char **args, int num, int client_fd) {
 			return;
 		}
 
-		output_t *prev = mon->prev;
-		output_t *next = mon->next;
-
-		if (prev)
-			prev->next = next;
-		else if (mon_head == mon)
-			mon_head = next;
-
-		if (next)
-			next->prev = prev;
+		output_t *remove_next = mon->link.next != &mon_list ? wl_container_of(mon->link.next, mon,
+			link) : NULL;
+		output_t *remove_prev = mon->link.prev != &mon_list ? wl_container_of(mon->link.prev, mon,
+			link) : NULL;
+		wl_list_remove(&mon->link);
 
 		if (server.focused_output == mon) {
-			server.focused_output = next ? next : prev;
+			server.focused_output = remove_next ? remove_next : remove_prev;
 			if (server.focused_output) {
 				focus_node(server.focused_output, server.focused_output->desk,
 					server.focused_output->desk ? server.focused_output->desk->focus : NULL);
@@ -764,7 +753,8 @@ void ipc_cmd_output(char **args, int num, int client_fd) {
 
 		desktop_t *d = mon->desk;
 		while (d != NULL && num > 0) {
-			desktop_t *next = d->next;
+			desktop_t *next = d->link.next == &mon->desk_list ? NULL : wl_container_of(d->link.next, d,
+				link);
 			for (int i = 0; i < num; i++) {
 				if (strcmp(d->name, args[i]) == 0) {
 					strncpy(d->name, args[i], SMALEN - 1);

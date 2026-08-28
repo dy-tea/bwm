@@ -752,14 +752,13 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
 			root = root->parent;
 
 		// find which desktop has this root
-		desktop_t *desk = m->desk_head;
-		while (desk != NULL) {
+		desktop_t *desk;
+		wl_list_for_each(desk, &m->desk_list, link) {
 			if (desk->root == root) {
 				d = desk;
 				wlr_log(WLR_DEBUG, "Found node %u belongs to desktop %s", n->id, d->name);
 				break;
 			}
-			desk = desk->next;
 		}
 
 		if (d == NULL) {

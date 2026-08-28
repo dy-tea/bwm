@@ -109,28 +109,30 @@ struct desktop_t *find_desktop_by_name(const char *name) {
 
 	if (name[0] == '^' && name[1] >= '1' && name[1] <= '9') {
 		int mon_idx = name[1] - '1';
-		output_t *m = mon_head;
+		output_t *m;
+		bool found = false;
+		int i = 0;
+		wl_list_for_each(m, &mon_list, link) {
+			if (i == mon_idx) {
+				found = true;
+				break;
+			}
+			i++;
+		}
 
-		for (int i = 0; m != NULL && i < mon_idx; m = m->next, i++)
-			;
-
-		if (m && m->desk_head)
-			return m->desk_head;
+		if (found && !wl_list_empty(&m->desk_list))
+			return wl_container_of(m->desk_list.next, m->desk, link);
 
 		return NULL;
 	}
 
-	output_t *m = mon_head;
-	while (m != NULL) {
-		desktop_t *d = m->desk_head;
-
-		while (d != NULL) {
+	output_t *m;
+	wl_list_for_each(m, &mon_list, link) {
+		desktop_t *d;
+		wl_list_for_each(d, &m->desk_list, link) {
 			if (strcmp(d->name, name) == 0)
 				return d;
-
-			d = d->next;
 		}
-		m = m->next;
 	}
 	return NULL;
 }
@@ -147,32 +149,31 @@ void workspace_sync(void) {
 	wl_list_for_each_safe(workspace, tmp, &server.workspace_manager->workspaces, link)
 		wlr_ext_workspace_handle_v1_destroy(workspace);
 
-	if (!mon_head)
+	if (wl_list_empty(&mon_list))
 		return;
 
-	output_t *m = mon_head;
-	while (m) {
-		desktop_t *d = m->desk_head;
-		while (d != NULL) {
+	output_t *m;
+	wl_list_for_each(m, &mon_list, link) {
+		desktop_t *d;
+		wl_list_for_each(d, &m->desk_list, link) {
 			struct wlr_ext_workspace_handle_v1 *workspace =
 				wlr_ext_workspace_handle_v1_create(server.workspace_manager, NULL, 0);
 			if (!workspace) {
 				wlr_log(WLR_ERROR, "Failed to create workspace: %s", d->name);
-				d = d->next;
 				continue;
 			}
 
 			wlr_ext_workspace_handle_v1_set_name(workspace, d->name);
 			wlr_ext_workspace_handle_v1_set_group(workspace, group);
-
-			d = d->next;
 		}
-		m = m->next;
 	}
 
-	struct wlr_ext_workspace_handle_v1 *active = find_workspace_by_name(mon_head->desk->name);
-	if (active)
-		wlr_ext_workspace_handle_v1_set_active(active, true);
+	if (!wl_list_empty(&mon_list)) {
+		output_t *first_mon = wl_container_of(mon_list.next, first_mon, link);
+		struct wlr_ext_workspace_handle_v1 *active = find_workspace_by_name(first_mon->desk->name);
+		if (active)
+			wlr_ext_workspace_handle_v1_set_active(active, true);
+	}
 
 	wlr_log(WLR_INFO, "Workspace manager synced");
 }
@@ -225,8 +226,8 @@ static void update_window_visibility(node_t *node, output_t *m, desktop_t *curre
 
 	bool should_show = false;
 	bool found = false;
-	desktop_t *d = m->desk_head;
-	while (d != NULL) {
+	desktop_t *d;
+	wl_list_for_each(d, &m->desk_list, link) {
 		if (d->root != NULL) {
 			node_t *parent = node;
 			while (parent != NULL) {
@@ -239,7 +240,6 @@ static void update_window_visibility(node_t *node, output_t *m, desktop_t *curre
 				parent = parent->parent;
 			}
 		}
-		d = d->next;
 	}
 
 	if (!found) {
@@ -283,8 +283,8 @@ static void update_all_toplevels_visibility(output_t *m, desktop_t *current_desk
 		update_window_visibility(toplevel->node, m, current_desktop, &window_count);
 	}
 
-	desktop_t *d = m->desk_head;
-	while (d != NULL) {
+	desktop_t *d;
+	wl_list_for_each(d, &m->desk_list, link) {
 		if (d->root != NULL) {
 			node_t *n = first_extrema(d->root);
 			while (n != NULL) {
@@ -293,7 +293,6 @@ static void update_all_toplevels_visibility(output_t *m, desktop_t *current_desk
 				n = next_leaf(n, d->root);
 			}
 		}
-		d = d->next;
 	}
 
 	struct xwayland_toplevel_t *xwayland_view;
@@ -319,22 +318,22 @@ static void workspace_switch_animate(output_t *output, desktop_t *old_desk, desk
 
 	int num_steps = 0;
 	desktop_t *walk = old_desk;
-	while (walk) {
+	while (walk->link.next != &output->desk_list) {
+		walk = wl_container_of(walk->link.next, walk, link);
+		num_steps++;
 		if (walk == new_desk) {
 			forward = false;
 			break;
 		}
-		walk = walk->next;
-		num_steps++;
 	}
 
 	if (forward) {
 		num_steps = 0;
 		walk = old_desk;
-		while (walk) {
+		while (walk->link.prev != &output->desk_list) {
 			if (walk == new_desk)
 				break;
-			walk = walk->prev;
+			walk = wl_container_of(walk->link.prev, walk, link);
 			num_steps++;
 		}
 	}
@@ -399,7 +398,10 @@ static void workspace_switch_animate(output_t *output, desktop_t *old_desk, desk
 
 	// enable and animate intermediate desktop windows (between old and new)
 	int k = 1;
-	desktop_t *intermediate = forward ? old_desk->prev : old_desk->next;
+	desktop_t *intermediate = forward ? (old_desk->link.prev == &output->desk_list ? NULL :
+		wl_container_of(old_desk->link.prev, old_desk,
+		link)) : (old_desk->link.next == &output->desk_list ? NULL : wl_container_of(old_desk->link.next,
+		old_desk, link));
 	while (intermediate && intermediate != new_desk) {
 		arrange(output, intermediate, true);
 		desktop_window_iter_t it;
@@ -428,7 +430,10 @@ static void workspace_switch_animate(output_t *output, desktop_t *old_desk, desk
 			animation_start_workspace_slide(output, n, tree, from, to, true);
 		}
 		k++;
-		intermediate = forward ? intermediate->prev : intermediate->next;
+		intermediate = forward ? (intermediate->link.prev == &output->desk_list ? NULL :
+			wl_container_of(intermediate->link.prev, intermediate,
+			link)) : (intermediate->link.next == &output->desk_list ? NULL :
+			wl_container_of(intermediate->link.next, intermediate, link));
 	}
 
 	{
@@ -501,7 +506,8 @@ void workspace_switch_to_desktop(const char *name) {
 
 	output_t *output = server.focused_output;
 	desktop_t *d = NULL;
-	for (desktop_t *local = output->desk_head; local; local = local->next) {
+	desktop_t *local;
+	wl_list_for_each(local, &output->desk_list, link) {
 		if (strcmp(local->name, name) == 0) {
 			d = local;
 			break;
@@ -566,7 +572,8 @@ void workspace_switch_to_last_desktop(void) {
 	if (target == output->desk)
 		return;
 
-	for (desktop_t *d = output->desk_head; d != NULL; d = d->next) {
+	desktop_t *d;
+	wl_list_for_each(d, &output->desk_list, link) {
 		if (d == target) {
 			workspace_switch_to_desktop(target->name);
 			return;
@@ -581,16 +588,24 @@ void workspace_switch_to_desktop_by_index(int index) {
 		return;
 
 	wlr_log(WLR_DEBUG, "Looking for desktop at index %d", index);
-	desktop_t *target = server.focused_output->desk_head;
-	for (int idx = 0; target != NULL && idx < index; target = target->next, ++idx)
-		wlr_log(WLR_DEBUG, "Desktop at idx %d: %s", idx, target->name);
+	desktop_t *target = NULL;
+	desktop_t *d;
+	int idx = 0;
+	wl_list_for_each(d, &server.focused_output->desk_list, link) {
+		if (idx == index) {
+			target = d;
+			break;
+		}
+		wlr_log(WLR_DEBUG, "Desktop at idx %d: %s", idx, d->name);
+		idx++;
+	}
 
 	if (!target) {
 		int count = 0;
-		target = server.focused_output->desk_head;
-
-		for (; target != NULL; target = target->next, ++count)
-			wlr_log(WLR_DEBUG, "Desktop %d: %s", count, target->name);
+		wl_list_for_each(d, &server.focused_output->desk_list, link) {
+			wlr_log(WLR_DEBUG, "Desktop %d: %s", count, d->name);
+			count++;
+		}
 
 		wlr_log(WLR_ERROR, "Desktop not found at index: %d (total: %d)", index, count);
 		return;

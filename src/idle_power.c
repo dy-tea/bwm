@@ -32,7 +32,8 @@ static void turn_displays_on(void) {
 	if (!displays_off)
 		return;
 	displays_off = false;
-	for (output_t *m = mon_head; m; m = m->next) {
+	output_t *m;
+	wl_list_for_each(m, &mon_list, link) {
 		if (!m->wlr_output)
 			continue;
 		struct wlr_output_state state;
@@ -48,7 +49,8 @@ static void turn_displays_off(void) {
 	if (displays_off)
 		return;
 	displays_off = true;
-	for (output_t *m = mon_head; m; m = m->next) {
+	output_t *m;
+	wl_list_for_each(m, &mon_list, link) {
 		if (!m->wlr_output || !m->wlr_output->enabled)
 			continue;
 		struct wlr_output_state state;

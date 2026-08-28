@@ -107,15 +107,13 @@ static bool find_and_send_portal_shortcut(uint32_t modifiers, uint32_t keycode,
 }
 
 static output_t *find_monitor_for_desktop(desktop_t *d) {
-	output_t *m = mon_head;
-	while (m != NULL) {
-		desktop_t *desk = m->desk_head;
-		while (desk != NULL) {
+	output_t *m;
+	wl_list_for_each(m, &mon_list, link) {
+		desktop_t *desk;
+		wl_list_for_each(desk, &m->desk_list, link) {
 			if (desk == d)
 				return m;
-			desk = desk->next;
 		}
-		m = m->next;
 	}
 	return NULL;
 }
@@ -602,7 +600,8 @@ void focus_next_desktop(void) {
 	if (!server.focused_output || !server.focused_output->desk)
 		return;
 
-	desktop_t *next = server.focused_output->desk->next;
+	desktop_t *next = server.focused_output->desk->link.next != &server.focused_output->desk_list ?
+		wl_container_of(server.focused_output->desk->link.next, next, link) : NULL;
 	if (next != NULL)
 		workspace_switch_to_desktop(next->name);
 }
@@ -611,7 +610,8 @@ void focus_prev_desktop(void) {
 	if (!server.focused_output || !server.focused_output->desk)
 		return;
 
-	desktop_t *prev = server.focused_output->desk->prev;
+	desktop_t *prev = server.focused_output->desk->link.prev != &server.focused_output->desk_list ?
+		wl_container_of(server.focused_output->desk->link.prev, prev, link) : NULL;
 	if (prev != NULL) {
 		wlr_log(WLR_DEBUG, "Focus prev desktop - %s", prev->name);
 		workspace_switch_to_desktop(prev->name);
@@ -627,10 +627,15 @@ void send_to_desktop(int desktop_index) {
 		return;
 
 	// get index of desktop
-	desktop_t *target = mon->desk_head;
+	desktop_t *target = NULL, *d;
 	int idx = 0;
-	for (; target != NULL && idx < desktop_index; target = target->next, ++idx)
-		;
+	wl_list_for_each(d, &mon->desk_list, link) {
+		if (idx == desktop_index) {
+			target = d;
+			break;
+		}
+		++idx;
+	}
 
 	if (!target) {
 		wlr_log(WLR_ERROR, "Desktop not found at index: %d", desktop_index);
@@ -786,7 +791,8 @@ void send_to_next_desktop(void) {
 	if (mon == NULL || mon->desk == NULL)
 		return;
 
-	desktop_t *next = mon->desk->next;
+	desktop_t *next = mon->desk->link.next != &mon->desk_list ? wl_container_of(mon->desk->link.next,
+		next, link) : NULL;
 	if (next != NULL) {
 		send_to_desktop_by_name(next->name);
 		wlr_log(WLR_INFO, "Sent window to next desktop");
@@ -797,7 +803,8 @@ void send_to_prev_desktop(void) {
 	if (mon == NULL || mon->desk == NULL)
 		return;
 
-	desktop_t *prev = mon->desk->prev;
+	desktop_t *prev = mon->desk->link.prev != &mon->desk_list ? wl_container_of(mon->desk->link.prev,
+		prev, link) : NULL;
 	if (prev != NULL) {
 		send_to_desktop_by_name(prev->name);
 		wlr_log(WLR_INFO, "Sent window to previous desktop");

@@ -764,7 +764,8 @@ void cursor_button(struct wl_listener *listener, void *data) {
 	} else {
 		// tab bar click
 		if (event->button == BTN_LEFT) {
-			for (output_t *m = mon_head; m != NULL; m = m->next) {
+			output_t *m;
+			wl_list_for_each(m, &mon_list, link) {
 				desktop_t *d = m->desk;
 				if (d == NULL)
 					continue;
@@ -782,7 +783,8 @@ void cursor_button(struct wl_listener *listener, void *data) {
 
 		// middle-click on tab bar closes the tab
 		if (event->button == BTN_MIDDLE) {
-			for (output_t *m = mon_head; m != NULL; m = m->next) {
+			output_t *m;
+			wl_list_for_each(m, &mon_list, link) {
 				desktop_t *d = m->desk;
 				if (d == NULL)
 					continue;
@@ -896,7 +898,8 @@ void cursor_axis(struct wl_listener *listener, void *data) {
 	struct wlr_pointer_axis_event *event = data;
 
 	// cycle through tabs when cursor is over a tab bar
-	for (output_t *m = mon_head; m != NULL; m = m->next) {
+	output_t *m;
+	wl_list_for_each(m, &mon_list, link) {
 		desktop_t *d = m->desk;
 		if (d == NULL)
 			continue;
@@ -921,7 +924,7 @@ void cursor_axis(struct wl_listener *listener, void *data) {
 		}
 	}
 
-	output_t *m = server.focused_output;
+	m = server.focused_output;
 	desktop_t *d = m ? m->desk : NULL;
 	bool is_touchpad = (event->source == WL_POINTER_AXIS_SOURCE_FINGER ||
 		event->source == WL_POINTER_AXIS_SOURCE_CONTINUOUS);

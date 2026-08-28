@@ -11,6 +11,44 @@
 #include <stdlib.h>
 #include <string.h>
 
+static void swap_desktops(desktop_t *d0, desktop_t *d1) {
+	struct wl_list *a = &d0->link;
+	struct wl_list *b = &d1->link;
+
+	if (a == b)
+		return;
+
+	struct wl_list *a_prev = a->prev;
+	struct wl_list *a_next = a->next;
+	struct wl_list *b_prev = b->prev;
+	struct wl_list *b_next = b->next;
+
+	if (a->next == b) {
+		a_prev->next = b;
+		b->prev = a_prev;
+		b->next = a;
+		a->prev = b;
+		a->next = b_next;
+		b_next->prev = a;
+	} else if (b->next == a) {
+		b_prev->next = a;
+		a->prev = b_prev;
+		a->next = b;
+		b->prev = a;
+		b->next = a_next;
+		a_next->prev = b;
+	} else {
+		a_prev->next = b;
+		b->prev = a_prev;
+		a_next->prev = b;
+		b->next = a_next;
+		b_prev->next = a;
+		a->prev = b_prev;
+		b_next->prev = a;
+		a->next = b_next;
+	}
+}
+
 void ipc_cmd_desktop(char **args, int num, int client_fd) {
 	if (num < 1) {
 		send_failure(client_fd, "desktop: Missing arguments\n");
@@ -100,8 +138,10 @@ void ipc_cmd_desktop(char **args, int num, int client_fd) {
 		}
 
 		if (num > 1 && streq("--all", args[1])) {
-			for (output_t *m = mon_head; m != NULL; m = m->next) {
-				for (desktop_t *d = m->desk_head; d != NULL; d = d->next) {
+			output_t *m;
+			wl_list_for_each(m, &mon_list, link) {
+				desktop_t *d;
+				wl_list_for_each(d, &m->desk_list, link) {
 					layout_set(d, layout);
 					arrange(m, d, true);
 					ipc_put_status(SUB_MASK_DESKTOP_LAYOUT, "desktop_layout[%s,%c]\n", d->name,
@@ -152,64 +192,9 @@ void ipc_cmd_desktop(char **args, int num, int client_fd) {
 		output_t *m0 = d0->output;
 		output_t *m1 = d1->output;
 
-		if (m0 == m1) {
-			desktop_t *prev0 = d0->prev;
-			desktop_t *next0 = d0->next;
-			desktop_t *prev1 = d1->prev;
-			desktop_t *next1 = d1->next;
+		swap_desktops(d0, d1);
 
-			if (next0 == d1) {
-				d0->prev = d1;
-				d0->next = next1;
-				d1->prev = prev0;
-				d1->next = d0;
-				if (prev0)
-					prev0->next = d1;
-				if (next1)
-					next1->next = d0;
-			} else {
-				d0->prev = prev1;
-				d0->next = next1;
-				d1->prev = prev0;
-				d1->next = next0;
-				if (prev0)
-					prev0->next = d1;
-				if (next0)
-					next0->next = d1;
-				if (prev1)
-					prev1->next = d0;
-				if (next1)
-					next1->next = d0;
-			}
-
-			if (m0->desk == d0)
-				m0->desk = d1;
-			else if (m0->desk == d1)
-				m0->desk = d0;
-		} else {
-			desktop_t *prev0 = d0->prev;
-			desktop_t *next0 = d0->next;
-			desktop_t *prev1 = d1->prev;
-			desktop_t *next1 = d1->next;
-
-			d0->prev = prev1;
-			d0->next = next1;
-			d1->prev = prev0;
-			d1->next = next0;
-
-			if (prev0)
-				prev0->next = d1;
-			else
-				m0->desk = d1;
-			if (next0)
-				next0->next = d1;
-			if (prev1)
-				prev1->next = d0;
-			else
-				m1->desk = d0;
-			if (next1)
-				next1->next = d0;
-
+		if (m0 != m1) {
 			d0->output = m1;
 			d1->output = m0;
 		}
@@ -222,21 +207,20 @@ void ipc_cmd_desktop(char **args, int num, int client_fd) {
 		transaction_commit_dirty();
 		send_success(client_fd, "swapped\n");
 	} else if (streq("-r", *args) || streq("--remove", *args)) {
-		if (!desk->prev && !desk->next) {
+		if (wl_list_length(&mon->desk_list) == 1) {
 			send_failure(client_fd, "desktop -r: cannot remove the only desktop\n");
 			return;
 		}
 
-		desktop_t *prev = desk->prev;
-		desktop_t *next = desk->next;
+		desktop_t *next = desk->link.next != &mon->desk_list ? wl_container_of(desk->link.next, desk,
+			link) : NULL;
+		desktop_t *prev = desk->link.prev != &mon->desk_list ? wl_container_of(desk->link.prev, desk,
+			link) : NULL;
 
-		if (prev)
-			prev->next = next;
-		else if (mon->desk)
+		if (desk->link.prev == &mon->desk_list && mon->desk)
 			mon->desk = next;
 
-		if (next)
-			next->prev = prev;
+		wl_list_remove(&desk->link);
 
 		if (mon->desk == desk) {
 			mon->desk = next ? next : prev;
@@ -259,32 +243,14 @@ void ipc_cmd_desktop(char **args, int num, int client_fd) {
 		num--;
 
 		if (streq("up", *args) || streq("prev", *args)) {
-			if (desk->prev) {
-				desktop_t *prev = desk->prev;
-				desktop_t *prev_prev = prev->prev;
-
-				desk->prev = prev_prev;
-				desk->next = prev;
-				prev->prev = desk;
-				prev->next = desk;
-
-				if (prev_prev)
-					prev_prev->next = desk;
-				else
-					mon->desk = desk;
+			if (desk->link.prev != &mon->desk_list) {
+				desktop_t *prev = wl_container_of(desk->link.prev, desk, link);
+				swap_desktops(desk, prev);
 			}
 		} else if (streq("down", *args) || streq("next", *args)) {
-			if (desk->next) {
-				desktop_t *next = desk->next;
-				desktop_t *next_next = next->next;
-
-				desk->prev = next;
-				desk->next = next_next;
-				next->prev = desk;
-				next->next = desk;
-
-				if (next_next)
-					next_next->prev = desk;
+			if (desk->link.next != &mon->desk_list) {
+				desktop_t *next = wl_container_of(desk->link.next, desk, link);
+				swap_desktops(desk, next);
 			}
 		} else {
 			send_failure(client_fd, "desktop -b: unknown direction\n");
@@ -313,43 +279,20 @@ void ipc_cmd_desktop(char **args, int num, int client_fd) {
 			return;
 		}
 
-		if (!target->desk && !target->desk_head) {
+		if (wl_list_empty(&target->desk_list)) {
 			send_failure(client_fd, "desktop -m: target monitor has no desktop\n");
 			return;
 		}
 
 		output_t *src_mon = desk->output;
 
-		if (desk->prev) {
-			desk->prev->next = desk->next;
-		} else {
-			src_mon->desk = desk->next;
-			if (src_mon->desk_head == desk)
-				src_mon->desk_head = desk->next;
-		}
-
-		if (desk->next) {
-			desk->next->prev = desk->prev;
-		} else {
-			if (src_mon->desk_tail == desk)
-				src_mon->desk_tail = desk->prev;
-		}
-
-		desk->prev = target->desk_tail;
-		desk->next = NULL;
+		wl_list_remove(&desk->link);
+		wl_list_insert(target->desk_list.prev, &desk->link);
 		desk->output = target;
 
-		if (target->desk_tail) {
-			target->desk_tail->next = desk;
-			target->desk_tail = desk;
-		} else {
-			target->desk = desk;
-			target->desk_head = desk;
-			target->desk_tail = desk;
-		}
-
 		if (src_mon->desk == desk) {
-			src_mon->desk = src_mon->desk_head;
+			src_mon->desk = wl_list_empty(&src_mon->desk_list) ? NULL :
+				wl_container_of(src_mon->desk_list.next, desk, link);
 			if (src_mon->desk)
 				focus_node(src_mon, src_mon->desk, src_mon->desk->focus);
 		}

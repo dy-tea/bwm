@@ -582,7 +582,8 @@ void ipc_cmd_node(char **args, int num, int client_fd) {
 		}
 
 		desktop_t *src_desk = m->desk;
-		desktop_t *target_desk = target->desk ? target->desk : target->desk_head;
+		desktop_t *target_desk = target->desk ? target->desk : (wl_list_empty(&target->desk_list) ? NULL :
+			wl_container_of(target->desk_list.next, target_desk, link));
 
 		if (!target_desk) {
 			send_failure(client_fd, "node -m: target monitor has no desktops");

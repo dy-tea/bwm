@@ -380,27 +380,23 @@ static void handle_output_destroy(struct wl_listener *listener, void *data) {
 		output->repaint_timer = NULL;
 	}
 
-	if (output->prev)
-		output->prev->next = output->next;
-	else
-		mon_head = output->next;
-
-	if (output->next)
-		output->next->prev = output->prev;
-	else
-		mon_tail = output->prev;
+	output_t *next = output->link.next != &mon_list ? wl_container_of(output->link.next, next,
+		link) : NULL;
+	output_t *prev = output->link.prev != &mon_list ? wl_container_of(output->link.prev, prev,
+		link) : NULL;
+	wl_list_remove(&output->link);
 
 	if (server.focused_output == output)
-		server.focused_output = (output->next) ? output->next : output->prev;
+		server.focused_output = next ? next : prev;
 	if (mon == output)
-		mon = mon_head;
+		mon = wl_list_empty(&mon_list) ? NULL : wl_container_of(mon_list.next, mon, link);
 
 	wlr_color_transform_unref(output->color_transform);
 	effects_output_fini(output->effects);
 
-	desktop_t *d = output->desk_head;
-	while (d) {
-		desktop_t *next = d->next;
+	desktop_t *d, *dtmp;
+	wl_list_for_each_safe(d, dtmp, &output->desk_list, link) {
+		wl_list_remove(&d->link);
 
 		if (d->root) {
 			node_t *n = first_extrema(d->root);
@@ -411,22 +407,9 @@ static void handle_output_destroy(struct wl_listener *listener, void *data) {
 		}
 
 		d->output = NULL;
-		d->prev = NULL;
-		d->next = NULL;
-
-		if (!orphan_desk_head) {
-			orphan_desk_head = d;
-			orphan_desk_tail = d;
-		} else {
-			orphan_desk_tail->next = d;
-			d->prev = orphan_desk_tail;
-			orphan_desk_tail = d;
-		}
-
-		d = next;
+		wl_list_insert(orphan_desk_list.prev, &d->link);
 	}
-	output->desk_head = NULL;
-	output->desk_tail = NULL;
+	wl_list_init(&output->desk_list);
 	output->desk = NULL;
 
 	ipc_put_status(SUB_MASK_MONITOR_REMOVE, "monitor_remove[%s]\n", output->name);
@@ -463,15 +446,12 @@ void output_create(struct wlr_output *wlr_output) {
 	};
 
 	// restore orphaned desktops or create default workspace
-	if (orphan_desk_head) {
-		output->desk = orphan_desk_head;
-		output->desk_head = orphan_desk_head;
-		output->desk_tail = orphan_desk_tail;
-
-		output->desk_head->prev = NULL;
-
-		desktop_t *d = orphan_desk_head;
-		while (d) {
+	wl_list_init(&output->desk_list);
+	if (!wl_list_empty(&orphan_desk_list)) {
+		desktop_t *d, *dtmp;
+		wl_list_for_each_safe(d, dtmp, &orphan_desk_list, link) {
+			wl_list_remove(&d->link);
+			wl_list_insert(output->desk_list.prev, &d->link);
 			d->output = output;
 			if (d->root) {
 				node_t *n = first_extrema(d->root);
@@ -480,13 +460,12 @@ void output_create(struct wlr_output *wlr_output) {
 					n = next_leaf(n, d->root);
 				}
 			}
-			d = d->next;
 		}
 
-		orphan_desk_head = NULL;
-		orphan_desk_tail = NULL;
+		output->desk = wl_list_empty(&output->desk_list) ? NULL : wl_container_of(output->desk_list.next,
+			output->desk, link);
 
-		if (output->desk->root && output->desk->focus)
+		if (output->desk && output->desk->root && output->desk->focus)
 			focus_node(output, output->desk, output->desk->focus);
 		arrange(output, output->desk, true);
 	} else {
@@ -503,28 +482,17 @@ void output_create(struct wlr_output *wlr_output) {
 			d->focus = NULL;
 			d->output = output;
 
+			wl_list_insert(output->desk_list.prev, &d->link);
 			output->desk = d;
-			output->desk_head = d;
-			output->desk_tail = d;
 		}
 	}
 
 	// add to monitor linked list
+	wl_list_init(&output->link);
+	wl_list_insert(mon_list.prev, &output->link);
+
 	if (!mon)
 		mon = output;
-
-	if (!mon_head)
-		mon_head = output;
-
-	if (mon_tail) {
-		output->prev = mon_tail;
-		mon_tail->next = output;
-		mon_tail = output;
-	} else {
-		mon = output;
-		mon_head = output;
-		mon_tail = output;
-	}
 
 	if (!server.focused_output)
 		server.focused_output = output;
@@ -731,14 +699,16 @@ void output_update_scale(output_t *output, float scale) {
 	effects_invalidate_mica(output->effects);
 
 	// rearrange all desktop on this output
-	for (desktop_t *d = output->desk; d != NULL; d = d->next)
+	desktop_t *d;
+	wl_list_for_each(d, &output->desk_list, link)
 		arrange(output, d, true);
 
 	update_idle_inhibitors(NULL);
 }
 
 output_t *output_get_valid(void) {
-	for (output_t *m = mon_head; m != NULL; m = m->next)
+	output_t *m;
+	wl_list_for_each(m, &mon_list, link)
 		if (m->enabled && m->wlr_output)
 			return m;
 

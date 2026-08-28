@@ -97,7 +97,8 @@ void output_config_apply(struct output_config *oc) {
 	output_t *output = NULL;
 	struct wlr_output *wlr_output = NULL;
 
-	for (output_t *o = mon_head; o != NULL; o = o->next) {
+	output_t *o;
+	wl_list_for_each(o, &mon_list, link) {
 		if (strcmp(o->wlr_output->name, oc->name) == 0) {
 			output = o;
 			wlr_output = o->wlr_output;
@@ -271,7 +272,8 @@ void output_update_manager_config(void) {
 
 	struct wlr_output_configuration_v1 *config = wlr_output_configuration_v1_create();
 
-	for (output_t *output = mon_head; output != NULL; output = output->next) {
+	output_t *output;
+	wl_list_for_each(output, &mon_list, link) {
 		struct wlr_output_configuration_head_v1 *head = wlr_output_configuration_head_v1_create(config,
 			output->wlr_output);
 

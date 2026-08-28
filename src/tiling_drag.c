@@ -155,7 +155,8 @@ void tiling_drag_motion(void) {
 	}
 
 	node_t *target = NULL;
-	for (output_t *m = mon_head; m; m = m->next) {
+	output_t *m;
+	wl_list_for_each(m, &mon_list, link) {
 		desktop_t *d = m->desk;
 		if (!d || !d->root)
 			continue;

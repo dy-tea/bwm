@@ -99,27 +99,25 @@ void ipc_cmd_query(char **args, int num, int client_fd) {
 	if (streq("-T", *args) || streq("--tree", *args)) {
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "{\n");
 
-		output_t *m_start = filter_mon ? filter_mon : mon_head;
-		output_t *m_end = filter_mon ? filter_mon->next : NULL;
+		output_t *m_start = filter_mon ? filter_mon : (wl_list_empty(&mon_list) ? NULL :
+			wl_container_of(mon_list.next, m_start, link));
 
-		for (output_t *m = m_start; m != m_end; ) {
+		for (output_t *m = m_start; m != NULL; m = filter_mon ? NULL : (m->link.next == &mon_list ? NULL :
+				wl_container_of(m->link.next, m, link))) {
 			offset += snprintf(buf + offset, sizeof(buf) - offset,
 				"  \"monitor\": {\"name\": \"%s\", \"id\": %u},\n", m->name, m->id);
 
 			desktop_t *d_start = filter_desk ? filter_desk : m->desk;
-			desktop_t *d_end = filter_desk ? filter_desk->next : NULL;
-
-			for (desktop_t *d = d_start; d != d_end; ) {
+			for (desktop_t *d = d_start; d != NULL; d = filter_desk ? NULL : (d->link.next == &m->desk_list ?
+					NULL : wl_container_of(d->link.next, d, link))) {
 				offset += snprintf(buf + offset, sizeof(buf) - offset,
 					"  \"desktop\": {\"name\": \"%s\", \"id\": %u, \"layout\": %d},\n", d->name, d->id, d->layout);
 				if (filter_desk)
 					break;
-				d = d->next;
 			}
 
 			if (filter_mon)
 				break;
-			m = m->next;
 		}
 
 		toplevel_t *toplevel;
@@ -163,30 +161,30 @@ void ipc_cmd_query(char **args, int num, int client_fd) {
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "}\n");
 		send_success(client_fd, buf);
 	} else if (streq("-M", *args) || streq("--monitors", *args)) {
-		for (output_t *m = filter_mon ? filter_mon : mon_head; m != NULL; m = filter_mon ? NULL : m->next)
-				{
+		output_t *m;
+		wl_list_for_each(m, &mon_list, link) {
+			if (filter_mon && m != filter_mon)
+				continue;
 			if (use_names)
 				offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", m->name);
 			else
 				offset += snprintf(buf + offset, sizeof(buf) - offset, "%u %s\n", m->id, m->name);
-			if (filter_mon)
-				break;
 		}
 		send_success(client_fd, buf);
 	} else if (streq("-D", *args) || streq("--desktops", *args)) {
-		output_t *m_start = filter_mon ? filter_mon : mon_head;
-		for (output_t *m = m_start; m != NULL; m = filter_mon ? NULL : m->next) {
-			desktop_t *d_start = filter_desk ? filter_desk : m->desk;
-			for (desktop_t *d = d_start; d != NULL; d = filter_desk ? NULL : d->next) {
+		output_t *m;
+		wl_list_for_each(m, &mon_list, link) {
+			if (filter_mon && m != filter_mon)
+				continue;
+			desktop_t *d;
+			wl_list_for_each(d, &m->desk_list, link) {
+				if (filter_desk && d != filter_desk)
+					continue;
 				if (use_names)
 					offset += snprintf(buf + offset, sizeof(buf) - offset, "%s\n", d->name);
 				else
 					offset += snprintf(buf + offset, sizeof(buf) - offset, "%u %s\n", d->id, d->name);
-				if (filter_desk)
-					break;
 			}
-			if (filter_mon)
-				break;
 		}
 		send_success(client_fd, buf);
 	} else if (streq("-N", *args) || streq("--nodes", *args)) {

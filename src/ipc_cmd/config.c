@@ -35,10 +35,17 @@
 #include <wlr/xwayland.h>
 
 static void tabs_rebuild_all(void) {
-	for (output_t *m = mon_head; m; m = m->next)
-		for (desktop_t *d = m->desk; d; d = d->next)
+	output_t *m;
+	wl_list_for_each(m, &mon_list, link) {
+		desktop_t *d = m->desk;
+		while (d) {
 			if (d->root)
 				tabs_rebuild(d->root);
+			if (d->link.next == &m->desk_list)
+				break;
+			d = wl_container_of(d->link.next, d, link);
+		}
+	}
 }
 
 void ipc_cmd_config(char **args, int num, int client_fd) {
@@ -62,9 +69,13 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 		if (num >= 2) {
 			int val = atoi(args[1]);
 			window_gap = val;
-			for (output_t *m = mon_head; m != NULL; m = m->next)
-				for (desktop_t *d = m->desk_head; d != NULL; d = d->next)
+			output_t *m;
+			wl_list_for_each(m, &mon_list, link) {
+				desktop_t *d;
+				wl_list_for_each(d, &m->desk_list, link) {
 					d->window_gap = window_gap;
+				}
+			}
 			transaction_commit_dirty();
 			send_success(client_fd, "window_gap set\n");
 		} else {
@@ -599,7 +610,8 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 			int val = atoi(args[1]);
 			if (val >= 1 && val <= 8) {
 				blur_downsample = val;
-				for (output_t *m = mon_head; m; m = m->next) {
+				output_t *m;
+				wl_list_for_each(m, &mon_list, link) {
 					if (m && m->effects)
 						effects_output_resize(m->effects, m->width, m->height, m);
 				}
@@ -630,8 +642,9 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 	} else if (streq("mica_enabled", *args)) {
 		if (num >= 2) {
 			mica_enabled = (strcmp(args[1], "true") == 0);
-			for (output_t *output = mon_head; output; output = output->next)
-				effects_invalidate_mica(output->effects);
+			output_t *m;
+			wl_list_for_each(m, &mon_list, link)
+				effects_invalidate_mica(m->effects);
 			send_success(client_fd, "mica_enabled set\n");
 		} else {
 			send_success(client_fd, mica_enabled ? "true\n" : "false\n");
@@ -641,8 +654,9 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 			float val = (float)atof(args[1]);
 			if (val >= 0.0f && val <= 1.0f) {
 				mica_tint_strength = val;
-				for (output_t *output = mon_head; output; output = output->next)
-					effects_invalidate_mica(output->effects);
+				output_t *m;
+				wl_list_for_each(m, &mon_list, link)
+					effects_invalidate_mica(m->effects);
 				send_success(client_fd, "mica_tint_strength set\n");
 			} else {
 				send_failure(client_fd, "config mica_tint_strength: value must be 0.0-1.0\n");
@@ -657,8 +671,9 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 			float rgba[4];
 			if (ipc_parse_color_float(args[1], rgba)) {
 				memcpy(mica_tint, rgba, sizeof(rgba));
-				for (output_t *output = mon_head; output; output = output->next)
-					effects_invalidate_mica(output->effects);
+				output_t *m;
+				wl_list_for_each(m, &mon_list, link)
+					effects_invalidate_mica(m->effects);
 				send_success(client_fd, "mica_tint set\n");
 			} else {
 				send_failure(client_fd, "config mica_tint: expected \"R G B [A]\"\n");
