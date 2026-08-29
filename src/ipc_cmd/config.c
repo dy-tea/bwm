@@ -1,6 +1,5 @@
 #include "animation.h"
 #include "bezier.h"
-#include "config.h"
 #include "effects.h"
 #include "idle_power.h"
 #include "ipc.h"
@@ -57,56 +56,56 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 	if (streq("border_width", *args)) {
 		if (num >= 2) {
 			int val = atoi(args[1]);
-			border_width = val;
+			settings.border_width = val;
 			transaction_commit_dirty();
 			send_success(client_fd, "border_width set\n");
 		} else {
 			char buf[64];
-			snprintf(buf, sizeof(buf), "%d\n", border_width);
+			snprintf(buf, sizeof(buf), "%d\n", settings.border_width);
 			send_success(client_fd, buf);
 		}
 	} else if (streq("window_gap", *args)) {
 		if (num >= 2) {
 			int val = atoi(args[1]);
-			window_gap = val;
+			settings.window_gap = val;
 			output_t *m;
 			wl_list_for_each(m, &mon_list, link) {
 				desktop_t *d;
 				wl_list_for_each(d, &m->desk_list, link) {
-					d->window_gap = window_gap;
+					d->window_gap = settings.window_gap;
 				}
 			}
 			transaction_commit_dirty();
 			send_success(client_fd, "window_gap set\n");
 		} else {
 			char buf[64];
-			snprintf(buf, sizeof(buf), "%d\n", window_gap);
+			snprintf(buf, sizeof(buf), "%d\n", settings.window_gap);
 			send_success(client_fd, buf);
 		}
 	} else if (streq("single_monocle", *args)) {
-		ipc_handle_bool(args, num, client_fd, &single_monocle, IPC_FLAG_COMMIT);
+		ipc_handle_bool(args, num, client_fd, &settings.single_monocle, IPC_FLAG_COMMIT);
 	} else if (streq("borderless_monocle", *args)) {
-		ipc_handle_bool(args, num, client_fd, &borderless_monocle, IPC_FLAG_COMMIT);
+		ipc_handle_bool(args, num, client_fd, &settings.borderless_monocle, IPC_FLAG_COMMIT);
 	} else if (streq("borderless_singleton", *args)) {
-		ipc_handle_bool(args, num, client_fd, &borderless_singleton, IPC_FLAG_COMMIT);
+		ipc_handle_bool(args, num, client_fd, &settings.borderless_singleton, IPC_FLAG_COMMIT);
 	} else if (streq("smart_gaps", *args)) {
-		ipc_handle_bool(args, num, client_fd, &smart_gaps, IPC_FLAG_COMMIT);
+		ipc_handle_bool(args, num, client_fd, &settings.smart_gaps, IPC_FLAG_COMMIT);
 	} else if (streq("smart_borders", *args)) {
-		ipc_handle_bool(args, num, client_fd, &smart_borders, IPC_FLAG_COMMIT);
+		ipc_handle_bool(args, num, client_fd, &settings.smart_borders, IPC_FLAG_COMMIT);
 	} else if (streq("respect_tiled_min_size", *args)) {
-		ipc_handle_bool(args, num, client_fd, &respect_tiled_min_size, IPC_FLAG_COMMIT);
+		ipc_handle_bool(args, num, client_fd, &settings.respect_tiled_min_size, IPC_FLAG_COMMIT);
 	} else if (streq("focus_wrapping", *args)) {
-		ipc_handle_bool(args, num, client_fd, &focus_wrapping, IPC_FLAG_COMMIT);
+		ipc_handle_bool(args, num, client_fd, &settings.focus_wrapping, IPC_FLAG_COMMIT);
 	} else if (streq("focus_on_activate", *args)) {
 		if (num >= 2) {
 			if (strcmp(args[1], "focus") == 0)
-				focus_on_activate = FOCUS_ON_ACTIVATE_FOCUS;
+				settings.focus_on_activate = FOCUS_ON_ACTIVATE_FOCUS;
 			else if (strcmp(args[1], "none") == 0)
-				focus_on_activate = FOCUS_ON_ACTIVATE_NONE;
+				settings.focus_on_activate = FOCUS_ON_ACTIVATE_NONE;
 			else if (strcmp(args[1], "smart") == 0)
-				focus_on_activate = FOCUS_ON_ACTIVATE_SMART;
+				settings.focus_on_activate = FOCUS_ON_ACTIVATE_SMART;
 			else if (strcmp(args[1], "urgent") == 0)
-				focus_on_activate = FOCUS_ON_ACTIVATE_URGENT;
+				settings.focus_on_activate = FOCUS_ON_ACTIVATE_URGENT;
 			else {
 				send_failure(client_fd,
 					"config focus_on_activate: expected \"focus\", \"none\", \"smart\", or \"urgent\"\n");
@@ -116,30 +115,30 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 			send_success(client_fd, "focus_on_activate set\n");
 		} else {
 			const char *mode = "focus";
-			if (focus_on_activate == FOCUS_ON_ACTIVATE_NONE)
+			if (settings.focus_on_activate == FOCUS_ON_ACTIVATE_NONE)
 				mode = "none";
-			else if (focus_on_activate == FOCUS_ON_ACTIVATE_SMART)
+			else if (settings.focus_on_activate == FOCUS_ON_ACTIVATE_SMART)
 				mode = "smart";
-			else if (focus_on_activate == FOCUS_ON_ACTIVATE_URGENT)
+			else if (settings.focus_on_activate == FOCUS_ON_ACTIVATE_URGENT)
 				mode = "urgent";
 			char buf[64];
 			snprintf(buf, sizeof(buf), "%s\n", mode);
 			send_success(client_fd, buf);
 		}
 	} else if (streq("hide_lone_tab", *args)) {
-		ipc_handle_bool(args, num, client_fd, &hide_lone_tab, IPC_FLAG_COMMIT);
+		ipc_handle_bool(args, num, client_fd, &settings.hide_lone_tab, IPC_FLAG_COMMIT);
 	} else if (streq("gapless_monocle", *args)) {
-		ipc_handle_bool(args, num, client_fd, &gapless_monocle, IPC_FLAG_COMMIT);
+		ipc_handle_bool(args, num, client_fd, &settings.gapless_monocle, IPC_FLAG_COMMIT);
 	} else if (streq("decoration_mode", *args)) {
 		if (num >= 2) {
 			if (strcmp(args[1], "none") == 0)
-				decoration_mode = DECORATION_NONE;
+				settings.decoration_mode = DECORATION_NONE;
 			else if (strcmp(args[1], "tabs") == 0)
-				decoration_mode = DECORATION_TABS;
+				settings.decoration_mode = DECORATION_TABS;
 			else if (strcmp(args[1], "always") == 0)
-				decoration_mode = DECORATION_ALWAYS;
+				settings.decoration_mode = DECORATION_ALWAYS;
 			else if (strcmp(args[1], "csd") == 0)
-				decoration_mode = DECORATION_CSD;
+				settings.decoration_mode = DECORATION_CSD;
 			else {
 				send_failure(client_fd,
 					"config decoration_mode: expected \"none\", \"tabs\", \"always\", or \"csd\"\n");
@@ -156,7 +155,7 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 			send_success(client_fd, "decoration_mode set\n");
 		} else {
 			const char *mode_str = "";
-			switch (decoration_mode) {
+			switch (settings.decoration_mode) {
 			case DECORATION_NONE:
 				mode_str = "none\n";
 				break;
@@ -173,24 +172,24 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 			send_success(client_fd, mode_str);
 		}
 	} else if (streq("enable_animations", *args)) {
-		ipc_handle_bool(args, num, client_fd, &enable_animations, IPC_FLAG_NONE);
+		ipc_handle_bool(args, num, client_fd, &settings.enable_animations, IPC_FLAG_NONE);
 	} else if (streq("workspace_anim_direction", *args)) {
 		if (num >= 2) {
 			if (streq(args[1], "vertical")) {
-				workspace_anim_direction = WORKSPACE_ANIM_VERTICAL;
+				settings.workspace_anim_direction = WORKSPACE_ANIM_VERTICAL;
 				send_success(client_fd, "workspace_anim_direction set to vertical\n");
 			} else if (streq(args[1], "horizontal")) {
-				workspace_anim_direction = WORKSPACE_ANIM_HORIZONTAL;
+				settings.workspace_anim_direction = WORKSPACE_ANIM_HORIZONTAL;
 				send_success(client_fd, "workspace_anim_direction set to horizontal\n");
 			} else {
 				send_failure(client_fd, "workspace_anim_direction: must be 'vertical' or 'horizontal'\n");
 			}
 		} else {
 			send_success(client_fd,
-				workspace_anim_direction == WORKSPACE_ANIM_VERTICAL ? "vertical\n" : "horizontal\n");
+				settings.workspace_anim_direction == WORKSPACE_ANIM_VERTICAL ? "vertical\n" : "horizontal\n");
 		}
 	} else if (streq("workspace_anim_slide_up", *args)) {
-		ipc_handle_bool(args, num, client_fd, &workspace_anim_slide_up, IPC_FLAG_NONE);
+		ipc_handle_bool(args, num, client_fd, &settings.workspace_anim_slide_up, IPC_FLAG_NONE);
 	} else if (streq("edge_scroller_pointer_focus", *args)) {
 		ipc_handle_bool(args, num, client_fd, &edge_scroller_pointer_focus, IPC_FLAG_NONE);
 	} else if (args[0][0] == 't' && strncmp(*args, "tab_color_", 10) == 0) {
@@ -315,11 +314,11 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 	} else if (streq("focus_follows_pointer", *args) || streq("focus_follows_mouse", *args)) {
 		if (num >= 2) {
 			if (strcmp(args[1], "no") == 0 || strcmp(args[1], "false") == 0)
-				focus_follows_mouse = FOLLOWS_NO;
+				settings.focus_follows_mouse = FOLLOWS_NO;
 			else if (strcmp(args[1], "yes") == 0 || strcmp(args[1], "true") == 0)
-				focus_follows_mouse = FOLLOWS_YES;
+				settings.focus_follows_mouse = FOLLOWS_YES;
 			else if (strcmp(args[1], "always") == 0)
-				focus_follows_mouse = FOLLOWS_ALWAYS;
+				settings.focus_follows_mouse = FOLLOWS_ALWAYS;
 			else {
 				send_failure(client_fd,
 					"config focus_follows_pointer: expected \"no\", \"yes\", or \"always\"\n");
@@ -329,21 +328,21 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 			send_success(client_fd, "focus_follows_pointer set\n");
 		} else {
 			const char *mode = "no";
-			if (focus_follows_mouse == FOLLOWS_YES)
+			if (settings.focus_follows_mouse == FOLLOWS_YES)
 				mode = "yes";
-			else if (focus_follows_mouse == FOLLOWS_ALWAYS)
+			else if (settings.focus_follows_mouse == FOLLOWS_ALWAYS)
 				mode = "always";
 			char buf[64];
 			snprintf(buf, sizeof(buf), "%s\n", mode);
 			send_success(client_fd, buf);
 		}
 	} else if (streq("pointer_follows_focus", *args)) {
-		ipc_handle_bool(args, num, client_fd, &pointer_follows_focus, IPC_FLAG_COMMIT);
+		ipc_handle_bool(args, num, client_fd, &settings.pointer_follows_focus, IPC_FLAG_COMMIT);
 	} else if (streq("split_ratio", *args)) {
 		if (num >= 2) {
 			double val = atof(args[1]);
 			if (val > 0 && val < 1) {
-				split_ratio = val;
+				settings.split_ratio = val;
 				transaction_commit_dirty();
 				send_success(client_fd, "split_ratio set\n");
 			} else {
@@ -351,67 +350,72 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 			}
 		} else {
 			char buf[64];
-			snprintf(buf, sizeof(buf), "%f\n", split_ratio);
+			snprintf(buf, sizeof(buf), "%f\n", settings.split_ratio);
 			send_success(client_fd, buf);
 		}
 	} else if (streq("top_padding", *args)) {
-		ipc_handle_int(args, num, client_fd, &padding.top, IPC_FLAG_COMMIT, INT_MIN, INT_MAX, NULL);
+		ipc_handle_int(args, num, client_fd, &settings.padding.top, IPC_FLAG_COMMIT, INT_MIN, INT_MAX,
+			NULL);
 	} else if (streq("right_padding", *args)) {
-		ipc_handle_int(args, num, client_fd, &padding.right, IPC_FLAG_COMMIT, INT_MIN, INT_MAX, NULL);
+		ipc_handle_int(args, num, client_fd, &settings.padding.right, IPC_FLAG_COMMIT, INT_MIN, INT_MAX,
+			NULL);
 	} else if (streq("bottom_padding", *args)) {
-		ipc_handle_int(args, num, client_fd, &padding.bottom, IPC_FLAG_COMMIT, INT_MIN, INT_MAX, NULL);
+		ipc_handle_int(args, num, client_fd, &settings.padding.bottom, IPC_FLAG_COMMIT, INT_MIN, INT_MAX,
+			NULL);
 	} else if (streq("left_padding", *args)) {
-		ipc_handle_int(args, num, client_fd, &padding.left, IPC_FLAG_COMMIT, INT_MIN, INT_MAX, NULL);
+		ipc_handle_int(args, num, client_fd, &settings.padding.left, IPC_FLAG_COMMIT, INT_MIN, INT_MAX,
+			NULL);
 	} else if (streq("normal_border_color", *args)) {
 		if (num >= 2) {
-			strncpy(normal_border_color, args[1], sizeof(normal_border_color) - 1);
-			normal_border_color[sizeof(normal_border_color) - 1] = '\0';
+			strncpy(settings.normal_border_color, args[1], sizeof(settings.normal_border_color) - 1);
+			settings.normal_border_color[sizeof(settings.normal_border_color) - 1] = '\0';
 			refresh_border_colors();
 			transaction_commit_dirty();
 			send_success(client_fd, "normal_border_color set\n");
 		} else {
-			send_success(client_fd, normal_border_color);
+			send_success(client_fd, settings.normal_border_color);
 			send_success(client_fd, "\n");
 		}
 	} else if (streq("active_border_color", *args)) {
 		if (num >= 2) {
-			strncpy(active_border_color, args[1], sizeof(active_border_color) - 1);
-			active_border_color[sizeof(active_border_color) - 1] = '\0';
+			strncpy(settings.active_border_color, args[1], sizeof(settings.active_border_color) - 1);
+			settings.active_border_color[sizeof(settings.active_border_color) - 1] = '\0';
 			refresh_border_colors();
 			transaction_commit_dirty();
 			send_success(client_fd, "active_border_color set\n");
 		} else {
-			send_success(client_fd, active_border_color);
+			send_success(client_fd, settings.active_border_color);
 			send_success(client_fd, "\n");
 		}
 	} else if (streq("focused_border_color", *args)) {
 		if (num >= 2) {
-			strncpy(focused_border_color, args[1], sizeof(focused_border_color) - 1);
-			focused_border_color[sizeof(focused_border_color) - 1] = '\0';
+			strncpy(settings.focused_border_color, args[1], sizeof(settings.focused_border_color) - 1);
+			settings.focused_border_color[sizeof(settings.focused_border_color) - 1] = '\0';
 			refresh_border_colors();
 			transaction_commit_dirty();
 			send_success(client_fd, "focused_border_color set\n");
 		} else {
-			send_success(client_fd, focused_border_color);
+			send_success(client_fd, settings.focused_border_color);
 			send_success(client_fd, "\n");
 		}
 	} else if (streq("presel_feedback_color", *args)) {
 		if (num >= 2) {
-			strncpy(presel_feedback_color, args[1], sizeof(presel_feedback_color) - 1);
-			presel_feedback_color[sizeof(presel_feedback_color) - 1] = '\0';
+			strncpy(settings.presel_feedback_color, args[1], sizeof(settings.presel_feedback_color) - 1);
+			settings.presel_feedback_color[sizeof(settings.presel_feedback_color) - 1] = '\0';
 			transaction_commit_dirty();
 			send_success(client_fd, "presel_feedback_color set\n");
 		} else {
-			send_success(client_fd, presel_feedback_color);
+			send_success(client_fd, settings.presel_feedback_color);
 			send_success(client_fd, "\n");
 		}
 	} else if (streq("tiling_drag_indicator_color", *args)) {
 		if (num >= 2) {
-			strncpy(tiling_drag_indicator_color, args[1], sizeof(tiling_drag_indicator_color) - 1);
-			tiling_drag_indicator_color[sizeof(tiling_drag_indicator_color) - 1] = '\0';
+			strncpy(settings.tiling_drag_indicator_color, args[1],
+				sizeof(settings.tiling_drag_indicator_color) - 1);
+			settings.tiling_drag_indicator_color[sizeof(settings.tiling_drag_indicator_color) - 1] = '\0';
 			send_success(client_fd, "tiling_drag_indicator_color set\n");
 		} else {
-			send_success(client_fd, tiling_drag_indicator_color);
+			send_success(client_fd, settings.tiling_drag_indicator_color);
 			send_success(client_fd, "\n");
 		}
 	} else if (streq("normal_border_gradient", *args) || streq("active_border_gradient",
@@ -421,11 +425,11 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 			*args) || streq("focused_border_gradient_lerp", *args)) {
 		border_theme_t *bt;
 		if (args[0][0] == 'n')
-			bt = &normal_border_theme;
+			bt = &settings.normal_border_theme;
 		else if (args[0][0] == 'a')
-			bt = &active_border_theme;
+			bt = &settings.active_border_theme;
 		else
-			bt = &focused_border_theme;
+			bt = &settings.focused_border_theme;
 
 		bool is_gradient2 = (strstr(*args, "gradient2") != NULL);
 		bool is_lerp = (strstr(*args, "lerp") != NULL);
@@ -478,11 +482,11 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 	} else if (streq("automatic_scheme", *args)) {
 		if (num >= 2) {
 			if (streq("longest_side", args[1]) || streq("longest-side", args[1])) {
-				automatic_scheme = SCHEME_LONGEST_SIDE;
+				settings.automatic_scheme = SCHEME_LONGEST_SIDE;
 			} else if (streq("alternate", args[1])) {
-				automatic_scheme = SCHEME_ALTERNATE;
+				settings.automatic_scheme = SCHEME_ALTERNATE;
 			} else if (streq("spiral", args[1])) {
-				automatic_scheme = SCHEME_SPIRAL;
+				settings.automatic_scheme = SCHEME_SPIRAL;
 			} else {
 				send_failure(client_fd, "config automatic_scheme: invalid value\n");
 				return;
@@ -492,9 +496,9 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 		} else {
 			char scheme_buf[64];
 			const char *scheme_str = "spiral";
-			if (automatic_scheme == SCHEME_LONGEST_SIDE)
+			if (settings.automatic_scheme == SCHEME_LONGEST_SIDE)
 				scheme_str = "longest_side";
-			else if (automatic_scheme == SCHEME_ALTERNATE)
+			else if (settings.automatic_scheme == SCHEME_ALTERNATE)
 				scheme_str = "alternate";
 			snprintf(scheme_buf, sizeof(scheme_buf), "%s\n", scheme_str);
 			send_success(client_fd, scheme_buf);
@@ -502,36 +506,37 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 	} else if (streq("initial_polarity", *args)) {
 		if (num >= 2) {
 			if (streq("first_child", args[1]) || streq("first-child", args[1])) {
-				initial_polarity = FIRST_CHILD;
+				settings.initial_polarity = FIRST_CHILD;
 			} else if (streq("second_child", args[1]) || streq("second-child", args[1])) {
-				initial_polarity = SECOND_CHILD;
+				settings.initial_polarity = SECOND_CHILD;
 			} else {
 				send_failure(client_fd, "config initial_polarity: invalid value\n");
 				return;
 			}
 			send_success(client_fd, "initial_polarity set\n");
 		} else {
-			send_success(client_fd, initial_polarity == FIRST_CHILD ? "first_child\n" : "second_child\n");
+			send_success(client_fd,
+				settings.initial_polarity == FIRST_CHILD ? "first_child\n" : "second_child\n");
 		}
 	} else if (streq("directional_focus_tightness", *args)) {
-		ipc_handle_int(args, num, client_fd, &directional_focus_tightness, IPC_FLAG_NONE, 0, 100,
+		ipc_handle_int(args, num, client_fd, &settings.directional_focus_tightness, IPC_FLAG_NONE, 0, 100,
 			"invalid value");
 	} else if (streq("mapping_events_count", *args)) {
-		ipc_handle_int(args, num, client_fd, &mapping_events_count, IPC_FLAG_NONE, 0, 1000000,
+		ipc_handle_int(args, num, client_fd, &settings.mapping_events_count, IPC_FLAG_NONE, 0, 1000000,
 			"invalid value");
 	} else if (streq("minimize_to_scratchpad", *args)) {
-		ipc_handle_bool(args, num, client_fd, &minimize_to_scratchpad, IPC_FLAG_NONE);
+		ipc_handle_bool(args, num, client_fd, &settings.minimize_to_scratchpad, IPC_FLAG_NONE);
 	} else if (streq("ignore_ewmh_fullscreen", *args)) {
-		ipc_handle_int(args, num, client_fd, &ignore_ewmh_fullscreen, IPC_FLAG_NONE, 0, 2,
+		ipc_handle_int(args, num, client_fd, &settings.ignore_ewmh_fullscreen, IPC_FLAG_NONE, 0, 2,
 			"invalid value (0-2)");
 	} else if (streq("click_to_focus", *args)) {
-		ipc_handle_bool(args, num, client_fd, &click_to_focus, IPC_FLAG_NONE);
+		ipc_handle_bool(args, num, client_fd, &settings.click_to_focus, IPC_FLAG_NONE);
 	} else if (streq("record_history", *args)) {
-		ipc_handle_bool(args, num, client_fd, &record_history, IPC_FLAG_NONE);
+		ipc_handle_bool(args, num, client_fd, &settings.record_history, IPC_FLAG_NONE);
 	} else if (streq("allow_tearing", *args)) {
-		ipc_handle_bool(args, num, client_fd, &allow_tearing, IPC_FLAG_COMMIT);
+		ipc_handle_bool(args, num, client_fd, &settings.allow_tearing, IPC_FLAG_COMMIT);
 	} else if (streq("auto_float_dialogs", *args)) {
-		ipc_handle_bool(args, num, client_fd, &auto_float_dialogs, IPC_FLAG_NONE);
+		ipc_handle_bool(args, num, client_fd, &settings.auto_float_dialogs, IPC_FLAG_NONE);
 	} else if (streq("blur_enabled", *args)) {
 		ipc_handle_bool(args, num, client_fd, &blur_enabled, IPC_FLAG_NONE);
 	} else if (streq("blur_algorithm", *args)) {
@@ -845,41 +850,41 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 			}
 		}
 	} else if (streq("shadow_size", *args)) {
-		ipc_handle_float(args, num, client_fd, &shadow_size, IPC_FLAG_NONE, 0.0f, 100.0f, "%.1f\n",
-			"value must be 0-100");
+		ipc_handle_float(args, num, client_fd, &settings.shadow_size, IPC_FLAG_NONE, 0.0f, 100.0f,
+			"%.1f\n", "value must be 0-100");
 	} else if (streq("shadow_offset_x", *args)) {
-		ipc_handle_float(args, num, client_fd, &shadow_offset_x, IPC_FLAG_NONE, -100.0f, 100.0f, "%.1f\n",
-			"value must be -100-100");
+		ipc_handle_float(args, num, client_fd, &settings.shadow_offset_x, IPC_FLAG_NONE, -100.0f, 100.0f,
+			"%.1f\n", "value must be -100-100");
 	} else if (streq("shadow_offset_y", *args)) {
-		ipc_handle_float(args, num, client_fd, &shadow_offset_y, IPC_FLAG_NONE, -100.0f, 100.0f, "%.1f\n",
-			"value must be -100-100");
+		ipc_handle_float(args, num, client_fd, &settings.shadow_offset_y, IPC_FLAG_NONE, -100.0f, 100.0f,
+			"%.1f\n", "value must be -100-100");
 	} else if (streq("shadow_color", *args)) {
 		if (num >= 2) {
 			float rgba[4];
 			if (ipc_parse_color_float(args[1], rgba)) {
-				memcpy(shadow_color, rgba, sizeof(rgba));
+				memcpy(settings.shadow_color, rgba, sizeof(rgba));
 				send_success(client_fd, "shadow_color set\n");
 			} else {
 				send_failure(client_fd, "config shadow_color: expected \"R G B [A]\"\n");
 			}
 		} else {
 			char buf[128];
-			ipc_format_color_float(buf, sizeof(buf), shadow_color);
+			ipc_format_color_float(buf, sizeof(buf), settings.shadow_color);
 			send_success(client_fd, buf);
 		}
 	} else if (streq("render_unfocused_fps", *args)) {
-		ipc_handle_int(args, num, client_fd, &render_unfocused_fps, IPC_FLAG_NONE, 1, INT_MAX,
+		ipc_handle_int(args, num, client_fd, &settings.render_unfocused_fps, IPC_FLAG_NONE, 1, INT_MAX,
 			"value must be >=1");
 	} else if (streq("idle_timeout", *args)) {
-		if (ipc_handle_int(args, num, client_fd, &idle_timeout, IPC_FLAG_NONE, 0, 86400,
+		if (ipc_handle_int(args, num, client_fd, &settings.idle_timeout, IPC_FLAG_NONE, 0, 86400,
 			"value must be 0-86400"))
 			idle_power_reset_timer();
 	} else if (streq("idle_dpms", *args)) {
-		if (ipc_handle_bool(args, num, client_fd, &idle_dpms, IPC_FLAG_NONE))
+		if (ipc_handle_bool(args, num, client_fd, &settings.idle_dpms, IPC_FLAG_NONE))
 			idle_power_reset_timer();
 	} else if (streq("realtime_scheduling", *args)) {
-		ipc_handle_bool(args, num, client_fd, &realtime_scheduling, IPC_FLAG_NONE);
-		if (realtime_scheduling)
+		ipc_handle_bool(args, num, client_fd, &settings.realtime_scheduling, IPC_FLAG_NONE);
+		if (settings.realtime_scheduling)
 			set_rr_scheduling();
 	} else {
 		send_failure(client_fd, "config: unknown setting\n");

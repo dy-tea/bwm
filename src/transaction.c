@@ -388,7 +388,7 @@ static void transaction_apply(transaction_t *txn) {
 		return;
 	}
 
-	if (debug_txn_timings) {
+	if (settings.debug_txn_timings) {
 		struct timespec now;
 		clock_gettime(CLOCK_MONOTONIC, &now);
 		double ms = (now.tv_sec - txn->commit_time.tv_sec) * 1000.0 + (now.tv_nsec -
@@ -544,7 +544,7 @@ static void transaction_commit(transaction_t *txn) {
 	wlr_log(WLR_DEBUG, "transaction_commit: txn=%p with %zu instructions", (void *)txn,
 		(size_t)wl_list_length(&txn->instructions));
 
-	if (debug_txn_timings)
+	if (settings.debug_txn_timings)
 		clock_gettime(CLOCK_MONOTONIC, &txn->commit_time);
 
 	size_t num_configures = 0;
@@ -606,10 +606,10 @@ static void transaction_commit(transaction_t *txn) {
 		(size_t)wl_list_length(&txn->instructions), txn->num_waiting);
 
 	// debug overrides
-	if (debug_noatomic) {
+	if (settings.debug_noatomic) {
 		wlr_log(WLR_DEBUG, "debug_noatomic: forcing immediate apply");
 		txn->num_waiting = 0;
-	} else if (debug_txn_wait) {
+	} else if (settings.debug_txn_wait) {
 		wlr_log(WLR_DEBUG, "debug_txn_wait: forcing transaction timeout");
 		txn->num_waiting += 1000000;
 	}
@@ -627,7 +627,7 @@ static void transaction_commit(transaction_t *txn) {
 			txn);
 
 		if (txn->timer)
-			wl_event_source_timer_update(txn->timer, txn_timeout_ms);
+			wl_event_source_timer_update(txn->timer, settings.txn_timeout_ms);
 
 		txn_state.queued_transaction = txn;
 	}

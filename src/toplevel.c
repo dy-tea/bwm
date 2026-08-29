@@ -101,7 +101,7 @@ static bool toplevel_should_use_server_decorations(toplevel_t *tl) {
 	if (!tl || !tl->node)
 		return false;
 
-	switch (decoration_mode) {
+	switch (settings.decoration_mode) {
 	case DECORATION_NONE:
 	case DECORATION_TABS:
 		return true;
@@ -617,7 +617,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
 			.height = base_rect.height
 		};
 		n->client->state = STATE_PSEUDO_TILED;
-	} else if (auto_float_dialogs && toplevel->is_dialog) {
+	} else if (settings.auto_float_dialogs && toplevel->is_dialog) {
 		toplevel_set_floating(toplevel, n, target_output);
 	}
 
@@ -693,7 +693,7 @@ void toplevel_map(struct wl_listener *listener, void *data) {
 void toplevel_freeze_sibling_buffers(desktop_t *d, node_t *n) {
 	if (!d || !d->root)
 		return;
-	if (!enable_animations)
+	if (!settings.enable_animations)
 		return;
 	if (n->client && n->client->flags.anim_disabled)
 		return;
@@ -738,7 +738,7 @@ void toplevel_unmap(struct wl_listener *listener, void *data) {
 	if (!animation_fade_out(toplevel))
 		animation_cancel_node(toplevel->node);
 
-	if (enable_animations && toplevel->node->client && toplevel->node->client->flags.shown)
+	if (settings.enable_animations && toplevel->node->client && toplevel->node->client->flags.shown)
 		toplevel_save_buffer(toplevel);
 
 	node_t *n = toplevel->node;
@@ -1168,7 +1168,7 @@ void toplevel_request_minimize(struct wl_listener *listener, void *data) {
 	if (!toplevel_is_ready(toplevel))
 		return;
 
-	if (minimize_to_scratchpad)
+	if (settings.minimize_to_scratchpad)
 		scratchpad_add(toplevel->node);
 }
 
@@ -1414,7 +1414,7 @@ bool toplevel_can_tear(struct toplevel_t *toplevel) {
 		return true;
 
 	// global allow_tearing toggle
-	if (allow_tearing)
+	if (settings.allow_tearing)
 		return true;
 
 	return false;

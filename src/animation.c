@@ -368,7 +368,7 @@ void animation_cancel_scene_tree(struct wlr_scene_tree *scene_tree) {
 }
 
 bool animation_fade_in(struct toplevel_t *toplevel) {
-	if (!toplevel || !toplevel->node || !toplevel->scene_tree || !enable_animations)
+	if (!toplevel || !toplevel->node || !toplevel->scene_tree || !settings.enable_animations)
 		return false;
 
 	if (!anim_type_configs[2].enabled)
@@ -408,7 +408,7 @@ bool animation_fade_in(struct toplevel_t *toplevel) {
 }
 
 bool animation_fade_in_layer(layer_surface_t *layer) {
-	if (!layer || !layer->scene_tree || !layer->output || !enable_animations)
+	if (!layer || !layer->scene_tree || !layer->output || !settings.enable_animations)
 		return false;
 
 	if (!anim_type_configs[4].enabled)
@@ -437,7 +437,7 @@ bool animation_fade_in_layer(layer_surface_t *layer) {
 
 bool animation_fade_out(toplevel_t *toplevel) {
 	if (!toplevel || !toplevel->scene_tree || !toplevel->node || !toplevel->node->output ||
-		!enable_animations)
+		!settings.enable_animations)
 		return false;
 
 	if (!anim_type_configs[3].enabled)
@@ -465,7 +465,7 @@ bool animation_fade_out(toplevel_t *toplevel) {
 }
 
 bool animation_fade_out_layer(layer_surface_t *layer) {
-	if (!layer || !layer->saved_tree || !layer->output || !enable_animations)
+	if (!layer || !layer->saved_tree || !layer->output || !settings.enable_animations)
 		return false;
 
 	if (!anim_type_configs[5].enabled)
@@ -508,7 +508,7 @@ bool animation_node_workspace_slide_out(node_t *node) {
 
 bool animation_start_workspace_slide(output_t *output, node_t *node,
 		struct wlr_scene_tree *scene_tree, struct wlr_box from, struct wlr_box to, bool slide_out) {
-	if (!node || !scene_tree || !output || !enable_animations)
+	if (!node || !scene_tree || !output || !settings.enable_animations)
 		return false;
 
 	if (!anim_type_configs[6].enabled)
@@ -565,7 +565,7 @@ static void update_resize_entry(animation_entry_t *entry);
 
 bool animation_start_resize(toplevel_t *toplevel, struct wlr_box from, struct wlr_box to) {
 	if (!toplevel || !toplevel->scene_tree || !toplevel->content_tree || !toplevel->node ||
-		!enable_animations)
+		!settings.enable_animations)
 		return false;
 
 	if (!anim_type_configs[1].enabled)
@@ -866,7 +866,7 @@ bool animation_apply_geometry_from(node_t *node, struct wlr_scene_tree *scene_tr
 		return true;
 
 	output_t *output = node->output;
-	if (!animate || !enable_animations || !output || !output->enabled || !node->client ||
+	if (!animate || !settings.enable_animations || !output || !output->enabled || !node->client ||
 			!node->client->flags.shown) {
 		animation_cancel_node(node);
 		wlr_scene_node_set_position(&scene_tree->node, target.x, target.y);

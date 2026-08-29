@@ -755,7 +755,7 @@ void send_to_desktop_by_name(const char *name) {
 	// ensure the moved node respects initial_polarity
 	// in spiral mode, insert_node may place it as second_child regardless
 	if (n->parent != NULL) {
-		if (initial_polarity == FIRST_CHILD && n->parent->second_child == n) {
+		if (settings.initial_polarity == FIRST_CHILD && n->parent->second_child == n) {
 			// node is second child but should be first, swap them
 			node_t *p = n->parent;
 			node_t *sibling = p->first_child;
@@ -765,7 +765,7 @@ void send_to_desktop_by_name(const char *name) {
 
 			if (sibling != NULL)
 				sibling->parent = p;
-		} else if (initial_polarity == SECOND_CHILD && n->parent->first_child == n) {
+		} else if (settings.initial_polarity == SECOND_CHILD && n->parent->first_child == n) {
 			// node is first child but should be second, swap them
 			node_t *p = n->parent;
 			node_t *sibling = p->second_child;

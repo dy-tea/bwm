@@ -114,7 +114,7 @@ static void set_node_geom(node_t *n, struct wlr_box geom, output_t *m, desktop_t
 			r.height = MIN_HEIGHT;
 	}
 
-	if (respect_tiled_min_size) {
+	if (settings.respect_tiled_min_size) {
 		if ((int)n->constraints.min_width > MIN_WIDTH && r.width < (int)n->constraints.min_width &&
 				geom.width > 0) {
 			r.x = geom.x + (geom.width - (int)n->constraints.min_width) / 2;
@@ -607,7 +607,7 @@ bool master_stack_focus(desktop_t *d, direction_t direction) {
 	if (!nodes)
 		return false;
 
-	int target = directional_target(nodes, count, index, direction, focus_wrapping);
+	int target = directional_target(nodes, count, index, direction, settings.focus_wrapping);
 	if (target >= 0) {
 		d->focus = nodes[target];
 		if (d->output)
@@ -625,7 +625,7 @@ bool master_stack_swap(output_t *m, desktop_t *d, direction_t direction) {
 	if (!nodes)
 		return false;
 
-	int target = directional_target(nodes, count, index, direction, focus_wrapping);
+	int target = directional_target(nodes, count, index, direction, settings.focus_wrapping);
 	if (target < 0) {
 		free(nodes);
 		return false;

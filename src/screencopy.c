@@ -231,7 +231,7 @@ static void block_out_window(toplevel_t *tl, struct wlr_render_pass *pass,
 	int abs_x, abs_y;
 	wlr_scene_node_coords(&tl->scene_tree->node, &abs_x, &abs_y);
 
-	int bw = (int)border_width;
+	int bw = (int)settings.border_width;
 	float scale = o->wlr_output->scale;
 	int buf_x = (abs_x - o->rectangle.x - bw) * scale;
 	int buf_y = (abs_y - o->rectangle.y - bw) * scale;
@@ -298,7 +298,7 @@ static void block_out_xwayland_window(xwayland_toplevel_t *view, struct wlr_rend
 	int abs_x, abs_y;
 	wlr_scene_node_coords(&view->scene_tree->node, &abs_x, &abs_y);
 
-	int bw = (int)border_width;
+	int bw = (int)settings.border_width;
 	int buf_x = (abs_x - o->rectangle.x - bw) * output->scale;
 	int buf_y = (abs_y - o->rectangle.y - bw) * output->scale;
 	int buf_w = (win_rect.width + 2 * bw) * output->scale;

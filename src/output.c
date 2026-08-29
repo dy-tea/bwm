@@ -475,7 +475,7 @@ void output_create(struct wlr_output *wlr_output) {
 			strncpy(d->name, "default", SMALEN - 1);
 			layout_set(d, LAYOUT_TILED);
 			d->user_layout = LAYOUT_TILED;
-			d->window_gap = window_gap;
+			d->window_gap = settings.window_gap;
 			d->master_stack_count = 1;
 			d->padding = (padding_t){0};
 			d->root = NULL;

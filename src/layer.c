@@ -9,6 +9,7 @@
 #include "server.h"
 #include "tablet.h"
 #include "tree.h"
+#include "types.h"
 #include <stdlib.h>
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_buffer.h>
@@ -120,7 +121,7 @@ static void layer_surface_unmap(struct wl_listener *listener, void *data) {
 	layer_surface_t *layer = wl_container_of(listener, layer, unmap);
 	layer->mapped = false;
 
-	if (!enable_animations) {
+	if (!settings.enable_animations) {
 		animation_cancel_scene_tree(layer->scene_tree);
 		wlr_scene_node_set_enabled(&layer->scene_tree->node, false);
 	} else {

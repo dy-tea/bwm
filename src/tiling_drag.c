@@ -135,7 +135,7 @@ void tiling_drag_begin(node_t *node) {
 
 	if (!server.tiling_drag_indicator) {
 		server.tiling_drag_indicator = wlr_scene_rect_create(server.drag_tree, 0, 0,
-			tiling_drag_indicator_color_rgba);
+			settings.tiling_drag_indicator_color_rgba);
 	}
 	wlr_scene_node_set_enabled(&server.tiling_drag_indicator->node, false);
 }

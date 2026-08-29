@@ -304,10 +304,10 @@ void ipc_cmd_node(char **args, int num, int client_fd) {
 			}
 			bool new_val = has_value ? set_value : !n->client->flags.shadow;
 			n->client->flags.shadow = new_val;
-			n->client->shadow_size = shadow_size;
-			n->client->shadow_offset_x = shadow_offset_x;
-			n->client->shadow_offset_y = shadow_offset_y;
-			memcpy(n->client->shadow_color, shadow_color, sizeof(shadow_color));
+			n->client->shadow_size = settings.shadow_size;
+			n->client->shadow_offset_x = settings.shadow_offset_x;
+			n->client->shadow_offset_y = settings.shadow_offset_y;
+			memcpy(n->client->shadow_color, settings.shadow_color, sizeof(settings.shadow_color));
 			surface_client_set_shadow(n->client, new_val);
 			send_success(client_fd, "flag changed\n");
 		} else if (strncmp(key, "border_radius", 13) == 0) {

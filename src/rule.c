@@ -255,10 +255,10 @@ void rule_apply_consequence(node_t *node, client_t *client, const rule_consequen
 
 	if (rule->has & RULE_TYPE_SHADOW) {
 		client->flags.shadow = rule->flags & RULE_TYPE_SHADOW;
-		client->shadow_size = shadow_size;
-		client->shadow_offset_x = shadow_offset_x;
-		client->shadow_offset_y = shadow_offset_y;
-		memcpy(client->shadow_color, shadow_color, sizeof(shadow_color));
+		client->shadow_size = settings.shadow_size;
+		client->shadow_offset_x = settings.shadow_offset_x;
+		client->shadow_offset_y = settings.shadow_offset_y;
+		memcpy(client->shadow_color, settings.shadow_color, sizeof(settings.shadow_color));
 	}
 }
 

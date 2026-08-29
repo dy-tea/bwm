@@ -656,7 +656,7 @@ static void handle_map(struct wl_listener *listener, void *data) {
 	} else if (rule && rule->has & RULE_TYPE_STATE && rule->state == STATE_FULLSCREEN) {
 		target_desktop->fullscreen_recreate_pending_window_id = 0;
 		enter_fullscreen(target_monitor, target_desktop, node);
-	} else if (xsurface->fullscreen && ignore_ewmh_fullscreen != 1) {
+	} else if (xsurface->fullscreen && settings.ignore_ewmh_fullscreen != 1) {
 		target_desktop->fullscreen_recreate_pending_window_id = 0;
 		enter_fullscreen(target_monitor, target_desktop, node);
 	}
@@ -896,7 +896,7 @@ static void handle_request_fullscreen(struct wl_listener *listener, void *data) 
 		return;
 	}
 
-	if (ignore_ewmh_fullscreen >= 1)
+	if (settings.ignore_ewmh_fullscreen >= 1)
 		return;
 
 	bool requested_fullscreen = xsurface->fullscreen;
@@ -932,7 +932,7 @@ static void handle_request_minimize(struct wl_listener *listener, void *data) {
 	struct wlr_xwayland_surface *xsurface = xwayland_view->xwayland_surface;
 	struct wlr_xwayland_minimize_event *ev = data;
 
-	if (minimize_to_scratchpad && xwayland_view->node) {
+	if (settings.minimize_to_scratchpad && xwayland_view->node) {
 		if (ev->minimize)
 			scratchpad_add(xwayland_view->node);
 		return;

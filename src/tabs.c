@@ -57,7 +57,7 @@ float color_tab_sep[4] = {
 };
 
 int tab_bar_height(node_t *n) {
-	if (hide_lone_tab && n && tabbed_leaf_count(n) <= 1)
+	if (settings.hide_lone_tab && n && tabbed_leaf_count(n) <= 1)
 		return 0;
 	return TAB_BAR_HEIGHT;
 }

@@ -39,51 +39,52 @@ void ipc_cmd_wm(char **args, int num, int client_fd) {
 
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "  \"settings\": {\n");
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"border_width\": %d,\n",
-			border_width);
-		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"window_gap\": %d,\n", window_gap);
+			settings.border_width);
+		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"window_gap\": %d,\n",
+			settings.window_gap);
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"split_ratio\": %.2f,\n",
-			split_ratio);
+			settings.split_ratio);
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"single_monocle\": %s,\n",
-			single_monocle ? "true" : "false");
+			settings.single_monocle ? "true" : "false");
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"automatic_scheme\": %d,\n",
-			automatic_scheme);
+			settings.automatic_scheme);
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"smart_gaps\": %s,\n",
-			smart_gaps ? "true" : "false");
+			settings.smart_gaps ? "true" : "false");
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"smart_borders\": %s,\n",
-			smart_borders ? "true" : "false");
+			settings.smart_borders ? "true" : "false");
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"respect_tiled_min_size\": %s,\n",
-			respect_tiled_min_size ? "true" : "false");
+			settings.respect_tiled_min_size ? "true" : "false");
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"focus_wrapping\": %s,\n",
-			focus_wrapping ? "true" : "false");
+			settings.focus_wrapping ? "true" : "false");
 
 		const char *m = "focus";
-		if (focus_on_activate == FOCUS_ON_ACTIVATE_NONE)
+		if (settings.focus_on_activate == FOCUS_ON_ACTIVATE_NONE)
 			m = "none";
-		else if (focus_on_activate == FOCUS_ON_ACTIVATE_SMART)
+		else if (settings.focus_on_activate == FOCUS_ON_ACTIVATE_SMART)
 			m = "smart";
-		else if (focus_on_activate == FOCUS_ON_ACTIVATE_URGENT)
+		else if (settings.focus_on_activate == FOCUS_ON_ACTIVATE_URGENT)
 			m = "urgent";
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"focus_on_activate\": \"%s\",\n", m);
 
 		const char *ffm = "no";
-		if (focus_follows_mouse == FOLLOWS_YES)
+		if (settings.focus_follows_mouse == FOLLOWS_YES)
 			ffm = "yes";
-		else if (focus_follows_mouse == FOLLOWS_ALWAYS)
+		else if (settings.focus_follows_mouse == FOLLOWS_ALWAYS)
 			ffm = "always";
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"focus_follows_mouse\": \"%s\",\n",
 			ffm);
 
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"record_history\": %s,\n",
-			record_history ? "true" : "false");
+			settings.record_history ? "true" : "false");
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"shadow_size\": %.1f,\n",
-			shadow_size);
+			settings.shadow_size);
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"shadow_offset_x\": %.1f,\n",
-			shadow_offset_x);
+			settings.shadow_offset_x);
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "    \"shadow_offset_y\": %.1f,\n",
-			shadow_offset_y);
+			settings.shadow_offset_y);
 		offset += snprintf(buf + offset, sizeof(buf) - offset,
-			"    \"shadow_color\": [%.3f, %.3f, %.3f, %.3f]\n", shadow_color[0], shadow_color[1],
-			shadow_color[2], shadow_color[3]);
+			"    \"shadow_color\": [%.3f, %.3f, %.3f, %.3f]\n", settings.shadow_color[0],
+			settings.shadow_color[1], settings.shadow_color[2], settings.shadow_color[3]);
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "  }\n");
 		offset += snprintf(buf + offset, sizeof(buf) - offset, "}\n");
 
@@ -152,16 +153,16 @@ void ipc_cmd_wm(char **args, int num, int client_fd) {
 	} else if (streq("-h", *args) || streq("--record-history", *args)) {
 		if (num >= 2) {
 			if (streq("true", args[1]) || streq("on", args[1]) || streq("1", args[1])) {
-				record_history = true;
+				settings.record_history = true;
 				send_success(client_fd, "record-history enabled\n");
 			} else if (streq("false", args[1]) || streq("off", args[1]) || streq("0", args[1])) {
-				record_history = false;
+				settings.record_history = false;
 				send_success(client_fd, "record-history disabled\n");
 			} else {
 				send_failure(client_fd, "wm -h: invalid value (use true/false)\n");
 			}
 		} else {
-			send_success(client_fd, record_history ? "true\n" : "false\n");
+			send_success(client_fd, settings.record_history ? "true\n" : "false\n");
 		}
 	} else if (streq("-r", *args) || streq("--restart", *args)) {
 		server_restart();

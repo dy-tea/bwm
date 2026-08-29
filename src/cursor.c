@@ -39,7 +39,6 @@
 #include <wlr/util/box.h>
 #include <wlr/util/region.h>
 #include <wlr/xwayland.h>
-extern bool gapless_monocle;
 
 #define RESIZE_RATIO_MIN 0.1
 #define RESIZE_RATIO_MAX 0.9
@@ -585,7 +584,7 @@ static void process_cursor_motion(uint32_t time, double dx, double dy, double dx
 		wlr_seat_pointer_notify_motion(seat, time, sx, sy);
 
 		// focus follows mouse
-		if (focus_follows_mouse != FOLLOWS_NO && type != NULL) {
+		if (settings.focus_follows_mouse != FOLLOWS_NO && type != NULL) {
 			node_t *node = NULL;
 
 			struct wlr_xdg_surface *xdg_surface = wlr_xdg_surface_try_from_wlr_surface(surface);
@@ -605,12 +604,12 @@ static void process_cursor_motion(uint32_t time, double dx, double dy, double dx
 
 			if (node && node->output && node->desktop && node->desktop == node->output->desk)
 				focus_node(node->output, node->desktop, node);
-		} else if (focus_follows_mouse == FOLLOWS_ALWAYS) {
+		} else if (settings.focus_follows_mouse == FOLLOWS_ALWAYS) {
 			wlr_seat_keyboard_notify_clear_focus(seat);
 		}
 	} else {
 		wlr_seat_pointer_clear_focus(seat);
-		if (focus_follows_mouse == FOLLOWS_ALWAYS)
+		if (settings.focus_follows_mouse == FOLLOWS_ALWAYS)
 			wlr_seat_keyboard_notify_clear_focus(seat);
 	}
 

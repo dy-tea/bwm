@@ -18,11 +18,11 @@ static void tiled_arrange(output_t *m, desktop_t *d, struct wlr_box available) {
 }
 
 static void monocle_arrange(output_t *m, desktop_t *d, struct wlr_box available) {
-	available.x += monocle_padding.left;
-	available.y += monocle_padding.top;
-	available.width -= monocle_padding.left + monocle_padding.right;
-	available.height -= monocle_padding.top + monocle_padding.bottom;
-	if (!gapless_monocle) {
+	available.x += settings.monocle_padding.left;
+	available.y += settings.monocle_padding.top;
+	available.width -= settings.monocle_padding.left + settings.monocle_padding.right;
+	available.height -= settings.monocle_padding.top + settings.monocle_padding.bottom;
+	if (!settings.gapless_monocle) {
 		int wg = compute_window_gap(d);
 		available.x += wg;
 		available.y += wg;
@@ -110,7 +110,7 @@ static bool tiled_focus(desktop_t *d, direction_t dir) {
 		n = dir == DIR_EAST || dir == DIR_NORTH ? first_extrema(n) : second_extrema(n);
 		if (n != NULL)
 			return focus_node(mon, d, n);
-	} else if (focus_wrapping && d->root) {
+	} else if (settings.focus_wrapping && d->root) {
 		node_t *w = dir == DIR_EAST ||
 			dir == DIR_SOUTH ? first_extrema(d->root) : second_extrema(d->root);
 		if (w && w != d->focus)

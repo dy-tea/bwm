@@ -217,73 +217,6 @@ typedef struct {
 	node_t *node;
 } coordinates_t;
 
-// global settings
-extern automatic_scheme_t automatic_scheme;
-extern child_polarity_t initial_polarity;
-extern bool single_monocle;
-extern bool borderless_monocle;
-extern bool borderless_singleton;
-extern bool gapless_monocle;
-extern bool removal_adjustment;
-extern int focus_follows_mouse;
-extern bool pointer_follows_focus;
-extern bool record_history;
-extern bool click_to_focus;
-extern bool allow_tearing;
-extern bool auto_float_dialogs;
-extern decoration_mode_t decoration_mode;
-extern bool enable_animations;
-extern bool hide_lone_tab;
-extern workspace_anim_direction_t workspace_anim_direction;
-extern bool workspace_anim_slide_up;
-extern int mapping_events_count;
-
-// Transaction system settings
-extern int txn_timeout_ms;
-extern bool debug_txn_timings;
-extern bool debug_noatomic;
-extern bool debug_txn_wait;
-extern int directional_focus_tightness;
-extern int ignore_ewmh_fullscreen;
-
-// Render-unfocused settings
-extern int render_unfocused_fps;
-
-// Idle power management (DPMS timeout)
-extern int idle_timeout;
-extern bool idle_dpms;
-
-// Real-time scheduling
-extern bool realtime_scheduling;
-
-// Shadow settings
-extern float shadow_size;
-extern float shadow_offset_x;
-extern float shadow_offset_y;
-extern float shadow_color[4];
-
-extern padding_t monocle_padding;
-extern padding_t padding;
-extern int border_width;
-extern int window_gap;
-extern bool smart_gaps;
-extern bool smart_borders;
-extern bool respect_tiled_min_size;
-extern bool focus_wrapping;
-extern int focus_on_activate; // focus_on_activate_mode_t
-extern double split_ratio;
-extern char normal_border_color[16];
-extern char active_border_color[16];
-extern char focused_border_color[16];
-extern char presel_feedback_color[16];
-extern char tiling_drag_indicator_color[16];
-
-extern float normal_border_color_rgba[4];
-extern float active_border_color_rgba[4];
-extern float focused_border_color_rgba[4];
-extern float presel_feedback_color_rgba[4];
-extern float tiling_drag_indicator_color_rgba[4];
-
 // border gradient theme
 #define BORDER_GRADIENT_MAX_STOPS 10
 typedef struct {
@@ -296,9 +229,83 @@ typedef struct {
 	float gradient_lerp;
 } border_theme_t;
 
-extern border_theme_t normal_border_theme;
-extern border_theme_t active_border_theme;
-extern border_theme_t focused_border_theme;
+// global settings
+typedef struct {
+	automatic_scheme_t automatic_scheme;
+	child_polarity_t initial_polarity;
+	bool single_monocle;
+	bool borderless_monocle;
+	bool borderless_singleton;
+	bool gapless_monocle;
+	bool removal_adjustment;
+	int focus_follows_mouse;
+	bool pointer_follows_focus;
+	bool record_history;
+	bool click_to_focus;
+	bool allow_tearing;
+	bool auto_float_dialogs;
+	decoration_mode_t decoration_mode;
+	bool enable_animations;
+	bool hide_lone_tab;
+	workspace_anim_direction_t workspace_anim_direction;
+	bool workspace_anim_slide_up;
+	int mapping_events_count;
+
+	// Transaction system settings
+	int txn_timeout_ms;
+	bool debug_txn_timings;
+	bool debug_noatomic;
+	bool debug_txn_wait;
+	int directional_focus_tightness;
+	int ignore_ewmh_fullscreen;
+
+	// Render-unfocused settings
+	int render_unfocused_fps;
+
+	// Idle power management (DPMS timeout)
+	int idle_timeout;
+	bool idle_dpms;
+
+	// Real-time scheduling
+	bool realtime_scheduling;
+
+	// Scratchpad behavior
+	bool minimize_to_scratchpad;
+
+	// Shadow settings
+	float shadow_size;
+	float shadow_offset_x;
+	float shadow_offset_y;
+	float shadow_color[4];
+
+	padding_t monocle_padding;
+	padding_t padding;
+	int border_width;
+	int window_gap;
+	bool smart_gaps;
+	bool smart_borders;
+	bool respect_tiled_min_size;
+	bool focus_wrapping;
+	focus_on_activate_mode_t focus_on_activate;
+	double split_ratio;
+	char normal_border_color[16];
+	char active_border_color[16];
+	char focused_border_color[16];
+	char presel_feedback_color[16];
+	char tiling_drag_indicator_color[16];
+
+	float normal_border_color_rgba[4];
+	float active_border_color_rgba[4];
+	float focused_border_color_rgba[4];
+	float presel_feedback_color_rgba[4];
+	float tiling_drag_indicator_color_rgba[4];
+
+	border_theme_t normal_border_theme;
+	border_theme_t active_border_theme;
+	border_theme_t focused_border_theme;
+} doors_settings_t;
+
+extern doors_settings_t settings;
 
 // global state
 extern struct output_t *mon;

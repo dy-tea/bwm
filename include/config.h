@@ -154,7 +154,6 @@ extern size_t num_gesturebinds;
 extern hotcornerbind_t hotcorner_bindings[MAX_HOTCORNERBINDS];
 extern size_t num_hotcornerbinds;
 extern submap_t *active_submap;
-extern bool minimize_to_scratchpad;
 
 void config_init(void);
 void config_init_with_config_dir(const char *config_dir);

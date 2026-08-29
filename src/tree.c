@@ -21,67 +21,97 @@
 #include <wlr/util/log.h>
 
 // global settings
-automatic_scheme_t automatic_scheme = SCHEME_SPIRAL;
-child_polarity_t initial_polarity = FIRST_CHILD;
-bool single_monocle = false;
-bool borderless_monocle = false;
-bool borderless_singleton = false;
-bool gapless_monocle = false;
-bool removal_adjustment = true;
-int focus_follows_mouse = FOLLOWS_NO;
-bool pointer_follows_focus = false;
-bool record_history = true;
-bool click_to_focus = false;
-bool allow_tearing = false;
-bool auto_float_dialogs = false;
-decoration_mode_t decoration_mode = DECORATION_ALWAYS;
-bool enable_animations = false;
-bool hide_lone_tab = false;
-workspace_anim_direction_t workspace_anim_direction = WORKSPACE_ANIM_VERTICAL;
-bool workspace_anim_slide_up = false;
-int mapping_events_count = 0;
-int directional_focus_tightness = 20;
-int ignore_ewmh_fullscreen = 0;
-padding_t monocle_padding = {0};
-padding_t padding = {0};
-int border_width = 2;
-int window_gap = 10;
-bool smart_gaps = false;
-bool smart_borders = false;
-bool respect_tiled_min_size = false;
-bool focus_wrapping = true;
-int focus_on_activate = FOCUS_ON_ACTIVATE_FOCUS;
-double split_ratio = 0.5;
+doors_settings_t settings = {
+	.automatic_scheme = SCHEME_SPIRAL,
+	.initial_polarity = FIRST_CHILD,
+	.single_monocle = false,
+	.borderless_monocle = false,
+	.borderless_singleton = false,
+	.gapless_monocle = false,
+	.removal_adjustment = true,
+	.focus_follows_mouse = FOLLOWS_NO,
+	.pointer_follows_focus = false,
+	.record_history = true,
+	.click_to_focus = false,
+	.allow_tearing = false,
+	.auto_float_dialogs = false,
+	.decoration_mode = DECORATION_ALWAYS,
+	.enable_animations = false,
+	.hide_lone_tab = false,
+	.workspace_anim_direction = WORKSPACE_ANIM_VERTICAL,
+	.workspace_anim_slide_up = false,
+	.mapping_events_count = 0,
+	.directional_focus_tightness = 20,
+	.ignore_ewmh_fullscreen = 0,
+	.render_unfocused_fps = 5,
+	.idle_timeout = 0,
+	.idle_dpms = true,
+	.realtime_scheduling = false,
+	.monocle_padding = {0},
+	.padding = {0},
+	.border_width = 2,
+	.window_gap = 10,
+	.smart_gaps = false,
+	.smart_borders = false,
+	.respect_tiled_min_size = false,
+	.focus_wrapping = true,
+	.focus_on_activate = FOCUS_ON_ACTIVATE_FOCUS,
+	.split_ratio = 0.5,
+	.minimize_to_scratchpad = false,
 
-// transaction settings
-int txn_timeout_ms = 200;
-bool debug_txn_timings = false;
-bool debug_noatomic = false;
-bool debug_txn_wait = false;
+	// transaction settings
+	.txn_timeout_ms = 200,
+	.debug_txn_timings = false,
+	.debug_noatomic = false,
+	.debug_txn_wait = false,
 
-// border colors
-char normal_border_color[16] = "444444ff";
-char active_border_color[16] = "555555ff";
-char focused_border_color[16] = "1793dfff";
+	// border colors
+	.normal_border_color = "444444ff",
+	.active_border_color = "555555ff",
+	.focused_border_color = "1793dfff",
+	.normal_border_theme = {
+		{0},
+		0,
+		0,
+		{0},
+		0,
+		0,
+		0
+	},
+	.active_border_theme = {
+		{0},
+		0,
+		0,
+		{0},
+		0,
+		0,
+		0
+	},
+	.focused_border_theme = {
+		{0},
+		0,
+		0,
+		{0},
+		0,
+		0,
+		0
+	},
+	.presel_feedback_color = "ff5555ff",
+	.tiling_drag_indicator_color = "4d9eff4d",
 
-border_theme_t normal_border_theme = {0};
-border_theme_t active_border_theme = {0};
-border_theme_t focused_border_theme = {0};
-char presel_feedback_color[16] = "ff5555ff";
-char tiling_drag_indicator_color[16] = "4d9eff4d";
-
-float normal_border_color_rgba[4];
-float active_border_color_rgba[4];
-float focused_border_color_rgba[4];
-float presel_feedback_color_rgba[4];
-float tiling_drag_indicator_color_rgba[4];
+	// shadow settings
+	.shadow_size = 8.0f,
+	.shadow_offset_x = 0.0f,
+	.shadow_offset_y = 4.0f,
+	.shadow_color = {0.0f, 0.0f, 0.0f, 0.5f},
+};
 
 void refresh_border_color_cache(void) {
-	parse_color(normal_border_color, normal_border_color_rgba);
-	parse_color(active_border_color, active_border_color_rgba);
-	parse_color(focused_border_color, focused_border_color_rgba);
-	parse_color(presel_feedback_color, presel_feedback_color_rgba);
-	parse_color(tiling_drag_indicator_color, tiling_drag_indicator_color_rgba);
+	parse_color(settings.normal_border_color, settings.normal_border_color_rgba);
+	parse_color(settings.active_border_color, settings.active_border_color_rgba);
+	parse_color(settings.focused_border_color, settings.focused_border_color_rgba);
+	parse_color(settings.presel_feedback_color, settings.presel_feedback_color_rgba);
+	parse_color(settings.tiling_drag_indicator_color, settings.tiling_drag_indicator_color_rgba);
 }
 
 // global state
@@ -153,10 +183,10 @@ client_t *make_client(void) {
 
 	// initialize shadow defaults
 	c->flags.shadow = false;
-	c->shadow_size = shadow_size;
-	c->shadow_offset_x = shadow_offset_x;
-	c->shadow_offset_y = shadow_offset_y;
-	memcpy(c->shadow_color, shadow_color, sizeof(shadow_color));
+	c->shadow_size = settings.shadow_size;
+	c->shadow_offset_x = settings.shadow_offset_x;
+	c->shadow_offset_y = settings.shadow_offset_y;
+	memcpy(c->shadow_color, settings.shadow_color, sizeof(settings.shadow_color));
 
 	return c;
 }
@@ -353,7 +383,7 @@ static void render_leaf(output_t *m, desktop_t *d, node_t *n, struct wlr_box rec
 		r = root_rect;
 		slot = root_rect;
 		use_centering = true;
-		r = apply_bleed(r, bw, gapless_monocle ? 0 : compute_window_gap(d));
+		r = apply_bleed(r, bw, settings.gapless_monocle ? 0 : compute_window_gap(d));
 	} else {
 		r = rect;
 		slot = rect;
@@ -363,7 +393,7 @@ static void render_leaf(output_t *m, desktop_t *d, node_t *n, struct wlr_box rec
 		if (omit_window_gap)
 			wg = 0;
 		else
-			wg = (gapless_monocle && d->layout == LAYOUT_MONOCLE) ? 0 : compute_window_gap(d);
+			wg = (settings.gapless_monocle && d->layout == LAYOUT_MONOCLE) ? 0 : compute_window_gap(d);
 
 		r = apply_bleed(r, bw, wg);
 	}
@@ -377,7 +407,7 @@ static void render_leaf(output_t *m, desktop_t *d, node_t *n, struct wlr_box rec
 	}
 
 	// clamp up to constraints and center within the tile slot
-	if (respect_tiled_min_size && use_centering) {
+	if (settings.respect_tiled_min_size && use_centering) {
 		if ((int)n->constraints.min_width > MIN_WIDTH && r.width < (int)n->constraints.min_width &&
 				slot.width > 0) {
 			r.x = slot.x + (slot.width - (int)n->constraints.min_width) / 2;
@@ -507,13 +537,13 @@ static void compute_split_rects(node_t *n, desktop_t *d, struct wlr_box rect,
 	*first_rect = rect;
 	*second_rect = rect;
 
-	uint16_t first_min_w = respect_tiled_min_size &&
+	uint16_t first_min_w = settings.respect_tiled_min_size &&
 		n->first_child ? n->first_child->constraints.min_width : 0;
-	uint16_t second_min_w = respect_tiled_min_size &&
+	uint16_t second_min_w = settings.respect_tiled_min_size &&
 		n->second_child ? n->second_child->constraints.min_width : 0;
-	uint16_t first_min_h = respect_tiled_min_size &&
+	uint16_t first_min_h = settings.respect_tiled_min_size &&
 		n->first_child ? n->first_child->constraints.min_height : 0;
-	uint16_t second_min_h = respect_tiled_min_size &&
+	uint16_t second_min_h = settings.respect_tiled_min_size &&
 		n->second_child ? n->second_child->constraints.min_height : 0;
 
 	if (n->split_type == TYPE_VERTICAL) {
@@ -577,7 +607,8 @@ void apply_layout(output_t *m, desktop_t *d, node_t *n, struct wlr_box rect,
 			n->client->tiled_rectangle.x, n->client->tiled_rectangle.y, n->client->tiled_rectangle.width,
 			n->client->tiled_rectangle.height);
 	} else if (n->split_type == TYPE_TABBED && d->layout != LAYOUT_MONOCLE) {
-		bool show_deco = decoration_mode == DECORATION_ALWAYS || decoration_mode == DECORATION_TABS;
+		bool show_deco = settings.decoration_mode == DECORATION_ALWAYS ||
+			settings.decoration_mode == DECORATION_TABS;
 
 		if (show_deco) {
 			int bar_h = tab_bar_height(n);
@@ -768,7 +799,7 @@ node_t *insert_node(desktop_t *d, node_t *n, node_t *f) {
 	if (f->presel == NULL) {
 		bool single_tiled = f->client != NULL && IS_TILED(f->client) && tiled_count(d->root, true) == 1;
 
-		if (p == NULL || automatic_scheme != SCHEME_SPIRAL || single_tiled || (p != NULL &&
+		if (p == NULL || settings.automatic_scheme != SCHEME_SPIRAL || single_tiled || (p != NULL &&
 				p->split_type == TYPE_TABBED)) {
 			// normal insertion
 			if (p != NULL) {
@@ -782,7 +813,7 @@ node_t *insert_node(desktop_t *d, node_t *n, node_t *f) {
 			c->parent = p;
 			f->parent = c;
 
-			if (initial_polarity == FIRST_CHILD) {
+			if (settings.initial_polarity == FIRST_CHILD) {
 				c->first_child = n;
 				c->second_child = f;
 			} else {
@@ -791,9 +822,9 @@ node_t *insert_node(desktop_t *d, node_t *n, node_t *f) {
 			}
 
 			// determine split type
-			if (p == NULL || automatic_scheme == SCHEME_LONGEST_SIDE || single_tiled) {
+			if (p == NULL || settings.automatic_scheme == SCHEME_LONGEST_SIDE || single_tiled) {
 				c->split_type = f->rectangle.width >= f->rectangle.height ? TYPE_VERTICAL : TYPE_HORIZONTAL;
-			} else if (automatic_scheme == SCHEME_ALTERNATE) {
+			} else if (settings.automatic_scheme == SCHEME_ALTERNATE) {
 				node_t *q = p;
 				for (; q != NULL && (q->first_child->vacant || q->second_child->vacant); q = q->parent)
 					;
@@ -1008,13 +1039,13 @@ void remove_node(desktop_t *d, node_t *n) {
 		}
 
 		// adjust tree structure
-		if (!n->vacant && removal_adjustment && (n->client == NULL || IS_TILED(n->client))) {
-			if (automatic_scheme == SCHEME_SPIRAL) {
+		if (!n->vacant && settings.removal_adjustment && (n->client == NULL || IS_TILED(n->client))) {
+			if (settings.automatic_scheme == SCHEME_SPIRAL) {
 				if (n_is_first)
 					rotate_tree(b, 270);
 				else
 					rotate_tree(b, 90);
-			} else if (automatic_scheme == SCHEME_LONGEST_SIDE || g == NULL) {
+			} else if (settings.automatic_scheme == SCHEME_LONGEST_SIDE || g == NULL) {
 				if (p != NULL && !is_leaf(b)) {
 					if (p->rectangle.width > p->rectangle.height) {
 						b->split_type = TYPE_VERTICAL;
@@ -1026,7 +1057,7 @@ void remove_node(desktop_t *d, node_t *n) {
 						b->current.split_type = TYPE_HORIZONTAL;
 					}
 				}
-			} else if (automatic_scheme == SCHEME_ALTERNATE) {
+			} else if (settings.automatic_scheme == SCHEME_ALTERNATE) {
 				if (g != NULL && !is_leaf(b)) {
 					if (g->split_type == TYPE_HORIZONTAL) {
 						b->split_type = TYPE_VERTICAL;
@@ -1164,7 +1195,7 @@ static bool focus_node_impl(output_t *m, desktop_t *d, node_t *n, bool give_keyb
 	}
 
 	// pointer follows focus (only when giving keyboard focus)
-	if (give_keyboard_focus && pointer_follows_focus && n != NULL && n->client != NULL &&
+	if (give_keyboard_focus && settings.pointer_follows_focus && n != NULL && n->client != NULL &&
 			!server.focus_from_click) {
 		int center_x = n->rectangle.x + n->rectangle.width / 2;
 		int center_y = n->rectangle.y + n->rectangle.height / 2;
@@ -1189,13 +1220,13 @@ bool focus_node(output_t *m, desktop_t *d, node_t *n) {
 }
 
 bool activate_node(output_t *m, desktop_t *d, node_t *n) {
-	if (focus_on_activate == FOCUS_ON_ACTIVATE_FOCUS)
+	if (settings.focus_on_activate == FOCUS_ON_ACTIVATE_FOCUS)
 		return focus_node_impl(m, d, n, true);
 
-	if (focus_on_activate == FOCUS_ON_ACTIVATE_NONE ||
-			(focus_on_activate == FOCUS_ON_ACTIVATE_URGENT)) {
+	if (settings.focus_on_activate == FOCUS_ON_ACTIVATE_NONE ||
+			(settings.focus_on_activate == FOCUS_ON_ACTIVATE_URGENT)) {
 		bool result = focus_node_impl(m, d, n, false);
-		if (focus_on_activate == FOCUS_ON_ACTIVATE_URGENT && n && n->client) {
+		if (settings.focus_on_activate == FOCUS_ON_ACTIVATE_URGENT && n && n->client) {
 			n->client->flags.urgent = true;
 			update_border_colors(n->client);
 		}
@@ -1643,7 +1674,7 @@ void parse_color(const char *hex, float *color) {
 }
 
 static void get_border_color(client_t *client, float *color) {
-	if (!client || border_width == 0) {
+	if (!client || settings.border_width == 0) {
 		color[0] = color[1] = color[2] = 0.0f;
 		color[3] = 1.0f;
 		return;
@@ -1653,8 +1684,8 @@ static void get_border_color(client_t *client, float *color) {
 
 	bool the_only_window = (wl_list_length(&mon_list) == 1) && bs.desk && bs.desk->root &&
 		bs.desk->root->client;
-	bool no_border = (borderless_monocle && bs.desk && bs.desk->layout == LAYOUT_MONOCLE &&
-		IS_TILED(client)) || (borderless_singleton && the_only_window) ||
+	bool no_border = (settings.borderless_monocle && bs.desk && bs.desk->layout == LAYOUT_MONOCLE &&
+		IS_TILED(client)) || (settings.borderless_singleton && the_only_window) ||
 		client->state == STATE_FULLSCREEN;
 
 	if (no_border) {
@@ -1666,21 +1697,21 @@ static void get_border_color(client_t *client, float *color) {
 	// check if this client's node has an active preselection
 	node_t *n = client_get_node(client);
 	if (n && n->presel) {
-		memcpy(color, presel_feedback_color_rgba, sizeof(float) * 4);
+		memcpy(color, settings.presel_feedback_color_rgba, sizeof(float) * 4);
 		return;
 	}
 
 	if (bs.is_focused)
-		memcpy(color, focused_border_color_rgba, sizeof(float) * 4);
+		memcpy(color, settings.focused_border_color_rgba, sizeof(float) * 4);
 	else if (bs.is_active)
-		memcpy(color, active_border_color_rgba, sizeof(float) * 4);
+		memcpy(color, settings.active_border_color_rgba, sizeof(float) * 4);
 	else
-		memcpy(color, normal_border_color_rgba, sizeof(float) * 4);
+		memcpy(color, settings.normal_border_color_rgba, sizeof(float) * 4);
 }
 
 void create_borders(struct wlr_scene_tree *parent, struct wlr_scene_tree **border_tree,
 		struct wlr_scene_rect *rects[4]) {
-	if (border_width == 0) {
+	if (settings.border_width == 0) {
 		if (*border_tree) {
 			wlr_scene_node_destroy(&(*border_tree)->node);
 			*border_tree = NULL;
@@ -1701,10 +1732,10 @@ void create_borders(struct wlr_scene_tree *parent, struct wlr_scene_tree **borde
 		0.0f,
 		0.0f
 	};
-	rects[0] = wlr_scene_rect_create(*border_tree, 0, border_width, transparent);
-	rects[1] = wlr_scene_rect_create(*border_tree, 0, border_width, transparent);
-	rects[2] = wlr_scene_rect_create(*border_tree, border_width, 0, transparent);
-	rects[3] = wlr_scene_rect_create(*border_tree, border_width, 0, transparent);
+	rects[0] = wlr_scene_rect_create(*border_tree, 0, settings.border_width, transparent);
+	rects[1] = wlr_scene_rect_create(*border_tree, 0, settings.border_width, transparent);
+	rects[2] = wlr_scene_rect_create(*border_tree, settings.border_width, 0, transparent);
+	rects[3] = wlr_scene_rect_create(*border_tree, settings.border_width, 0, transparent);
 }
 
 void destroy_borders(struct wlr_scene_tree **border_tree, struct wlr_scene_rect *rects[4]) {
@@ -1759,7 +1790,7 @@ void update_borders(struct wlr_scene_tree *border_tree, struct wlr_scene_rect *r
 
 void update_border_colors(client_t *client) {
 	struct wlr_scene_tree *border_tree = client_border_tree(client);
-	if (border_width == 0 || !border_tree)
+	if (settings.border_width == 0 || !border_tree)
 		return;
 
 	float color[4];
@@ -1772,11 +1803,11 @@ void update_border_colors(client_t *client) {
 
 	border_theme_t *bt;
 	if (bs.is_focused)
-		bt = &focused_border_theme;
+		bt = &settings.focused_border_theme;
 	else if (bs.is_active)
-		bt = &active_border_theme;
+		bt = &settings.active_border_theme;
 	else
-		bt = &normal_border_theme;
+		bt = &settings.normal_border_theme;
 
 	bool has_gradient = (bt->gradient_count >= 2);
 	bool use_shader = (has_gradient || (client->border_radius > 0.0f));

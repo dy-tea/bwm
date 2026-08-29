@@ -509,7 +509,7 @@ void ipc_cmd_output(char **args, int num, int client_fd) {
 			d->name[SMALEN - 1] = '\0';
 			d->layout = LAYOUT_TILED;
 			d->user_layout = LAYOUT_TILED;
-			d->window_gap = window_gap;
+			d->window_gap = settings.window_gap;
 			d->master_stack_count = 1;
 			d->padding = (padding_t){0};
 			d->root = NULL;
@@ -567,7 +567,7 @@ void ipc_cmd_output(char **args, int num, int client_fd) {
 				newd->name[SMALEN - 1] = '\0';
 				newd->layout = LAYOUT_TILED;
 				newd->user_layout = LAYOUT_TILED;
-				newd->window_gap = window_gap;
+				newd->window_gap = settings.window_gap;
 				newd->master_stack_count = 1;
 				newd->padding = (padding_t){0};
 				newd->root = NULL;

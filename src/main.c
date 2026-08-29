@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
 
 	config_init_with_config_dir(config_dir);
 	server_init();
-	if (realtime_scheduling)
+	if (settings.realtime_scheduling)
 		set_rr_scheduling();
 	int ret = server_run();
 	server_fini();

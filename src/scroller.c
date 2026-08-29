@@ -563,7 +563,7 @@ bool scroller_focus_next(desktop_t *d) {
 	if (!s || s->column_count == 0)
 		return false;
 	if (s->active_column_idx >= s->column_count - 1) {
-		if (!focus_wrapping)
+		if (!settings.focus_wrapping)
 			return false;
 		s->active_column_idx = 0;
 	} else {
@@ -580,7 +580,7 @@ bool scroller_focus_prev(desktop_t *d) {
 	if (!s || s->column_count == 0)
 		return false;
 	if (s->active_column_idx == 0) {
-		if (!focus_wrapping)
+		if (!settings.focus_wrapping)
 			return false;
 		s->active_column_idx = s->column_count - 1;
 	} else {

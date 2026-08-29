@@ -313,7 +313,7 @@ static void workspace_switch_animate(output_t *output, desktop_t *old_desk, desk
 	bool forward = true;
 
 	// skip if animations are disabled
-	if (old_desk == new_desk || !enable_animations)
+	if (old_desk == new_desk || !settings.enable_animations)
 		return;
 
 	int num_steps = 0;
@@ -338,15 +338,15 @@ static void workspace_switch_animate(output_t *output, desktop_t *old_desk, desk
 		}
 	}
 
-	if (workspace_anim_direction == WORKSPACE_ANIM_VERTICAL) {
+	if (settings.workspace_anim_direction == WORKSPACE_ANIM_VERTICAL) {
 		slide_dist = output->height;
 		dy = forward ? slide_dist : -slide_dist;
-		if (workspace_anim_slide_up)
+		if (settings.workspace_anim_slide_up)
 			dy = -dy;
 	} else {
 		slide_dist = output->width;
 		dx = forward ? slide_dist : -slide_dist;
-		if (workspace_anim_slide_up)
+		if (settings.workspace_anim_slide_up)
 			dx = -dx;
 	}
 
@@ -491,7 +491,8 @@ static void workspace_switch_animate(output_t *output, desktop_t *old_desk, desk
 
 	output_schedule_frame(output);
 	wlr_log(WLR_DEBUG, "Switched from %s to %s (animated slide %s)", old_desk ? old_desk->name : "NULL",
-		new_desk->name, workspace_anim_direction == WORKSPACE_ANIM_VERTICAL ? "vertical" : "horizontal");
+		new_desk->name,
+		settings.workspace_anim_direction == WORKSPACE_ANIM_VERTICAL ? "vertical" : "horizontal");
 }
 
 void workspace_switch_to_desktop(const char *name) {
@@ -527,7 +528,7 @@ void workspace_switch_to_desktop(const char *name) {
 	if (old_desktop && old_desktop != d)
 		output->last_desk = old_desktop;
 
-	if (enable_animations && old_desktop && old_desktop != d && output) {
+	if (settings.enable_animations && old_desktop && old_desktop != d && output) {
 		workspace_switch_animate(output, old_desktop, d);
 		return;
 	}

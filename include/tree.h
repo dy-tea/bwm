@@ -129,13 +129,13 @@ output_t *find_output_by_name(const char *name);
 	 (client)->xwayland_view ? (client)->xwayland_view->field : NULL)
 
 static inline int effective_border_width(desktop_t *d) {
-	if (smart_borders && d && visible_tiled_count(d) <= 1)
+	if (settings.smart_borders && d && visible_tiled_count(d) <= 1)
 		return 0;
-	return border_width;
+	return settings.border_width;
 }
 
 static inline int compute_window_gap(desktop_t *d) {
-	if (smart_gaps && visible_tiled_count(d) <= 1)
+	if (settings.smart_gaps && visible_tiled_count(d) <= 1)
 		return 0;
 	return d->window_gap;
 }

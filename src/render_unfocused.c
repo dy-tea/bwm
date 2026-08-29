@@ -3,11 +3,10 @@
 #include "server.h"
 #include "toplevel.h"
 #include "tree.h"
+#include "types.h"
 #include <stdlib.h>
 #include <time.h>
 #include <wlr/types/wlr_scene.h>
-
-int render_unfocused_fps = 5;
 
 static struct wl_list render_unfocused_clients;
 static struct wl_event_source *render_unfocused_timer = NULL;
@@ -48,8 +47,8 @@ static int handle_render_unfocused_timer(void *data) {
 		send_frame_done_to_client(rfl->client);
 	}
 
-	if (!wl_list_empty(&render_unfocused_clients) && render_unfocused_fps > 0)
-		wl_event_source_timer_update(render_unfocused_timer, 1000 / render_unfocused_fps);
+	if (!wl_list_empty(&render_unfocused_clients) && settings.render_unfocused_fps > 0)
+		wl_event_source_timer_update(render_unfocused_timer, 1000 / settings.render_unfocused_fps);
 
 	return 0;
 }
@@ -80,11 +79,11 @@ void render_unfocused_client_update(client_t *client) {
 	rfl->client = client;
 	wl_list_insert(&render_unfocused_clients, &rfl->link);
 
-	if (!render_unfocused_timer && render_unfocused_fps > 0) {
+	if (!render_unfocused_timer && settings.render_unfocused_fps > 0) {
 		render_unfocused_timer = wl_event_loop_add_timer(wl_display_get_event_loop(server.wl_display),
 			handle_render_unfocused_timer, NULL);
 		if (render_unfocused_timer)
-			wl_event_source_timer_update(render_unfocused_timer, 1000 / render_unfocused_fps);
+			wl_event_source_timer_update(render_unfocused_timer, 1000 / settings.render_unfocused_fps);
 	}
 }
 

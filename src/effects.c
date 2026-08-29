@@ -7,6 +7,7 @@
 #include "server.h"
 #include "toplevel.h"
 #include "tree.h"
+#include "types.h"
 #include <drm_fourcc.h>
 #include <pixman.h>
 #include <stdint.h>
@@ -96,16 +97,6 @@ float refraction_normal_pow = 6.0f;
 float refraction_rgb_fringing = 22.0f / 30.0f;
 int refraction_texture_repeat_mode = 1;
 float refraction_offset = 1.0f;
-
-float shadow_size = 8.0f;
-float shadow_offset_x = 0.0f;
-float shadow_offset_y = 4.0f;
-float shadow_color[4] = {
-	0.0f,
-	0.0f,
-	0.0f,
-	0.5f
-};
 
 effects_state_t effects_state = {0};
 const effects_backend_t *effects_backend = NULL;
@@ -759,7 +750,7 @@ static void build_blur_mask_params(toplevel_t *tl, output_t *output, int w, int 
 		struct be_corner_mask_params *params) {
 	client_t *c = tl->node->client;
 	struct wlr_box content_r = get_animated_client_rect(tl);
-	int bw_i = (c->state == STATE_FULLSCREEN) ? 0 : border_width;
+	int bw_i = (c->state == STATE_FULLSCREEN) ? 0 : settings.border_width;
 	float inner_r = (c->border_radius > (float)bw_i) ? c->border_radius - (float)bw_i : 0.0f;
 	memset(params, 0, sizeof(*params));
 	params->out_w = content_r.width;
@@ -1348,7 +1339,7 @@ static bool rebuild_live_acrylic(output_t *output, pixman_region32_t *damage,
 			float win_v = (float)(content_r.y - output->ly) / oh;
 			float win_sw = (float)content_r.width / ow;
 			float win_sh = (float)content_r.height / oh;
-			int bw_i = (c->state == STATE_FULLSCREEN) ? 0 : border_width;
+			int bw_i = (c->state == STATE_FULLSCREEN) ? 0 : settings.border_width;
 			float inner_r = (c->border_radius > (float)bw_i) ? c->border_radius - (float)bw_i : 0.0f;
 
 			struct be_corner_mask_params params = {
@@ -1639,7 +1630,7 @@ static bool blur_render_shadow(toplevel_t *tl) {
 	if (client_r.width <= 0 || client_r.height <= 0)
 		return false;
 
-	int size = (int)shadow_size;
+	int size = (int)settings.shadow_size;
 	if (size <= 0)
 		return false;
 	int bw_i = effective_border_width(tl->node->desktop);
@@ -1666,14 +1657,14 @@ static bool blur_render_shadow(toplevel_t *tl) {
 
 	struct be_shadow_params sp = {
 		.shadow_size = size * scale,
-		.shadow_offset_x = shadow_offset_x,
-		.shadow_offset_y = shadow_offset_y,
+		.shadow_offset_x = settings.shadow_offset_x,
+		.shadow_offset_y = settings.shadow_offset_y,
 		.shadow_color = {c->shadow_color[0], c->shadow_color[1], c->shadow_color[2], c->shadow_color[3]},
 		.border_radius = c->border_radius * scale,
 		.inner_width = (client_r.width + 2 * bw_i) * scale,
 		.inner_height = (client_r.height + 2 * bw_i) * scale,
-		.hole_x = (tl->content_tree->node.x - shadow_offset_x + size) * scale,
-		.hole_y = (tl->content_tree->node.y - shadow_offset_y + size) * scale,
+		.hole_x = (tl->content_tree->node.x - settings.shadow_offset_x + size) * scale,
+		.hole_y = (tl->content_tree->node.y - settings.shadow_offset_y + size) * scale,
 		.hole_width = (client_r.width + 2 * bw_i) * scale,
 		.hole_height = (client_r.height + 2 * bw_i) * scale,
 		.scale = scale,
@@ -1701,8 +1692,8 @@ static bool blur_render_shadow(toplevel_t *tl) {
 	wlr_scene_buffer_set_source_box(tl->shadow->shadow_node, &src_box);
 	wlr_scene_buffer_set_dest_size(tl->shadow->shadow_node, buf_w, buf_h);
 
-	wlr_scene_node_set_position(&tl->shadow->shadow_node->node, shadow_offset_x - bw_i - size,
-		shadow_offset_y - bw_i - size);
+	wlr_scene_node_set_position(&tl->shadow->shadow_node->node, settings.shadow_offset_x - bw_i - size,
+		settings.shadow_offset_y - bw_i - size);
 	wlr_scene_node_set_enabled(&tl->shadow->shadow_node->node, true);
 
 	return true;
@@ -2430,7 +2421,7 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 			}
 
 			if (tl->shadow->shadow_geometry_dirty && !tl->shadow->shadow_dirty) {
-				int size = (int)shadow_size;
+				int size = (int)settings.shadow_size;
 				if (tl->shadow->shadow_node && size > 0) {
 					int bw_i = effective_border_width(tl->node->desktop);
 					struct wlr_box client_r = get_client_rect(tl);
@@ -2441,8 +2432,8 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 						if (tl->shadow->shadow_buf_w == (int)(buf_w * scale) &&
 								tl->shadow->shadow_buf_h == (int)(buf_h * scale)) {
 							wlr_scene_node_lower_to_bottom(&tl->shadow->shadow_node->node);
-							wlr_scene_node_set_position(&tl->shadow->shadow_node->node, shadow_offset_x - bw_i - size,
-								shadow_offset_y - bw_i - size);
+							wlr_scene_node_set_position(&tl->shadow->shadow_node->node,
+								settings.shadow_offset_x - bw_i - size, settings.shadow_offset_y - bw_i - size);
 							if (!tl->shadow->shadow_node->node.enabled)
 								wlr_scene_node_set_enabled(&tl->shadow->shadow_node->node, true);
 							tl->shadow->shadow_geometry_dirty = false;

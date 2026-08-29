@@ -36,8 +36,6 @@ size_t num_gesturebinds = 0;
 hotcornerbind_t hotcorner_bindings[MAX_HOTCORNERBINDS];
 size_t num_hotcornerbinds = 0;
 submap_t *active_submap = NULL;
-bool minimize_to_scratchpad = false;
-bool realtime_scheduling = false;
 
 #define MAX_SUBMAPS 32
 static submap_t submaps[MAX_SUBMAPS];
