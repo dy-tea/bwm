@@ -29,7 +29,7 @@ typedef enum {
 	RULE_TYPE_BLOCK_OUT_FROM_SCREENSHARE = 1 << 16,
 	RULE_TYPE_ALLOW_TEARING = 1 << 17,
 	RULE_TYPE_SHORTCUTS_INHIBITOR = 1 << 18,
-	RULE_TYPE_RENDER_UNFOCUSED = 1 << 19,
+	RULE_TYPE_RENDER_UNFOCUSED_FPS = 1 << 19,
 	RULE_TYPE_OPACITY = 1 << 20,
 	RULE_TYPE_ANIM_DISABLE = 1 << 21,
 	RULE_TYPE_LAST = 1 << 22,
@@ -54,6 +54,7 @@ typedef struct {
 	float scroller_proportion_single;
 	float border_radius;
 	float opacity;
+	int render_unfocused_fps;
 } rule_consequence_t;
 
 typedef struct rule_t {

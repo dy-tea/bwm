@@ -139,9 +139,9 @@ void list_rules(char *buf, size_t buf_size) {
 		if (r->consequence.has & RULE_TYPE_SHORTCUTS_INHIBITOR)
 			offset += snprintf(buf + offset, buf_size - offset, "shortcuts_inhibitor=%s ",
 				r->consequence.flags & RULE_TYPE_SHORTCUTS_INHIBITOR ? "on" : "off");
-		if (r->consequence.has & RULE_TYPE_RENDER_UNFOCUSED)
-			offset += snprintf(buf + offset, buf_size - offset, "render_unfocused=%s ",
-				r->consequence.flags & RULE_TYPE_RENDER_UNFOCUSED ? "on" : "off");
+		if (r->consequence.has & RULE_TYPE_RENDER_UNFOCUSED_FPS)
+			offset += snprintf(buf + offset, buf_size - offset, "render_unfocused_fps=%d ",
+				r->consequence.render_unfocused_fps);
 		if (r->consequence.has & RULE_TYPE_OPACITY)
 			offset += snprintf(buf + offset, buf_size - offset, "opacity=%.1f ", r->consequence.opacity);
 
@@ -192,6 +192,8 @@ rule_consequence_t *find_matching_rule(const char *app_id, const char *title, co
 				merged.border_radius = r->consequence.border_radius;
 			if (bits & RULE_TYPE_OPACITY)
 				merged.opacity = r->consequence.opacity;
+			if (bits & RULE_TYPE_RENDER_UNFOCUSED_FPS)
+				merged.render_unfocused_fps = r->consequence.render_unfocused_fps;
 
 			if (r->match.one_shot)
 				remove_rule(r);
@@ -228,10 +230,8 @@ void rule_apply_consequence(node_t *node, client_t *client, const rule_consequen
 		client->flags.allow_tearing_from_rule = true;
 	}
 
-	if (rule->has & RULE_TYPE_RENDER_UNFOCUSED) {
-		client->flags.render_unfocused = rule->flags & RULE_TYPE_RENDER_UNFOCUSED;
-		client->flags.render_unfocused_from_rule = true;
-	}
+	if (rule->has & RULE_TYPE_RENDER_UNFOCUSED_FPS)
+		client->render_unfocused_fps = rule->render_unfocused_fps;
 
 	if (rule->has & RULE_TYPE_BLUR) {
 		client->flags.blur = rule->flags & RULE_TYPE_BLUR;

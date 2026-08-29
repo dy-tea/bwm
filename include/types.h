@@ -140,8 +140,6 @@ typedef struct {
 	uint32_t block_out_from_screenshare : 1;
 	uint32_t allow_tearing : 1;
 	uint32_t allow_tearing_from_rule : 1;
-	uint32_t render_unfocused : 1;
-	uint32_t render_unfocused_from_rule : 1;
 	uint32_t anim_disabled : 1;
 } client_flags_t;
 
@@ -160,6 +158,7 @@ typedef struct client_t {
 	// Visual effects
 	float border_radius;
 	float opacity;
+	int render_unfocused_fps;
 	float shadow_size, shadow_offset_x, shadow_offset_y;
 	float shadow_color[4];
 
@@ -258,9 +257,6 @@ typedef struct {
 	bool debug_txn_wait;
 	int directional_focus_tightness;
 	int ignore_ewmh_fullscreen;
-
-	// Render-unfocused settings
-	int render_unfocused_fps;
 
 	// Idle power management (DPMS timeout)
 	int idle_timeout;

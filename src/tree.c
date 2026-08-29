@@ -43,7 +43,6 @@ doors_settings_t settings = {
 	.mapping_events_count = 0,
 	.directional_focus_tightness = 20,
 	.ignore_ewmh_fullscreen = 0,
-	.render_unfocused_fps = 5,
 	.idle_timeout = 0,
 	.idle_dpms = true,
 	.realtime_scheduling = false,

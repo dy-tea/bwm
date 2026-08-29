@@ -175,12 +175,15 @@ void ipc_cmd_rule(char **args, int num, int client_fd) {
 			} else if (streq("animations_disable=off", arg)) {
 				r->consequence.flags &= ~RULE_TYPE_ANIM_DISABLE;
 				r->consequence.has |= RULE_TYPE_ANIM_DISABLE;
-			} else if (streq("render_unfocused=on", arg)) {
-				r->consequence.flags |= RULE_TYPE_RENDER_UNFOCUSED;
-				r->consequence.has |= RULE_TYPE_RENDER_UNFOCUSED;
-			} else if (streq("render_unfocused=off", arg)) {
-				r->consequence.flags &= ~RULE_TYPE_RENDER_UNFOCUSED;
-				r->consequence.has |= RULE_TYPE_RENDER_UNFOCUSED;
+			} else if (strncmp("render_unfocused_fps=", arg, 21) == 0) {
+				int val = atoi(arg + 21);
+				if (val >= 0 && val <= 1000) {
+					r->consequence.render_unfocused_fps = val;
+					r->consequence.has |= RULE_TYPE_RENDER_UNFOCUSED_FPS;
+				} else {
+					send_failure(client_fd, "render_unfocused_fps must be between 0 and 1000");
+					return;
+				}
 			} else if (strncmp("opacity=", arg, 8) == 0) {
 				float val = atof(arg + 8);
 				if (val >= 0.0f && val <= 1.0f) {

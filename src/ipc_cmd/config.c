@@ -872,9 +872,6 @@ void ipc_cmd_config(char **args, int num, int client_fd) {
 			ipc_format_color_float(buf, sizeof(buf), settings.shadow_color);
 			send_success(client_fd, buf);
 		}
-	} else if (streq("render_unfocused_fps", *args)) {
-		ipc_handle_int(args, num, client_fd, &settings.render_unfocused_fps, IPC_FLAG_NONE, 1, INT_MAX,
-			"value must be >=1");
 	} else if (streq("idle_timeout", *args)) {
 		if (ipc_handle_int(args, num, client_fd, &settings.idle_timeout, IPC_FLAG_NONE, 0, 86400,
 			"value must be 0-86400"))

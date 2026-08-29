@@ -4,9 +4,14 @@
 #include "toplevel.h"
 #include "tree.h"
 #include "types.h"
+#include <limits.h>
 #include <stdlib.h>
 #include <time.h>
 #include <wlr/types/wlr_scene.h>
+
+#ifndef MIN
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
 
 static struct wl_list render_unfocused_clients;
 static struct wl_event_source *render_unfocused_timer = NULL;
@@ -35,6 +40,7 @@ static int handle_render_unfocused_timer(void *data) {
 		return 0;
 
 	struct render_unfocused_link *rfl, *tmp;
+	int min_interval = INT_MAX;
 	wl_list_for_each_safe(rfl, tmp, &render_unfocused_clients, link) {
 		if (!rfl->client) {
 			wl_list_remove(&rfl->link);
@@ -44,11 +50,13 @@ static int handle_render_unfocused_timer(void *data) {
 		struct wlr_scene_tree *st = client_get_scene_tree(rfl->client);
 		if (st && st->node.enabled)
 			continue;
+		if (rfl->client->render_unfocused_fps > 0)
+			min_interval = MIN(min_interval, 1000 / rfl->client->render_unfocused_fps);
 		send_frame_done_to_client(rfl->client);
 	}
 
-	if (!wl_list_empty(&render_unfocused_clients) && settings.render_unfocused_fps > 0)
-		wl_event_source_timer_update(render_unfocused_timer, 1000 / settings.render_unfocused_fps);
+	if (min_interval != INT_MAX)
+		wl_event_source_timer_update(render_unfocused_timer, min_interval);
 
 	return 0;
 }
@@ -57,7 +65,7 @@ void render_unfocused_client_update(client_t *client) {
 	if (!client)
 		return;
 
-	bool enabled = client->flags.render_unfocused;
+	bool enabled = client->render_unfocused_fps > 0;
 
 	struct render_unfocused_link *rfl, *tmp;
 	wl_list_for_each_safe(rfl, tmp, &render_unfocused_clients, link) {
@@ -79,11 +87,11 @@ void render_unfocused_client_update(client_t *client) {
 	rfl->client = client;
 	wl_list_insert(&render_unfocused_clients, &rfl->link);
 
-	if (!render_unfocused_timer && settings.render_unfocused_fps > 0) {
+	if (!render_unfocused_timer && client->render_unfocused_fps > 0) {
 		render_unfocused_timer = wl_event_loop_add_timer(wl_display_get_event_loop(server.wl_display),
 			handle_render_unfocused_timer, NULL);
 		if (render_unfocused_timer)
-			wl_event_source_timer_update(render_unfocused_timer, 1000 / settings.render_unfocused_fps);
+			wl_event_source_timer_update(render_unfocused_timer, 1000 / client->render_unfocused_fps);
 	}
 }
 
