@@ -735,6 +735,7 @@ static void gles2_output_resize(be_output_state_t *state, int width, int height,
 	state->pong.height = blur_h;
 	state->blur_scratch.width = blur_w;
 	state->blur_scratch.height = blur_h;
+	state->blur_scratch.state = BE_RESOURCE_SHADER_READ;
 
 	create_fbo(width, height, (GLuint *)&state->staging.native_handle[0],
 		(GLuint *)&state->staging.native_handle[1]);

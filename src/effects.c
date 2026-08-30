@@ -851,6 +851,7 @@ static bool rebuild_live_blur(output_t *output, be_effect_resource_t shared_blur
 				NULL, 0, &blur_result) || !blur_result.valid || !effects_backend->blit(blur_result,
 				blur_out_target, ctx->blur_w, ctx->blur_h, NULL, 0)) {
 			ctx->blur_gen = 0;
+			wlr_log(WLR_ERROR, "blur pass failed for output %s", output->name);
 			return false;
 		}
 		ctx->blur_gen = ctx->backdrop_gen;
