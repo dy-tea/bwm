@@ -380,6 +380,7 @@ static void box_pass_dir(GLuint prog, GLuint src_tex, GLuint dst_fbo, int w, int
 		glUniform1f(g->u_box.contrast, p->contrast);
 	draw_quad_scissored(scissor, n_scissor, h);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glFlush();
 }
 
 static void box_pass(GLuint src_tex, GLuint ping_fbo, GLuint ping_tex, GLuint pong_fbo, int w, int h,
@@ -408,6 +409,7 @@ static void gaussian_pass_dir(GLuint prog, GLuint src_tex, GLuint dst_fbo, int w
 		glUniform1f(g->u_gauss.contrast, p->contrast);
 	draw_quad_scissored(scissor, n_scissor, h);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glFlush();
 }
 
 static void gaussian_pass(GLuint src_tex, GLuint ping_fbo, GLuint ping_tex, GLuint pong_fbo, int w,
@@ -845,6 +847,7 @@ static bool gles2_blit(be_effect_resource_t src, be_effect_resource_t dst, int w
 	}
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glFlush();
 	return true;
 }
 
