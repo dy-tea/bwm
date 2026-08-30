@@ -820,6 +820,25 @@ static bool vk_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 		.pSubpasses = &sp,
 	};
 
+	VkSubpassDependency deps[2] = {
+		{
+			.srcSubpass = VK_SUBPASS_EXTERNAL,
+			.dstSubpass = 0,
+			.srcStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+			.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		},
+		{
+			.srcSubpass = 0,
+			.dstSubpass = VK_SUBPASS_EXTERNAL,
+			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+		},
+	};
+
 	for (int i = 0; i < 4; i++) {
 		VkAttachmentLoadOp loadOp = (VkAttachmentLoadOp[]){
 			VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -842,6 +861,8 @@ static bool vk_init(struct wlr_renderer *r, struct wlr_allocator *a) {
 			.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 		};
 		rpci.pAttachments = &att;
+		rpci.dependencyCount = 2;
+		rpci.pDependencies = deps;
 		if (vkCreateRenderPass(vk->device, &rpci, NULL, dest) != VK_SUCCESS) {
 			vkDestroyCommandPool(vk->device, vk->cmd_pool, NULL);
 			free(vk);

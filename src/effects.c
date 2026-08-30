@@ -1641,10 +1641,10 @@ static bool blur_render_shadow(toplevel_t *tl) {
 		return false;
 
 	if (!tl->shadow->shadow_node) {
-		tl->shadow->shadow_node = wlr_scene_buffer_create(tl->scene_tree, NULL);
+		tl->shadow->shadow_node = wlr_scene_buffer_create(tl->scene_tree, tl->shadow->shadow_buf);
 		if (!tl->shadow->shadow_node)
 			return false;
-		wlr_scene_node_lower_to_bottom(&tl->shadow->shadow_node->node);
+		wlr_scene_node_raise_to_top(&tl->shadow->shadow_node->node);
 		tl->shadow->shadow_node->point_accepts_input = scene_buffer_no_input;
 	}
 
@@ -1681,7 +1681,6 @@ static bool blur_render_shadow(toplevel_t *tl) {
 	};
 	effects_backend->render_shadow(&sp, be_buffer_target_from_buffer(&shadow_buf, 0));
 
-	wlr_scene_node_lower_to_bottom(&tl->shadow->shadow_node->node);
 	if (tl->shadow->shadow_node->buffer != tl->shadow->shadow_buf)
 		wlr_scene_buffer_set_buffer(tl->shadow->shadow_node, tl->shadow->shadow_buf);
 	struct wlr_fbox src_box = {
@@ -2432,7 +2431,6 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 						float scale = tl->node->output ? tl->node->output->wlr_output->scale : 1.0f;
 						if (tl->shadow->shadow_buf_w == (int)(buf_w * scale) &&
 								tl->shadow->shadow_buf_h == (int)(buf_h * scale)) {
-							wlr_scene_node_lower_to_bottom(&tl->shadow->shadow_node->node);
 							wlr_scene_node_set_position(&tl->shadow->shadow_node->node,
 								settings.shadow_offset_x - bw_i - size, settings.shadow_offset_y - bw_i - size);
 							if (!tl->shadow->shadow_node->node.enabled)

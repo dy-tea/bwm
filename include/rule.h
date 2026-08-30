@@ -43,8 +43,8 @@ typedef struct {
 } rule_match_t;
 
 typedef struct {
-	rule_type_t has; // what fields are set in this rule
-	rule_type_t flags; // value of boolean fields
+	uint32_t has; // what fields are set in this rule
+	uint32_t flags; // value of boolean fields
 
 	// non-boolean fields
 	char desktop[SMALEN];

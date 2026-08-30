@@ -9,7 +9,6 @@
 - Inner glow effects on borders
 - Rule-based blur for `blur=on` and `acrylic=on` do not render
 - Some AMD rendering issues
-- When shadow is enabled on a toplevel with rounded borders, the shadow seems to be clipped where the toplevel was clipped by the rounded border (either a layering or rendering issue)
 
 # Layout
 - Better tab grouping (see sway or Hyprland for reference)
