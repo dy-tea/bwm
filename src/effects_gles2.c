@@ -293,6 +293,7 @@ static void blur_pass(GLuint src_tex, GLuint dst_fbo, int w, int h, int pass_ind
 
 	draw_quad_scissored(scissor, n_scissor, h);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glFlush();
 }
 
 static void refraction_pass(GLuint src_tex, GLuint dst_fbo, int w, int h, struct be_blur_params *p,
@@ -759,23 +760,28 @@ static bool gles2_ensure_buffer(struct wlr_buffer **buf, uint64_t native[2], int
 		return false;
 
 	struct wlr_buffer *new_buf = wlr_allocator_create_buffer(a, w, h, g->render_fmt);
-	if (!new_buf)
+	if (!new_buf) {
+		wlr_log(WLR_DEBUG, "gles2_ensure_buffer: alloc create_buffer failed %dx%d", w, h);
 		return false;
+	}
 
 	GLuint fbo = wlr_gles2_renderer_get_buffer_fbo(r, new_buf);
 	if (!fbo) {
+		wlr_log(WLR_DEBUG, "gles2_ensure_buffer: get_buffer_fbo failed %dx%d", w, h);
 		wlr_buffer_drop(new_buf);
 		return false;
 	}
 
 	struct wlr_texture *tex = wlr_texture_from_buffer(r, new_buf);
 	if (!tex) {
+		wlr_log(WLR_DEBUG, "gles2_ensure_buffer: texture_from_buffer failed %dx%d", w, h);
 		wlr_buffer_drop(new_buf);
 		return false;
 	}
 	struct wlr_gles2_texture_attribs attribs;
 	wlr_gles2_texture_get_attribs(tex, &attribs);
 	if (!attribs.tex) {
+		wlr_log(WLR_DEBUG, "gles2_ensure_buffer: no GL texture attrib %dx%d", w, h);
 		wlr_texture_destroy(tex);
 		wlr_buffer_drop(new_buf);
 		return false;
@@ -787,8 +793,8 @@ static bool gles2_ensure_buffer(struct wlr_buffer **buf, uint64_t native[2], int
 	*buf = new_buf;
 	native[0] = (uint64_t)fbo;
 	native[1] = (uint64_t)attribs.tex;
-	// The wrapper owns the GL texture object; keep it alive until the buffer is
-	// released rather than destroying it immediately.
+	wlr_log(WLR_DEBUG, "gles2_ensure_buffer: created buf %dx%d, fbo=%lu, tex=%lu",
+		w, h, (unsigned long)fbo, (unsigned long)attribs.tex);
 	return true;
 }
 
@@ -812,8 +818,13 @@ static void gles2_frame_end(void) {
 
 static bool gles2_blit(be_effect_resource_t src, be_effect_resource_t dst, int w, int h,
 		const pixman_box32_t *scissor, int n_scissor) {
-	if (!be_resource_readable(&src) || !be_resource_valid(&dst))
+	if (!be_resource_readable(&src) || !be_resource_valid(&dst)) {
+		wlr_log(WLR_DEBUG, "gles2_blit: validation failed src.valid=%d src.state=%d dst.valid=%d dst.handle=%lu",
+			src.valid, src.state, dst.valid, (unsigned long)dst.handle);
 		return false;
+	}
+	wlr_log(WLR_DEBUG, "gles2_blit: src tex=%lu, dst fbo=%lu, %dx%d",
+		(unsigned long)src.handle, (unsigned long)dst.handle, w, h);
 	glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst.handle);
 	glViewport(0, 0, w, h);
 	glActiveTexture(GL_TEXTURE0);
@@ -840,9 +851,17 @@ static bool gles2_blit(be_effect_resource_t src, be_effect_resource_t dst, int w
 static bool gles2_blur(be_output_state_t *state, be_effect_resource_t src, int src_w, int src_h,
 		struct be_blur_params *p, be_effect_resource_t dst, const pixman_box32_t *scissor, int n_scissor,
 		be_effect_resource_t *out_resource) {
-	if (!be_resource_readable(&src))
+	if (!be_resource_readable(&src)) {
+		wlr_log(WLR_DEBUG, "gles2_blur: src not readable (handle=%lu, valid=%d, state=%d)",
+			(unsigned long)src.handle, src.valid, src.state);
 		return false;
+	}
 	uint64_t src_handle = src.handle;
+
+	wlr_log(WLR_DEBUG, "gles2_blur: src=%lu %dx%d, passes=%d, full_res=%d, algorithm=%d, offset=%.2f, "
+		"bright=%.2f, contrast=%.2f, sat=%.2f, dst.valid=%d, dst.handle=%lu",
+		(unsigned long)src.handle, src_w, src_h, p->passes, p->full_res, p->algorithm, p->offset,
+		p->brightness, p->contrast, p->saturation, dst.valid, (unsigned long)dst.handle);
 
 	if (p->passes <= 0 || p->algorithm == BLUR_ALGORITHM_NONE) {
 		if (dst.valid) {
@@ -920,6 +939,7 @@ static bool gles2_blur(be_output_state_t *state, be_effect_resource_t src, int s
 				cur_tex = level_tex[i - 1];
 		}
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glFlush();
 		if (out_resource)
 			*out_resource = dst.valid ? (be_effect_resource_t){0} : (be_effect_resource_t){
 				.handle = (uint64_t)state->blur_scratch.native_handle[1],
@@ -928,6 +948,8 @@ static bool gles2_blur(be_output_state_t *state, be_effect_resource_t src, int s
 				.state = BE_RESOURCE_SHADER_READ,
 				.valid = true
 			};
+		wlr_log(WLR_DEBUG, "gles2_blur: full-res kawase done, scratch tex=%lu, src=%dx%d",
+			(unsigned long)state->blur_scratch.native_handle[1], src_w, src_h);
 		return true;
 	}
 
@@ -1051,7 +1073,9 @@ static bool gles2_apply_acrylic(be_output_state_t *state, be_effect_resource_t b
 		int target = (current == texs[0]) ? 1 : 0;
 		for (int i = 0; i < p->blur_passes; i++) {
 			blur_pass(current, fbos[target], blur_w, blur_h, i, &(struct be_blur_params){
-				.radius = p->blur_radius
+				.radius = p->blur_radius,
+				.brightness = 1.0f,
+				.contrast = 1.0f
 			}, NULL, 0);
 			current = texs[target];
 			target ^= 1;
@@ -1216,6 +1240,11 @@ static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_
 		return false;
 	}
 
+	wlr_log(WLR_DEBUG, "gles2_capture_readback: src=%dx%d at (%d,%d), dst=%dx%d at (%d,%d), "
+		"dst_fbo=%lu, capture_fbo=%lu, dst.valid=%d",
+		src_w, src_h, src_x, src_y, dst_w, dst_h, dst_x, dst_y,
+		(unsigned long)dst_fbo, (unsigned long)capture_fbo, dst.valid);
+
 	GLuint result_tex = 0;
 
 	glBindFramebuffer(GL_FRAMEBUFFER, capture_fbo);
@@ -1297,8 +1326,13 @@ static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_
 			result_tex = (GLuint)state->screen_shader.native_handle[1];
 	}
 
-	if (!result_tex)
+	if (!result_tex) {
+		wlr_log(WLR_DEBUG, "gles2_capture_readback: no result texture (attach_type=%d, attach_name=%u)",
+			attach_type, attach_name);
 		return false;
+	}
+	wlr_log(WLR_DEBUG, "gles2_capture_readback: success, result_tex=%lu, %dx%d",
+		(unsigned long)result_tex, dst_w, dst_h);
 	out_resource->handle = (uint64_t)result_tex;
 	out_resource->width = dst_w;
 	out_resource->height = dst_h;

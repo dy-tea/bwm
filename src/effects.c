@@ -799,6 +799,11 @@ static bool rebuild_live_blur(output_t *output, be_effect_resource_t shared_blur
 
 	bool keep_blur = ctx->blur_buf && ctx->blur_native[0] && ctx->blur_gen == ctx->backdrop_gen;
 
+	wlr_log(WLR_DEBUG, "rebuild_live_blur: output=%s, keep=%d, blur_buf=%p, blur_gen=%u, "
+		"backdrop_gen=%u, blur_w=%d, blur_h=%d, shared_bg.valid=%d",
+		output->name, keep_blur, (void *)ctx->blur_buf, ctx->blur_gen, ctx->backdrop_gen,
+		ctx->blur_w, ctx->blur_h, shared_blurred.valid);
+
 	if (!keep_blur) {
 		// capture shared background if not provided (fallback for non-damaged frames)
 		if (!shared_blurred.valid) {
@@ -851,10 +856,13 @@ static bool rebuild_live_blur(output_t *output, be_effect_resource_t shared_blur
 				NULL, 0, &blur_result) || !blur_result.valid || !effects_backend->blit(blur_result,
 				blur_out_target, ctx->blur_w, ctx->blur_h, NULL, 0)) {
 			ctx->blur_gen = 0;
-			wlr_log(WLR_ERROR, "blur pass failed for output %s", output->name);
+			wlr_log(WLR_ERROR, "blur pass failed for output %s (blur_result.valid=%d, blur_out_target.valid=%d)",
+				output->name, blur_result.valid, blur_out_target.valid);
 			return false;
 		}
 		ctx->blur_gen = ctx->backdrop_gen;
+		wlr_log(WLR_DEBUG, "rebuild_live_blur: blur rebuilt for output %s, blur_buf native FBO=%lu, result tex=%lu",
+			output->name, (unsigned long)ctx->blur_native[0], (unsigned long)blur_result.handle);
 	}
 	any = true;
 

@@ -2168,14 +2168,12 @@ static bool vk_apply_acrylic(be_output_state_t *state, be_effect_resource_t bg,
 		VkImage current = vk_img_of(bg.handle);
 		int target = (current == tex0) ? 1 : 0;
 		for (int i = 0; i < p->blur_passes; i++) {
-			struct {
-				float hp[2];
-				float off;
-				float _pad[28];
-			} pc = {0};
-			pc.hp[0] = 0.5f / blur_w;
-			pc.hp[1] = 0.5f / blur_h;
-			pc.off = p->blur_radius * (float)(i + 1);
+			union vk_push_data pc = {0};
+			pc.kawase.hp[0] = 0.5f / blur_w;
+			pc.kawase.hp[1] = 0.5f / blur_h;
+			pc.kawase.off = p->blur_radius * (float)(i + 1);
+			pc.kawase.br = 1.0f;
+			pc.kawase.cont = 1.0f;
 			struct vk_fbo *dfbo = target ? fbo1 : fbo0;
 			VkImage dimg = target ? tex1 : tex0;
 			vk_draw_full(vk->pipe_kawase, current, dfbo, blur_w, blur_h, dfbo->img.image, &pc, sizeof(pc),

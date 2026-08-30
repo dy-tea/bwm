@@ -1,4 +1,4 @@
-precision mediump float;
+precision highp float;
 uniform sampler2D tex;
 varying vec2 v_uv;
 
