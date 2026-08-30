@@ -7,10 +7,9 @@
 # Effects
 - Effects per window state (e.g. unfocused, focused, ...)
 - Inner glow effects on borders
-- On Intel, mica renders fine but blur does not render at all
-- AMD has the following issues: gles2 non-protocol blur buffers render as black (ext-background-effect-v1 protocol, doesn't happen with mica); vulkan incorrectly clips surfaces with rounded borders, mica and shadow do not render
+- Rule-based blur for `blur=on` and `acrylic=on` do not render
+- Some AMD rendering issues
 - When shadow is enabled on a toplevel with rounded borders, the shadow seems to be clipped where the toplevel was clipped by the rounded border (either a layering or rendering issue)
-- Acrylic appears to not render at all anymore
 
 # Layout
 - Better tab grouping (see sway or Hyprland for reference)
