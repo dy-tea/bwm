@@ -7,8 +7,9 @@
 # Effects
 - Effects per window state (e.g. unfocused, focused, ...)
 - Inner glow effects on borders
-- Rule-based blur for `blur=on` and `acrylic=on` do not render
-- Some AMD rendering issues
+- Rule-based blur for `blur=on` does not render a blur surface (`mica=on` and `blur=on` do render correctly on gles2+intel)
+- On intel+vulkan, `mica=on` shows the wrong content in the buffer (non-updating fullscreen capture instead of background), `acrylic=on` shows a light grey color and `blur=on` shows no surface. Shadow looks different from gles2 and has an incorrect y position (closer to the bottom of the screen than expected).
+- Some AMD rendering issues, will fix these after intel ones
 
 # Layout
 - Better tab grouping (see sway or Hyprland for reference)
