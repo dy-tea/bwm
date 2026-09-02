@@ -2232,7 +2232,7 @@ static bool vk_render_shadow(struct be_shadow_params *p, be_effect_resource_t ds
 	pc.inner[0] = p->inner_width;
 	pc.inner[1] = p->inner_height;
 	pc.hole[0] = p->hole_x;
-	pc.hole[1] = (float)p->buf_h - p->hole_y - p->hole_height;
+	pc.hole[1] = p->hole_y;
 	pc.hsize[0] = p->hole_width;
 	pc.hsize[1] = p->hole_height;
 

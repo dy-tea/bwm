@@ -8,7 +8,7 @@
 - Effects per window state (e.g. unfocused, focused, ...)
 - Inner glow effects on borders
 - Toplevels with `blur=on` do not render toplevels with blur or mica behind it
-- On intel+vulkan, `mica=on` shows the wrong content in the buffer (non-updating fullscreen capture instead of background), `acrylic=on` shows a light grey color and `blur=on` shows no surface. Shadow looks different from gles2 and has an incorrect y position (closer to the bottom of the screen than expected).
+- On intel+vulkan, `mica=on` shows the wrong content in the buffer (potentially a non-updating fullscreen capture instead of background), `acrylic=on` looks strange and `blur=on` shows the toplevels' surface blurred instead of what is behind it blurred.
 - Some AMD rendering issues, will fix these after intel ones
 
 # Layout
