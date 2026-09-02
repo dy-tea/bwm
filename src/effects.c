@@ -625,9 +625,15 @@ static be_effect_resource_t capture_bg_to_tex1_ex(output_t *output, effects_outp
 		}
 	} else if (hide_blur_toplevels) {
 		wl_list_for_each(tl, &server.toplevels, link) {
-			if (!tl->blur)
+			if (!tl->blur) {
+				wlr_log(WLR_DEBUG, "DBGTL: tl=%p blur=NULL (no blur struct)", (void *)tl);
 				continue;
+			}
 			tl->blur->blur_scene_hidden = false;
+			int bc = blur_count(tl->blur);
+			wlr_log(WLR_DEBUG, "DBGTL: tl=%p blur=%p count=%d mica=%d acryl=%d shown=%d", (void *)tl,
+				(void *)tl->blur, bc, !!tl->blur->mica_node, !!tl->blur->acrylic_node,
+				tl->node && tl->node->client ? tl->node->client->flags.shown : -1);
 			if ((blur_count(tl->blur) > 0 || tl->blur->mica_node || tl->blur->acrylic_node) &&
 					tl->scene_tree && tl->scene_tree->node.enabled) {
 				wlr_scene_node_set_enabled(&tl->scene_tree->node, false);
@@ -800,9 +806,9 @@ static bool rebuild_live_blur(output_t *output, be_effect_resource_t shared_blur
 	bool keep_blur = ctx->blur_buf && ctx->blur_native[0] && ctx->blur_gen == ctx->backdrop_gen;
 
 	wlr_log(WLR_DEBUG, "rebuild_live_blur: output=%s, keep=%d, blur_buf=%p, blur_gen=%u, "
-		"backdrop_gen=%u, blur_w=%d, blur_h=%d, shared_bg.valid=%d",
-		output->name, keep_blur, (void *)ctx->blur_buf, ctx->blur_gen, ctx->backdrop_gen,
-		ctx->blur_w, ctx->blur_h, shared_blurred.valid);
+		"backdrop_gen=%u, blur_w=%d, blur_h=%d, shared_bg.valid=%d", output->name, keep_blur,
+			(void *)ctx->blur_buf, ctx->blur_gen, ctx->backdrop_gen, ctx->blur_w, ctx->blur_h,
+			shared_blurred.valid);
 
 	if (!keep_blur) {
 		// capture shared background if not provided (fallback for non-damaged frames)
@@ -856,12 +862,14 @@ static bool rebuild_live_blur(output_t *output, be_effect_resource_t shared_blur
 				NULL, 0, &blur_result) || !blur_result.valid || !effects_backend->blit(blur_result,
 				blur_out_target, ctx->blur_w, ctx->blur_h, NULL, 0)) {
 			ctx->blur_gen = 0;
-			wlr_log(WLR_ERROR, "blur pass failed for output %s (blur_result.valid=%d, blur_out_target.valid=%d)",
-				output->name, blur_result.valid, blur_out_target.valid);
+			wlr_log(WLR_ERROR,
+				"blur pass failed for output %s (blur_result.valid=%d, blur_out_target.valid=%d)", output->name,
+				blur_result.valid, blur_out_target.valid);
 			return false;
 		}
 		ctx->blur_gen = ctx->backdrop_gen;
-		wlr_log(WLR_DEBUG, "rebuild_live_blur: blur rebuilt for output %s, blur_buf native FBO=%lu, result tex=%lu",
+		wlr_log(WLR_DEBUG,
+			"rebuild_live_blur: blur rebuilt for output %s, blur_buf native FBO=%lu, result tex=%lu",
 			output->name, (unsigned long)ctx->blur_native[0], (unsigned long)blur_result.handle);
 	}
 	any = true;
@@ -2399,7 +2407,11 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 			bg_damaged = false;
 	}
 	bool mica_dirty = mica_enabled && ctx->mica_dirty;
-	bool effects_work = bg_damaged || mica_dirty;
+	bool blur_stale = blur_enabled && has_window_blur && (!ctx->blur_buf || !ctx->blur_native[0] ||
+		ctx->blur_gen != ctx->backdrop_gen);
+	bool effects_work = bg_damaged || mica_dirty || blur_stale;
+	wlr_log(WLR_DEBUG,
+		"DBGFRAME: bg_damaged=%d mica_dirty=%d blur_stale=%d effects_work=%d bg=%d blur_gen=%u bd_gen=%u shared_valid=%d frame_valid=%d blurred.valid=%d", bg_damaged, mica_dirty, blur_stale, effects_work, bg_damaged, ctx->blur_gen, ctx->backdrop_gen, ctx->shared_bg_valid, ctx->frame_capture.valid, ctx->frame_capture.valid);
 
 	if (!effects_work && !effects_border_pending(output) && !screen_shader_enabled)
 		return;
@@ -2472,13 +2484,12 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 			}
 		}
 		if (needs_bg)
-			shared_bg = capture_bg_to_tex1_ex(output, ctx, false, NULL, NULL, !unified, workspace_warmup,
-				NULL);
+			shared_bg = capture_bg_to_tex1_ex(output, ctx, false, NULL, NULL, true, workspace_warmup, NULL);
 	}
 
 	// toplevel blur
 	if (blur_enabled && has_window_blur) {
-		if (bg_damaged)
+		if (bg_damaged || blur_stale)
 			rebuild_live_blur(output, shared_bg, &scene_output->damage_ring.current, workspace_warmup);
 		push_blur_to_toplevels(output);
 	}
@@ -2511,8 +2522,12 @@ void effects_output_frame(output_t *output, struct wlr_scene_output *scene_outpu
 	// apply corner masks and blur if needed
 	if (has_layer_blur) {
 		if (unified) {
-			// single capture already blurred into blur_buf above; layers reuse it
-			push_blur_to_layers(output, ctx->blur_buf);
+			be_effect_resource_t layer_bg = capture_bg_combined(output, ctx);
+			if (layer_bg.valid && blur_enabled)
+				rebuild_live_blur_layers(output, layer_bg, &scene_output->damage_ring.current);
+			else if (blur_enabled)
+				rebuild_live_blur_layers(output, (be_effect_resource_t){0}, &scene_output->damage_ring.current);
+			push_blur_to_layers(output, ctx->layer_blur_buf);
 			if (any_cm_dirty)
 				rebuild_corner_masks(output);
 			push_corner_masks_to_toplevels(output, any_cm_dirty);

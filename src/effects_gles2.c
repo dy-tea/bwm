@@ -795,8 +795,8 @@ static bool gles2_ensure_buffer(struct wlr_buffer **buf, uint64_t native[2], int
 	*buf = new_buf;
 	native[0] = (uint64_t)fbo;
 	native[1] = (uint64_t)attribs.tex;
-	wlr_log(WLR_DEBUG, "gles2_ensure_buffer: created buf %dx%d, fbo=%lu, tex=%lu",
-		w, h, (unsigned long)fbo, (unsigned long)attribs.tex);
+	wlr_log(WLR_DEBUG, "gles2_ensure_buffer: created buf %dx%d, fbo=%lu, tex=%lu", w, h,
+		(unsigned long)fbo, (unsigned long)attribs.tex);
 	return true;
 }
 
@@ -821,12 +821,13 @@ static void gles2_frame_end(void) {
 static bool gles2_blit(be_effect_resource_t src, be_effect_resource_t dst, int w, int h,
 		const pixman_box32_t *scissor, int n_scissor) {
 	if (!be_resource_readable(&src) || !be_resource_valid(&dst)) {
-		wlr_log(WLR_DEBUG, "gles2_blit: validation failed src.valid=%d src.state=%d dst.valid=%d dst.handle=%lu",
-			src.valid, src.state, dst.valid, (unsigned long)dst.handle);
+		wlr_log(WLR_DEBUG,
+			"gles2_blit: validation failed src.valid=%d src.state=%d dst.valid=%d dst.handle=%lu", src.valid,
+			src.state, dst.valid, (unsigned long)dst.handle);
 		return false;
 	}
-	wlr_log(WLR_DEBUG, "gles2_blit: src tex=%lu, dst fbo=%lu, %dx%d",
-		(unsigned long)src.handle, (unsigned long)dst.handle, w, h);
+	wlr_log(WLR_DEBUG, "gles2_blit: src tex=%lu, dst fbo=%lu, %dx%d", (unsigned long)src.handle,
+		(unsigned long)dst.handle, w, h);
 	glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)dst.handle);
 	glViewport(0, 0, w, h);
 	glActiveTexture(GL_TEXTURE0);
@@ -862,9 +863,9 @@ static bool gles2_blur(be_output_state_t *state, be_effect_resource_t src, int s
 	uint64_t src_handle = src.handle;
 
 	wlr_log(WLR_DEBUG, "gles2_blur: src=%lu %dx%d, passes=%d, full_res=%d, algorithm=%d, offset=%.2f, "
-		"bright=%.2f, contrast=%.2f, sat=%.2f, dst.valid=%d, dst.handle=%lu",
-		(unsigned long)src.handle, src_w, src_h, p->passes, p->full_res, p->algorithm, p->offset,
-		p->brightness, p->contrast, p->saturation, dst.valid, (unsigned long)dst.handle);
+		"bright=%.2f, contrast=%.2f, sat=%.2f, dst.valid=%d, dst.handle=%lu", (unsigned long)src.handle,
+			src_w, src_h, p->passes, p->full_res, p->algorithm, p->offset, p->brightness, p->contrast,
+			p->saturation, dst.valid, (unsigned long)dst.handle);
 
 	if (p->passes <= 0 || p->algorithm == BLUR_ALGORITHM_NONE) {
 		if (dst.valid) {
@@ -1244,9 +1245,8 @@ static bool gles2_capture_readback(struct wlr_buffer *capture_buffer, be_output_
 	}
 
 	wlr_log(WLR_DEBUG, "gles2_capture_readback: src=%dx%d at (%d,%d), dst=%dx%d at (%d,%d), "
-		"dst_fbo=%lu, capture_fbo=%lu, dst.valid=%d",
-		src_w, src_h, src_x, src_y, dst_w, dst_h, dst_x, dst_y,
-		(unsigned long)dst_fbo, (unsigned long)capture_fbo, dst.valid);
+		"dst_fbo=%lu, capture_fbo=%lu, dst.valid=%d", src_w, src_h, src_x, src_y, dst_w, dst_h, dst_x,
+			dst_y, (unsigned long)dst_fbo, (unsigned long)capture_fbo, dst.valid);
 
 	GLuint result_tex = 0;
 
