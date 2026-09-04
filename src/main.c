@@ -35,15 +35,21 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	if (log_init(NULL) != 0) {
-		fprintf(stderr, "Error: Failed to initialize logging\n");
-		return 1;
-	}
+#ifndef DEBUG
+	if (getenv("DOORS_LOGGING")) {
+#endif
+		if (log_init(NULL) != 0) {
+			fprintf(stderr, "Error: Failed to initialize logging\n");
+			return 1;
+		}
 
-	if (log_setup_signals() != 0) {
-		fprintf(stderr, "Error: Failed to setup signal handlers\n");
-		return 1;
+		if (log_setup_signals() != 0) {
+			fprintf(stderr, "Error: Failed to setup signal handlers\n");
+			return 1;
+		}
+#ifndef DEBUG
 	}
+#endif
 
 	config_init_with_config_dir(config_dir);
 	server_init();
