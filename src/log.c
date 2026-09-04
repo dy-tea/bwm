@@ -1,5 +1,6 @@
 #include "log.h"
 #include "once.h"
+#include <dirent.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -14,59 +15,100 @@
 #include <execinfo.h>
 #endif
 
-#define MAX_LOG_LINES 10000
-#define MAX_LOG_FILES 5
-#define LOG_FILENAME_BASE "doors"
-
 static FILE *log_file = NULL;
 static char log_path[2048] = {0};
 static char log_dir[1024] = {0};
-static unsigned int current_line_count = 0;
-static unsigned int rotation_count = 0;
 
-static void rotate_log_file(void);
+static const char *verbosity_colors[] = {
+	[WLR_SILENT] = "",
+	[WLR_ERROR] = "\x1B[1;31m",
+	[WLR_INFO] = "\x1B[1;34m",
+	[WLR_DEBUG] = "\x1B[1;90m",
+};
+
+static const char *verbosity_headers[] = {
+	[WLR_SILENT] = "",
+	[WLR_ERROR] = "[ERROR]",
+	[WLR_INFO] = "[INFO]",
+	[WLR_DEBUG] = "[DEBUG]",
+};
+
+static int log_compare(const void *a, const void *b) {
+	const struct dirent *ea = *(const struct dirent **)a;
+	const struct dirent *eb = *(const struct dirent **)b;
+	return strcmp(eb->d_name, ea->d_name);
+}
+
+static void cleanup_old_logs(void) {
+	DIR *dir = opendir(log_dir);
+	if (!dir)
+		return;
+
+	struct dirent **namelist = NULL;
+	int count = 0;
+	struct dirent *entry;
+	while ((entry = readdir(dir)) != NULL) {
+		if (strstr(entry->d_name, ".log"))
+			count++;
+	}
+	rewinddir(dir);
+
+	if (count <= 25) {
+		closedir(dir);
+		return;
+	}
+
+	namelist = malloc(count * sizeof(struct dirent *));
+	if (!namelist) {
+		closedir(dir);
+		return;
+	}
+
+	int i = 0;
+	while ((entry = readdir(dir)) != NULL) {
+		if (strstr(entry->d_name, ".log")) {
+			namelist[i] = malloc(sizeof(struct dirent));
+			memcpy(namelist[i], entry, sizeof(struct dirent));
+			i++;
+		}
+	}
+	closedir(dir);
+
+	qsort(namelist, count, sizeof(struct dirent *), log_compare);
+
+	for (int j = 25; j < count; j++) {
+		char full_path[2048];
+		snprintf(full_path, sizeof(full_path), "%s/%s", log_dir, namelist[j]->d_name);
+		unlink(full_path);
+		free(namelist[j]);
+	}
+
+	for (int j = 0; j < 25; j++)
+		free(namelist[j]);
+	free(namelist);
+}
 
 static void log_callback(enum wlr_log_importance importance, const char *fmt, va_list args) {
-	// check if rotation is needed
-	if (log_file && current_line_count >= MAX_LOG_LINES)
-		rotate_log_file();
-
 	// get current time
 	time_t now = time(NULL);
 	struct tm *tm_info = localtime(&now);
 	char time_str[32];
 	strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
 
-	// map importance level to string
-	const char *level_str = "UNKN";
-	switch (importance) {
-	case WLR_SILENT:
-		level_str = "SLNT";
-		break;
-	case WLR_ERROR:
-		level_str = "ERRO";
-		break;
-	case WLR_INFO:
-		level_str = "INFO";
-		break;
-	case WLR_DEBUG:
-		level_str = "DEBUG";
-		break;
-	default:
-		level_str = "UNKN";
-		break;
-	}
+	// map importance level to string and color
+	const char *level_str = verbosity_headers[importance];
+	const char *color = verbosity_colors[importance];
 
-	// print to stdout
-	fprintf(stdout, "[%s] %s ", time_str, level_str);
+	// print to stdout (colored)
+	fprintf(stdout, "[%s] %s%s ", time_str, color, level_str);
 	va_list args_copy;
 	va_copy(args_copy, args);
 	vfprintf(stdout, fmt, args_copy);
 	va_end(args_copy);
-	fprintf(stdout, "\n");
+	fprintf(stdout, "\033[0m\n");
 	fflush(stdout);
 
-	// print to file
+	// print to file (uncolored)
 	if (log_file) {
 		fprintf(log_file, "[%s] %s ", time_str, level_str);
 		va_copy(args_copy, args);
@@ -74,50 +116,7 @@ static void log_callback(enum wlr_log_importance importance, const char *fmt, va
 		va_end(args_copy);
 		fprintf(log_file, "\n");
 		fflush(log_file);
-		current_line_count++;
 	}
-}
-
-static void rotate_log_file(void) {
-	if (!log_file)
-		return;
-
-	// close current file
-	fprintf(log_file, "########## Log rotation ##########\n");
-	fflush(log_file);
-	fclose(log_file);
-	log_file = NULL;
-
-	char rotated_path[sizeof(log_path)];
-	snprintf(rotated_path, sizeof(rotated_path), "%s/%s.%u.log", log_dir, LOG_FILENAME_BASE,
-		rotation_count++ % MAX_LOG_FILES);
-
-	// rename current log to rotated version
-	if (rename(log_path, rotated_path) != 0) {
-		fprintf(stderr, "ERROR: Failed to rotate log file: %s\n", strerror(errno));
-		log_file = fopen(log_path, "a");
-		return;
-	}
-
-	fprintf(stderr, "Rotated log to: %s\n", rotated_path);
-
-	// open new log file
-	log_file = fopen(log_path, "a");
-	if (!log_file) {
-		fprintf(stderr, "ERROR: Failed to open new log file: %s\n", log_path);
-		return;
-	}
-
-	current_line_count = 0;
-
-	// log rotation marker
-	time_t now = time(NULL);
-	struct tm *tm_info = localtime(&now);
-	char time_str[32];
-	strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
-	fprintf(log_file, "########## doors startup (%s) ##########\n", time_str);
-	fflush(log_file);
-	current_line_count++;
 }
 
 static void signal_handler(int sig) {
@@ -153,7 +152,7 @@ static void signal_handler(int sig) {
 	backtrace_symbols_fd(addrlist, addrlen, STDOUT_FILENO);
 	write(STDOUT_FILENO, "##################################\n\n", 35);
 
-	// always log crashes
+	// log to file
 	if (log_file) {
 		fprintf(log_file, "\n########## CRASH REPORT ##########\n");
 		fprintf(log_file, "Signal: %s (%d)\n", sig_name, sig);
@@ -225,7 +224,13 @@ int log_init(const char *log_file_path) {
 			}
 		}
 
-		snprintf(log_path, sizeof(log_path), "%s/doors.log", log_dir);
+		cleanup_old_logs();
+
+		time_t now = time(NULL);
+		struct tm *tm_info = localtime(&now);
+		char time_str[32];
+		strftime(time_str, sizeof(time_str), "%Y.%m.%d|%H-%M-%S", tm_info);
+		snprintf(log_path, sizeof(log_path), "%s/%s|%d.log", log_dir, time_str, getpid());
 	}
 
 	// open log file for appending
@@ -235,20 +240,7 @@ int log_init(const char *log_file_path) {
 		return -1;
 	}
 
-	// count existing lines in log file
-	current_line_count = 0;
-	FILE *temp_file = fopen(log_path, "r");
-	if (temp_file) {
-		int c;
-		while ((c = fgetc(temp_file)) != EOF)
-			if (c == '\n')
-				current_line_count++;
-		fclose(temp_file);
-	}
-
 	fprintf(stdout, "Logging to: %s\n", log_path);
-	fprintf(stdout, "Log rotation: %u lines per file, keeping %u files (0-%u)\n", MAX_LOG_LINES,
-		MAX_LOG_FILES, MAX_LOG_FILES - 1);
 
 	// log startup
 	fprintf(log_file, "\n");
@@ -258,7 +250,6 @@ int log_init(const char *log_file_path) {
 	strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
 	fprintf(log_file, "########## doors startup (%s) ##########\n", time_str);
 	fflush(log_file);
-	current_line_count += 2;
 
 	wlr_log_init(WLR_DEBUG, log_callback);
 

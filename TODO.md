@@ -20,7 +20,6 @@
 - Rework the docs to be easier to use
 - Improve the README (include video, images, better info)
 - Looks like there is a 1px gap between toplevels and borders under certain conditions, likely a rounding error somewhere
-- Improve log.c
 
 # Potential
 - Per desktop rules (e.g. floating, master_stack)
