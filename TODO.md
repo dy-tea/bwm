@@ -14,11 +14,13 @@
 # Layout
 - Better tab grouping (see sway or Hyprland for reference)
 - Undersized toplevels that are tiled will jump in position unexpectedly during resize, and lose their surface clip temporarily if they have one on another axis (observed on protonvpn-app)
+- Better scrolling layout handling (see niri for reference)
 
 # Misc
 - Rework the docs to be easier to use
 - Improve the README (include video, images, better info)
 - Looks like there is a 1px gap between toplevels and borders under certain conditions, likely a rounding error somewhere
+- Improve log.c
 
 # Potential
 - Per desktop rules (e.g. floating, master_stack)
