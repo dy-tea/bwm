@@ -20,9 +20,10 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 void main() {
   vec2 px = v_uv * pc.resolution;
   vec2 half_inner = pc.inner_size * 0.5;
+  vec2 center = pc.resolution * 0.5;
+  float d_shadow = sdRoundedBox(px - center, half_inner, pc.border_radius);
   vec2 half_hole = pc.hole_size * 0.5;
   vec2 hole_center = pc.hole_pos + half_hole;
-  float d_shadow = sdRoundedBox(px - hole_center, half_inner, pc.border_radius);
   float d_hole = sdRoundedBox(px - hole_center, half_hole, pc.border_radius);
   float alpha = 1.0 - smoothstep(0.0, pc.shadow_size, d_shadow);
   float fw = fwidth(d_hole);
