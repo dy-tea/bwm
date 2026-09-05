@@ -1,5 +1,4 @@
 #include "animation.h"
-#include "config.h"
 #include "copy_capture.h"
 #include "cursor.h"
 #include "effects.h"

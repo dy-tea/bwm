@@ -10,6 +10,7 @@
 - Toplevels with `blur=on` do not render toplevels with blur or mica behind it
 - On intel+vulkan, `mica=on` shows the wrong content in the buffer (potentially a non-updating fullscreen capture instead of background), `acrylic=on` looks strange and `blur=on` shows the toplevels' surface blurred instead of what is behind it blurred.
 - Some AMD rendering issues, will fix these after intel ones
+- On gles2/amd, `blur=on` shows black blur surfaces until triggered by running `doorsctl node -g blur=on` on a toplevel without blur set by a rule, after which it renders fine for the rest of the session
 
 # Layout
 - Better tab grouping (see sway or Hyprland for reference)
@@ -20,6 +21,7 @@
 - Rework the docs to be easier to use
 - Improve the README (include video, images, better info)
 - Looks like there is a 1px gap between toplevels and borders under certain conditions, likely a rounding error somewhere
+- Interactive resize is not smooth, especially in tiled layout
 
 # Potential
 - Per desktop rules (e.g. floating, master_stack)

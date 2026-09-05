@@ -277,6 +277,7 @@ void ipc_cmd_node(char **args, int num, int client_fd) {
 			}
 			bool new_blur = has_value ? set_value : !n->client->flags.blur;
 			n->client->flags.blur = new_blur;
+			n->client->flags.blur_from_rule = true;
 			surface_client_set_effect(n->client, EFFECT_BLUR, new_blur);
 			send_success(client_fd, "flag changed\n");
 		} else if (strcmp(key, "mica") == 0) {
