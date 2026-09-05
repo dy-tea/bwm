@@ -229,8 +229,8 @@ int log_init(const char *log_file_path) {
 		time_t now = time(NULL);
 		struct tm *tm_info = localtime(&now);
 		char time_str[32];
-		strftime(time_str, sizeof(time_str), "%Y.%m.%d|%H-%M-%S", tm_info);
-		snprintf(log_path, sizeof(log_path), "%s/%s|%d.log", log_dir, time_str, getpid());
+		strftime(time_str, sizeof(time_str), "%Y.%m.%d_%H-%M-%S", tm_info);
+		snprintf(log_path, sizeof(log_path), "%s/%s_%d.log", log_dir, time_str, getpid());
 	}
 
 	// open log file for appending
